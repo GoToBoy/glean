@@ -9,41 +9,66 @@
 export interface User {
   id: string
   email: string
-  name: string | null
-  avatarUrl: string | null
-  createdAt: string
+  name: string
+  avatar_url: string | null
+  is_active: boolean
+  is_verified: boolean
+  created_at: string
 }
 
-/** RSS feed subscription */
+/** RSS feed status */
+export enum FeedStatus {
+  ACTIVE = 'ACTIVE',
+  ERROR = 'ERROR',
+  PAUSED = 'PAUSED',
+}
+
+/** RSS feed */
 export interface Feed {
   id: string
   url: string
   title: string | null
-  siteUrl: string | null
+  site_url: string | null
   description: string | null
-  iconUrl: string | null
-  lastFetchedAt: string | null
+  icon_url: string | null
+  language: string | null
+  status: FeedStatus
+  error_count: number
+  fetch_error_message: string | null
+  last_fetched_at: string | null
+  last_entry_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** User subscription to a feed */
+export interface Subscription {
+  id: string
+  user_id: string
+  feed_id: string
+  custom_title: string | null
+  created_at: string
+  feed: Feed
 }
 
 /** Feed entry (article) */
 export interface Entry {
   id: string
-  feedId: string
+  feed_id: string
+  guid: string
   url: string
   title: string
   author: string | null
   content: string | null
   summary: string | null
-  publishedAt: string | null
-  createdAt: string
+  published_at: string | null
+  created_at: string
 }
 
-/** User-specific entry state */
-export interface UserEntry {
-  userId: string
-  entryId: string
-  isRead: boolean
-  isLiked: boolean | null
-  readLater: boolean
-  readAt: string | null
+/** Entry with user state */
+export interface EntryWithState extends Entry {
+  is_read: boolean
+  is_liked: boolean
+  read_later: boolean
+  read_at: string | null
 }

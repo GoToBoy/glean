@@ -1,0 +1,38 @@
+import { useEffect } from 'react'
+import { Navigate, useLocation } from 'react-router-dom'
+import { useAuthStore } from '../stores/authStore'
+
+interface ProtectedRouteProps {
+  children: React.ReactNode
+}
+
+/**
+ * Protected route wrapper.
+ *
+ * Redirects to login if user is not authenticated.
+ * Loads user profile on mount if authenticated.
+ */
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { isAuthenticated, user, loadUser, isLoading } = useAuthStore()
+  const location = useLocation()
+
+  useEffect(() => {
+    if (isAuthenticated && !user && !isLoading) {
+      loadUser()
+    }
+  }, [isAuthenticated, user, loadUser, isLoading])
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-gray-600">Loading...</div>
+      </div>
+    )
+  }
+
+  return <>{children}</>
+}

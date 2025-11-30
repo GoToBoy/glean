@@ -1,8 +1,8 @@
-"""Initial schema
+"""Initial M1 schema
 
-Revision ID: 1ead13bf924b
+Revision ID: 62a71e21b434
 Revises:
-Create Date: 2025-11-29 21:46:50.370993
+Create Date: 2025-11-30 15:29:49.521357
 
 """
 
@@ -10,10 +10,10 @@ from typing import Sequence, Union
 
 from alembic import op
 import sqlalchemy as sa
-
+from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
-revision: str = "1ead13bf924b"
+revision: str = "62a71e21b434"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -52,9 +52,13 @@ def upgrade() -> None:
         sa.Column("site_url", sa.String(length=2000), nullable=True),
         sa.Column("description", sa.String(length=2000), nullable=True),
         sa.Column("icon_url", sa.String(length=500), nullable=True),
+        sa.Column("language", sa.String(length=10), nullable=True),
         sa.Column("status", sa.String(length=20), nullable=False),
         sa.Column("error_count", sa.Integer(), nullable=False),
+        sa.Column("fetch_error_message", sa.String(length=1000), nullable=True),
         sa.Column("last_fetched_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("last_entry_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("next_fetch_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("etag", sa.String(length=255), nullable=True),
         sa.Column("last_modified", sa.String(length=255), nullable=True),
         sa.Column(
@@ -71,11 +75,12 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id"),
     )
+    op.create_index(op.f("ix_feeds_next_fetch_at"), "feeds", ["next_fetch_at"], unique=False)
     op.create_index(op.f("ix_feeds_url"), "feeds", ["url"], unique=True)
     op.create_table(
         "system_configs",
         sa.Column("key", sa.String(length=100), nullable=False),
-        sa.Column("value", sa.String(length=1000), nullable=False),
+        sa.Column("value", postgresql.JSONB(astext_type=sa.Text()), nullable=False),
         sa.Column("description", sa.String(length=500), nullable=True),
         sa.Column(
             "created_at",
@@ -101,6 +106,9 @@ def upgrade() -> None:
         sa.Column("is_active", sa.Boolean(), nullable=False),
         sa.Column("is_verified", sa.Boolean(), nullable=False),
         sa.Column("last_login_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column(
+            "settings", postgresql.JSONB(astext_type=sa.Text()), server_default="{}", nullable=True
+        ),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
@@ -141,6 +149,7 @@ def upgrade() -> None:
         ),
         sa.ForeignKeyConstraint(["feed_id"], ["feeds.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("feed_id", "guid", name="uq_feed_guid"),
     )
     op.create_index(op.f("ix_entries_feed_id"), "entries", ["feed_id"], unique=False)
     op.create_index(op.f("ix_entries_guid"), "entries", ["guid"], unique=False)
@@ -221,6 +230,7 @@ def downgrade() -> None:
     op.drop_table("users")
     op.drop_table("system_configs")
     op.drop_index(op.f("ix_feeds_url"), table_name="feeds")
+    op.drop_index(op.f("ix_feeds_next_fetch_at"), table_name="feeds")
     op.drop_table("feeds")
     op.drop_table("admin_users")
     # ### end Alembic commands ###

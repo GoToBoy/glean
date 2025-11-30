@@ -35,9 +35,13 @@ class Feed(Base, TimestampMixin):
         site_url: Website URL associated with feed.
         description: Feed description.
         icon_url: Favicon or feed icon URL.
+        language: Feed language code (e.g., 'en', 'zh').
         status: Current feed status.
         error_count: Consecutive fetch error count.
-        last_fetched_at: Timestamp of last successful fetch.
+        fetch_error_message: Last error message if any.
+        last_fetched_at: Timestamp of last fetch attempt.
+        last_entry_at: Timestamp of most recent entry published.
+        next_fetch_at: Scheduled timestamp for next fetch.
         etag: HTTP ETag for conditional requests.
         last_modified: HTTP Last-Modified header value.
     """
@@ -58,12 +62,20 @@ class Feed(Base, TimestampMixin):
     description: Mapped[str | None] = mapped_column(String(2000))
     icon_url: Mapped[str | None] = mapped_column(String(500))
 
+    # Language
+    language: Mapped[str | None] = mapped_column(String(10))
+
     # Fetch status
     status: Mapped[FeedStatus] = mapped_column(
         String(20), default=FeedStatus.ACTIVE, nullable=False
     )
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    fetch_error_message: Mapped[str | None] = mapped_column(String(1000))
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_entry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    next_fetch_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
 
     # Conditional request headers
     etag: Mapped[str | None] = mapped_column(String(255))

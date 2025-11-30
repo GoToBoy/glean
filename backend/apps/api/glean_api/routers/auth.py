@@ -1,79 +1,88 @@
 """
-Authentication router - Skeleton implementation.
+Authentication router.
 
-This module provides authentication endpoints for user registration,
-login, and token management.
+Provides endpoints for user registration, login, token refresh, and user profile.
 """
 
-from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, EmailStr
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+
+from glean_core.schemas import (
+    LoginRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    TokenResponse,
+    UserResponse,
+)
+from glean_core.services import AuthService
+
+from ..dependencies import get_auth_service, get_current_user
 
 router = APIRouter()
 
 
-class UserRegister(BaseModel):
-    """User registration request schema."""
-
-    email: EmailStr
-    password: str
-    name: str | None = None
-
-
-class UserLogin(BaseModel):
-    """User login request schema."""
-
-    email: EmailStr
-    password: str
-
-
-class TokenResponse(BaseModel):
-    """Authentication token response schema."""
-
-    access_token: str
-    refresh_token: str
-    token_type: str = "bearer"
-
-
 @router.post("/register", status_code=status.HTTP_201_CREATED)
-async def register(data: UserRegister) -> dict[str, str]:
+async def register(
+    data: RegisterRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> dict[str, UserResponse | TokenResponse]:
     """
     Register a new user account.
 
     Args:
         data: User registration data.
+        auth_service: Authentication service.
 
     Returns:
-        Success message with user ID.
+        User profile and authentication tokens.
 
     Raises:
         HTTPException: If email is already registered.
     """
-    # TODO: Implement in M1
-    raise HTTPException(status_code=501, detail="Not implemented")
+    try:
+        user, tokens = await auth_service.register(data)
+        return {"user": user, "tokens": tokens}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(data: UserLogin) -> TokenResponse:
+@router.post("/login")
+async def login(
+    data: LoginRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> dict[str, UserResponse | TokenResponse]:
     """
     Authenticate user and issue tokens.
 
     Args:
         data: User login credentials.
+        auth_service: Authentication service.
 
     Returns:
-        Access and refresh tokens.
+        User profile and authentication tokens.
 
     Raises:
         HTTPException: If credentials are invalid.
     """
-    # TODO: Implement in M1
-    raise HTTPException(status_code=501, detail="Not implemented")
+    try:
+        user, tokens = await auth_service.login(data)
+        return {"user": user, "tokens": tokens}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
 
 
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh_token() -> TokenResponse:
+@router.post("/refresh")
+async def refresh_token(
+    data: RefreshTokenRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+) -> TokenResponse:
     """
     Refresh access token using refresh token.
+
+    Args:
+        data: Refresh token request.
+        auth_service: Authentication service.
 
     Returns:
         New access and refresh tokens.
@@ -81,20 +90,37 @@ async def refresh_token() -> TokenResponse:
     Raises:
         HTTPException: If refresh token is invalid or expired.
     """
-    # TODO: Implement in M1
-    raise HTTPException(status_code=501, detail="Not implemented")
+    try:
+        tokens = await auth_service.refresh_access_token(data.refresh_token)
+        return tokens
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+
+
+@router.post("/logout")
+async def logout() -> dict[str, str]:
+    """
+    Logout user (placeholder for token invalidation).
+
+    Returns:
+        Success message.
+    """
+    # In a production system, you might want to invalidate the refresh token
+    # by storing it in Redis with an expiration
+    return {"message": "Logged out successfully"}
 
 
 @router.get("/me")
-async def get_current_user() -> dict[str, str]:
+async def get_me(
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+) -> UserResponse:
     """
     Get current authenticated user information.
 
+    Args:
+        current_user: Current authenticated user from token.
+
     Returns:
         User profile data.
-
-    Raises:
-        HTTPException: If not authenticated.
     """
-    # TODO: Implement in M1
-    raise HTTPException(status_code=501, detail="Not implemented")
+    return current_user

@@ -6,7 +6,7 @@ This module defines the Entry model for storing feed entries (articles).
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_uuid
@@ -64,3 +64,6 @@ class Entry(Base, TimestampMixin):
     user_entries = relationship(
         "UserEntry", back_populates="entry", cascade="all, delete-orphan"
     )
+
+    # Constraints: Unique entry per feed
+    __table_args__ = (UniqueConstraint("feed_id", "guid", name="uq_feed_guid"),)

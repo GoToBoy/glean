@@ -2,7 +2,7 @@
 
 A personal knowledge management tool for information-heavy consumers.
 
-> ✅ **M0 Phase Complete** - Infrastructure ready! | 🚧 **Next: M1 Phase** - MVP features
+> ✅ **M1 Phase Complete** - Full MVP ready! | 🚀 **Ready for Production**
 
 ## Overview
 
@@ -35,34 +35,45 @@ Glean (拾灵) is a powerful RSS reader and personal knowledge management tool t
 
 ## Quick Start
 
-**One-line setup:**
+### Development Setup
+
+**1. Start infrastructure:**
 ```bash
-./scripts/setup.sh
+make up    # Start PostgreSQL & Redis
 ```
 
-**Start development (3 terminals):**
+**2. Start services (3 terminals):**
 ```bash
-# Terminal 1: Backend API
-cd backend && uv run uvicorn glean_api.main:app --reload
-
-# Terminal 2: Background Worker  
-cd backend && uv run arq glean_worker.main.WorkerSettings
-
-# Terminal 3: Web App
-cd frontend && pnpm dev:web
+make api      # Terminal 1: Backend API (http://localhost:8000)
+make worker   # Terminal 2: Background Worker
+make web      # Terminal 3: Web App (http://localhost:3000)
 ```
 
-**Access:**
+**3. Access the application:**
 - 🌐 Web App: http://localhost:3000
 - 📚 API Docs: http://localhost:8000/api/docs
 - ❤️ Health: http://localhost:8000/api/health
 
-**Verify:**
+### Production Deployment
+
+**Using Docker Compose:**
+
 ```bash
-./scripts/verify-m0.sh
+# 1. Configure environment
+cd deploy
+cp .env.prod.example .env.prod
+# Edit .env.prod with your secure values
+
+# 2. Start all services
+docker compose -f deploy/docker-compose.prod.yml --env-file .env.prod up -d --build
+
+# 3. Run migrations
+docker exec -it glean-backend uv run alembic -c packages/database/alembic.ini upgrade head
+
+# 4. Access at http://localhost (or your configured domain)
 ```
 
-📖 **Detailed guide:** [QUICKSTART.md](./QUICKSTART.md)
+📖 **Full deployment guide:** [deploy/README.md](./deploy/README.md)
 
 ## Project Structure
 
@@ -95,15 +106,42 @@ glean/
 ## Documentation
 
 ### 🚀 Getting Started
+- [Deployment Guide](./deploy/README.md) - Production deployment with Docker
+- [Development Commands](./CLAUDE.md) - Makefile commands and development workflow
 - [Quick Start](./QUICKSTART.md) - 5-minute setup
-- [Setup Guide](./README_SETUP.md) - Detailed instructions
-- [M0 Summary](./M0_SUMMARY.md) - What's completed
-- [Verify Script](./scripts/verify-m0.sh) - Check your setup
 
 ### 📋 Architecture & Planning
 - [PRD (Product Requirements)](./docs/glean-prd-v1.2.md)
 - [Architecture Design](./docs/glean-architecture.md)
 - [M0 Development Guide](./docs/glean-m0-development-guide.md)
+- [M1 Development Guide](./docs/glean-m1-development-guide.md)
+
+### 🎯 Implemented Features (M1)
+
+**Backend:**
+- ✅ User authentication (JWT-based)
+- ✅ Feed subscription management
+- ✅ RSS/Atom feed parsing and fetching
+- ✅ Entry storage and retrieval
+- ✅ User entry state tracking (read, liked, read later)
+- ✅ OPML import/export
+- ✅ Background worker for feed updates
+- ✅ RESTful API with FastAPI
+
+**Frontend:**
+- ✅ User authentication UI (login/register)
+- ✅ RSS reader interface
+- ✅ Subscription management
+- ✅ Entry filtering and pagination
+- ✅ Reading pane with content display
+- ✅ State management (Zustand + React Query)
+- ✅ Responsive design with Tailwind CSS
+
+**Infrastructure:**
+- ✅ Docker deployment configuration
+- ✅ Database migrations with Alembic
+- ✅ Production-ready docker-compose setup
+- ✅ Development environment with hot reload
 
 ## License
 

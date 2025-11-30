@@ -1,5 +1,15 @@
-import React from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { Layout } from './components/Layout'
+
+// Lazy load pages
+import { lazy, Suspense } from 'react'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const RegisterPage = lazy(() => import('./pages/RegisterPage'))
+const ReaderPage = lazy(() => import('./pages/ReaderPage'))
+const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /**
  * Root application component.
@@ -8,25 +18,37 @@ import { Routes, Route } from 'react-router-dom'
  */
 function App() {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-gray-600">Loading...</div>
+        </div>
+      }
+    >
       <Routes>
-        <Route path="/" element={
-          <div className="flex items-center justify-center h-screen">
-            <div className="text-center">
-              <h1 className="text-4xl font-bold text-gray-900 mb-4">
-                Glean 拾灵
-              </h1>
-              <p className="text-lg text-gray-600">
-                Personal Knowledge Management Tool
-              </p>
-              <p className="text-sm text-gray-500 mt-2">
-                M0 Phase - Coming Soon
-              </p>
-            </div>
-          </div>
-        } />
+        {/* Public routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+
+        {/* Protected routes */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route index element={<Navigate to="/reader" replace />} />
+          <Route path="reader" element={<ReaderPage />} />
+          <Route path="subscriptions" element={<SubscriptionsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+
+        {/* 404 fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-    </div>
+    </Suspense>
   )
 }
 

@@ -5,8 +5,10 @@ This module defines the User model for storing user account information.
 """
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_uuid
@@ -27,6 +29,7 @@ class User(Base, TimestampMixin):
         is_active: Account active status.
         is_verified: Email verification status.
         last_login_at: Timestamp of most recent login.
+        settings: User preferences and settings (JSONB).
     """
 
     __tablename__ = "users"
@@ -50,6 +53,11 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    # Settings (JSONB for flexible user preferences)
+    settings: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB, default=dict, server_default="{}"
+    )
 
     # Relationships
     subscriptions = relationship(

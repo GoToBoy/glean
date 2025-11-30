@@ -6,8 +6,10 @@ This module defines models for administrative users and system configuration.
 
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 from sqlalchemy import Boolean, DateTime, String
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin, generate_uuid
@@ -65,5 +67,5 @@ class SystemConfig(Base, TimestampMixin):
     __tablename__ = "system_configs"
 
     key: Mapped[str] = mapped_column(String(100), primary_key=True)
-    value: Mapped[str] = mapped_column(String(1000), nullable=False)
+    value: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     description: Mapped[str | None] = mapped_column(String(500))
