@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { Rss, Mail, Lock, User, AlertCircle } from 'lucide-react'
+import { Rss, AlertCircle, Sparkles, Check } from 'lucide-react'
+import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
 
 /**
  * Registration page.
@@ -49,146 +50,187 @@ export default function RegisterPage() {
 
   const displayError = validationError || error
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="max-w-md w-full">
-        {/* Logo and title */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center">
-              <Rss className="w-10 h-10 text-white" />
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">Create your account</h1>
-          <p className="text-gray-600 mt-2">Get started with Glean</p>
-        </div>
+  const features = [
+    'Subscribe to your favorite RSS feeds',
+    'Read distraction-free articles',
+    'Save articles for later',
+    'Organize with custom categories',
+  ]
 
-        {/* Registration form */}
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Error message */}
-            {displayError && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
-                <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-red-800">Error</p>
-                  <p className="text-sm text-red-700 mt-1">{displayError}</p>
+  return (
+    <div className="relative flex min-h-screen overflow-hidden bg-background">
+      {/* Left side - Form */}
+      <div className="relative flex flex-1 items-center justify-center px-4 py-12">
+        {/* Background decorations */}
+        <div className="absolute inset-0 bg-pattern" />
+        <div className="absolute -left-48 -top-48 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute -bottom-48 right-0 h-64 w-64 rounded-full bg-secondary/10 blur-3xl" />
+
+        <div className="relative z-10 w-full max-w-md animate-fade-in">
+          {/* Logo and title */}
+          <div className="mb-8 text-center lg:text-left">
+            <div className="mb-6 flex justify-center lg:justify-start">
+              <div className="relative">
+                <div className="absolute inset-0 animate-pulse-glow rounded-2xl" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary/30">
+                  <Rss className="h-8 w-8 text-primary-foreground" />
                 </div>
               </div>
-            )}
+            </div>
+            <h1 className="font-display text-3xl font-bold tracking-tight text-foreground">
+              Create your account
+            </h1>
+            <p className="mt-2 text-muted-foreground">
+              Start your journey with Glean
+            </p>
+          </div>
 
-            {/* Name field */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
+          {/* Registration form */}
+          <div className="glass rounded-2xl p-8 shadow-xl">
+            <form onSubmit={handleSubmit} className="space-y-5">
+              {/* Error message */}
+              {displayError && (
+                <Alert variant="error">
+                  <AlertCircle />
+                  <AlertTitle>Error</AlertTitle>
+                  <AlertDescription>{displayError}</AlertDescription>
+                </Alert>
+              )}
+
+              {/* Name field */}
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm font-medium text-foreground">
+                  Full Name
+                </Label>
+                <Input
                   id="name"
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="John Doe"
                   disabled={isLoading}
+                  className="w-full"
                 />
               </div>
-            </div>
 
-            {/* Email field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
+              {/* Email field */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-sm font-medium text-foreground">
+                  Email
+                </Label>
+                <Input
                   id="email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="you@example.com"
                   disabled={isLoading}
+                  className="w-full"
                 />
               </div>
-            </div>
 
-            {/* Password field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
+              {/* Password field */}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-sm font-medium text-foreground">
+                  Password
+                </Label>
+                <Input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Minimum 8 characters"
                   disabled={isLoading}
+                  className="w-full"
                 />
               </div>
-            </div>
 
-            {/* Confirm password field */}
-            <div>
-              <label
-                htmlFor="confirmPassword"
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
+              {/* Confirm password field */}
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword" className="text-sm font-medium text-foreground">
+                  Confirm Password
+                </Label>
+                <Input
                   id="confirmPassword"
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Re-enter your password"
                   disabled={isLoading}
+                  className="w-full"
                 />
               </div>
+
+              {/* Submit button */}
+              <Button 
+                type="submit" 
+                disabled={isLoading} 
+                className="btn-glow w-full py-3 text-base font-semibold"
+              >
+                {isLoading ? 'Creating account...' : 'Create account'}
+              </Button>
+            </form>
+
+            {/* Login link */}
+            <div className="mt-6 text-center">
+              <p className="text-sm text-muted-foreground">
+                Already have an account?{' '}
+                <Link to="/login" className="font-medium text-primary hover:text-primary/80 transition-colors">
+                  Sign in
+                </Link>
+              </p>
             </div>
-
-            {/* Submit button */}
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {isLoading ? 'Creating account...' : 'Create account'}
-            </button>
-          </form>
-
-          {/* Login link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="text-blue-600 hover:text-blue-700 font-medium">
-                Sign in
-              </Link>
-            </p>
           </div>
         </div>
+      </div>
 
-        {/* Footer */}
-        <p className="text-center text-sm text-gray-500 mt-8">
-          Glean - Your Personal Knowledge Management Tool
-        </p>
+      {/* Right side - Features (hidden on mobile) */}
+      <div className="hidden lg:flex lg:w-1/2 flex-col justify-center bg-gradient-to-br from-muted/50 to-muted p-12">
+        <div className="relative">
+          {/* Decorative element */}
+          <div className="absolute -top-12 -left-12 h-24 w-24 rounded-full bg-primary/20 blur-2xl" />
+          
+          <div className="relative">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
+              <Sparkles className="h-4 w-4" />
+              Why Glean?
+            </div>
+            
+            <h2 className="font-display text-3xl font-bold text-foreground mb-8">
+              Your personal knowledge<br />
+              management companion
+            </h2>
+
+            <ul className="space-y-4">
+              {features.map((feature, index) => (
+                <li 
+                  key={index} 
+                  className="flex items-start gap-3"
+                  style={{ animationDelay: `${index * 0.1}s` }}
+                >
+                  <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/20">
+                    <Check className="h-3.5 w-3.5 text-primary" />
+                  </div>
+                  <span className="text-foreground/80">{feature}</span>
+                </li>
+              ))}
+            </ul>
+
+            {/* Testimonial or additional info */}
+            <div className="mt-12 rounded-xl border border-border/50 bg-card/50 p-6">
+              <p className="font-reading text-lg italic text-foreground/70">
+                &quot;Glean has transformed how I consume online content. It&apos;s like having a personal librarian for the internet.&quot;
+              </p>
+              <div className="mt-4 flex items-center gap-3">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-br from-primary-400 to-primary-600" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Happy User</p>
+                  <p className="text-xs text-muted-foreground">Knowledge enthusiast</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )

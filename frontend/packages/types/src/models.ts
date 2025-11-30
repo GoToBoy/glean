@@ -49,6 +49,7 @@ export interface Subscription {
   custom_title: string | null
   created_at: string
   feed: Feed
+  unread_count: number
 }
 
 /** Feed entry (article) */
@@ -68,7 +69,7 @@ export interface Entry {
 /** Entry with user state */
 export interface EntryWithState extends Entry {
   is_read: boolean
-  is_liked: boolean
+  is_liked: boolean | null  // true = liked, false = disliked, null = no feedback
   read_later: boolean
   read_at: string | null
 }

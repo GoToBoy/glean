@@ -4,11 +4,10 @@ Feed fetcher tasks.
 Background tasks for fetching and parsing RSS feeds.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from arq import Retry
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session
@@ -26,6 +25,7 @@ async def fetch_feed_task(ctx: dict, feed_id: str) -> dict[str, str | int]:
     Returns:
         Dictionary with fetch results.
     """
+    print(f"[fetch_feed_task] Starting fetch for feed_id: {feed_id}")
     async for session in get_session():
         try:
             # Get feed from database
@@ -34,32 +34,50 @@ async def fetch_feed_task(ctx: dict, feed_id: str) -> dict[str, str | int]:
             feed = result.scalar_one_or_none()
 
             if not feed:
+                print(f"[fetch_feed_task] ERROR: Feed not found: {feed_id}")
                 return {"status": "error", "message": "Feed not found"}
 
+            print(f"[fetch_feed_task] Fetching feed: {feed.url}")
+
             # Fetch feed content
+            print(f"[fetch_feed_task] Requesting feed: {feed.url}")
             fetch_result = await fetch_feed(feed.url, feed.etag, feed.last_modified)
 
             if fetch_result is None:
                 # Not modified (304)
-                feed.last_fetched_at = datetime.now(timezone.utc)
+                print(f"[fetch_feed_task] Feed not modified (304): {feed.url}")
+                feed.last_fetched_at = datetime.now(UTC)
                 await session.commit()
                 return {"status": "not_modified", "new_entries": 0}
+
+            print("[fetch_feed_task] Feed content received, parsing...")
 
             content, cache_headers = fetch_result
 
             # Parse feed
+            print("[fetch_feed_task] Parsing feed content...")
             parsed_feed = await parse_feed(content, feed.url)
+            print(
+                f"[fetch_feed_task] Parsed feed: {parsed_feed.title}, {len(parsed_feed.entries)} entries"
+            )
 
             # Update feed metadata
+            print(
+                f"[fetch_feed_task] DEBUG: parsed_feed.icon_url = {parsed_feed.icon_url!r}"
+            )
+            print(
+                f"[fetch_feed_task] DEBUG: feed.icon_url (before) = {feed.icon_url!r}"
+            )
             feed.title = parsed_feed.title or feed.title
             feed.description = parsed_feed.description or feed.description
             feed.site_url = parsed_feed.site_url or feed.site_url
             feed.language = parsed_feed.language or feed.language
             feed.icon_url = parsed_feed.icon_url or feed.icon_url
+            print(f"[fetch_feed_task] DEBUG: feed.icon_url (after) = {feed.icon_url!r}")
             feed.status = FeedStatus.ACTIVE
             feed.error_count = 0
             feed.fetch_error_message = None
-            feed.last_fetched_at = datetime.now(timezone.utc)
+            feed.last_fetched_at = datetime.now(UTC)
 
             # Update cache headers
             if "etag" in cache_headers:
@@ -97,19 +115,24 @@ async def fetch_feed_task(ctx: dict, feed_id: str) -> dict[str, str | int]:
                 new_entries += 1
 
                 # Track latest entry time
-                if parsed_entry.published_at:
-                    if latest_entry_time is None or parsed_entry.published_at > latest_entry_time:
-                        latest_entry_time = parsed_entry.published_at
+                if parsed_entry.published_at and (
+                    latest_entry_time is None
+                    or parsed_entry.published_at > latest_entry_time
+                ):
+                    latest_entry_time = parsed_entry.published_at
 
             # Update last_entry_at and schedule next fetch
             if latest_entry_time:
                 feed.last_entry_at = latest_entry_time
 
             # Schedule next fetch (15 minutes from now)
-            feed.next_fetch_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
 
             await session.commit()
 
+            print(
+                f"[fetch_feed_task] SUCCESS: Feed {feed.url} - {new_entries} new entries out of {len(parsed_feed.entries)} total"
+            )
             return {
                 "status": "success",
                 "feed_id": feed_id,
@@ -118,6 +141,9 @@ async def fetch_feed_task(ctx: dict, feed_id: str) -> dict[str, str | int]:
             }
 
         except Exception as e:
+            print(
+                f"[fetch_feed_task] ERROR: Failed to fetch feed {feed_id}: {type(e).__name__}: {str(e)}"
+            )
             # Update feed error status
             stmt = select(Feed).where(Feed.id == feed_id)
             result = await session.execute(stmt)
@@ -126,20 +152,29 @@ async def fetch_feed_task(ctx: dict, feed_id: str) -> dict[str, str | int]:
             if feed:
                 feed.error_count += 1
                 feed.fetch_error_message = str(e)
-                feed.last_fetched_at = datetime.now(timezone.utc)
+                feed.last_fetched_at = datetime.now(UTC)
 
                 # Disable feed after 10 consecutive errors
                 if feed.error_count >= 10:
+                    print(
+                        f"[fetch_feed_task] DISABLED: Feed {feed.url} disabled after 10 errors"
+                    )
                     feed.status = FeedStatus.ERROR
 
                 # Schedule retry with exponential backoff
                 retry_minutes = min(60, 15 * (2 ** min(feed.error_count - 1, 5)))
-                feed.next_fetch_at = datetime.now(timezone.utc) + timedelta(minutes=retry_minutes)
+                feed.next_fetch_at = datetime.now(UTC) + timedelta(
+                    minutes=retry_minutes
+                )
 
+                print(
+                    f"[fetch_feed_task] Scheduling retry in {retry_minutes} minutes (error count: {feed.error_count})"
+                )
                 await session.commit()
 
             # Retry the task
-            raise Retry(defer=timedelta(minutes=5))
+            print("[fetch_feed_task] Retrying task in 5 minutes...")
+            raise Retry(defer=timedelta(minutes=5)) from None
 
 
 async def fetch_all_feeds(ctx: dict) -> dict[str, int]:
@@ -152,9 +187,10 @@ async def fetch_all_feeds(ctx: dict) -> dict[str, int]:
     Returns:
         Dictionary with fetch statistics.
     """
+    print("[fetch_all_feeds] Starting to fetch all active feeds")
     async for session in get_session():
         # Get all active feeds that are due for fetching
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         stmt = select(Feed).where(
             Feed.status == FeedStatus.ACTIVE,
             (Feed.next_fetch_at.is_(None)) | (Feed.next_fetch_at <= now),
@@ -162,10 +198,14 @@ async def fetch_all_feeds(ctx: dict) -> dict[str, int]:
         result = await session.execute(stmt)
         feeds = result.scalars().all()
 
+        print(f"[fetch_all_feeds] Found {len(feeds)} feeds to fetch")
+
         # Queue fetch tasks for each feed
         for feed in feeds:
+            print(f"[fetch_all_feeds] Queueing feed: {feed.url} (ID: {feed.id})")
             await ctx["redis"].enqueue_job("fetch_feed_task", feed.id)
 
+        print(f"[fetch_all_feeds] Queued {len(feeds)} feeds for fetching")
         return {"feeds_queued": len(feeds)}
 
 
@@ -179,8 +219,9 @@ async def scheduled_fetch(ctx: dict) -> dict[str, int]:
     Returns:
         Dictionary with fetch statistics.
     """
+    print("[scheduled_fetch] Running scheduled feed fetch (every 15 minutes)")
     return await fetch_all_feeds(ctx)
 
 
-# Export task functions
-fetch_feed = fetch_feed_task
+# Export task functions (arq uses the exported name)
+fetch_feed_task_exported = fetch_feed_task

@@ -6,7 +6,7 @@ Request and response models for feed-related operations.
 
 from datetime import datetime
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl
 
 
 class FeedBase(BaseModel):
@@ -19,6 +19,8 @@ class FeedBase(BaseModel):
 
 class FeedResponse(BaseModel):
     """Feed response model."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     url: str
@@ -33,12 +35,11 @@ class FeedResponse(BaseModel):
     last_entry_at: datetime | None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
-
 
 class SubscriptionResponse(BaseModel):
     """Subscription response model."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     user_id: str
@@ -46,9 +47,7 @@ class SubscriptionResponse(BaseModel):
     custom_title: str | None
     created_at: datetime
     feed: FeedResponse
-
-    class Config:
-        from_attributes = True
+    unread_count: int = 0
 
 
 class DiscoverFeedRequest(BaseModel):

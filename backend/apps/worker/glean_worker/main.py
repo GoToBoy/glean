@@ -8,6 +8,8 @@ cron jobs, and Redis connection settings.
 from arq import cron
 from arq.connections import RedisSettings
 
+from glean_database.session import init_database
+
 from .config import settings
 from .tasks import feed_fetcher
 
@@ -19,8 +21,22 @@ async def startup(ctx: dict) -> None:
     Args:
         ctx: Worker context dictionary for shared resources.
     """
+    print("=" * 60)
     print("Starting Glean Worker")
-    # TODO: Initialize database connection
+    print(
+        f"Database URL: {settings.database_url.split('@')[1] if '@' in settings.database_url else 'configured'}"
+    )
+    print(
+        f"Redis URL: {settings.redis_url.split('@')[1] if '@' in settings.redis_url else 'configured'}"
+    )
+    init_database(settings.database_url)
+    print("Database initialized")
+    print("Registered task functions:")
+    print("  - fetch_feed_task")
+    print("  - fetch_all_feeds")
+    print("Scheduled cron jobs:")
+    print("  - scheduled_fetch (every 15 minutes: 0, 15, 30, 45)")
+    print("=" * 60)
 
 
 async def shutdown(ctx: dict) -> None:
@@ -30,8 +46,9 @@ async def shutdown(ctx: dict) -> None:
     Args:
         ctx: Worker context dictionary.
     """
+    print("=" * 60)
     print("Shutting down Glean Worker")
-    # TODO: Close database connection
+    print("=" * 60)
 
 
 class WorkerSettings:
@@ -43,7 +60,7 @@ class WorkerSettings:
 
     # Registered task functions
     functions = [
-        feed_fetcher.fetch_feed,
+        feed_fetcher.fetch_feed_task,
         feed_fetcher.fetch_all_feeds,
     ]
 

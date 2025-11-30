@@ -35,7 +35,7 @@ async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
             response = await client.get(url)
             response.raise_for_status()
         except httpx.HTTPError as e:
-            raise ValueError(f"Failed to fetch URL: {e}")
+            raise ValueError(f"Failed to fetch URL: {e}") from e
 
         content_type = response.headers.get("content-type", "").lower()
 
@@ -78,7 +78,9 @@ async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
         raise ValueError("No RSS feed found at this URL")
 
 
-async def fetch_feed(url: str, etag: str | None = None, last_modified: str | None = None) -> tuple[str, dict[str, str] | None] | None:
+async def fetch_feed(
+    url: str, etag: str | None = None, last_modified: str | None = None
+) -> tuple[str, dict[str, str] | None] | None:
     """
     Fetch feed content with conditional request support.
 
@@ -99,9 +101,7 @@ async def fetch_feed(url: str, etag: str | None = None, last_modified: str | Non
     if last_modified:
         headers["If-Modified-Since"] = last_modified
 
-    async with httpx.AsyncClient(
-        timeout=30, follow_redirects=True, headers=headers
-    ) as client:
+    async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as client:
         try:
             response = await client.get(url)
 
@@ -121,4 +121,4 @@ async def fetch_feed(url: str, etag: str | None = None, last_modified: str | Non
             return response.text, cache_headers
 
         except httpx.HTTPError as e:
-            raise ValueError(f"Failed to fetch feed: {e}")
+            raise ValueError(f"Failed to fetch feed: {e}") from e

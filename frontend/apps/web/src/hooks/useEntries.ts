@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { entryService } from '@glean/api-client'
 import type { UpdateEntryStateRequest } from '@glean/types'
+import { subscriptionKeys } from './useSubscriptions'
 
 /**
  * Query key factory for entries.
@@ -52,19 +53,17 @@ export function useUpdateEntryState() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({
-      entryId,
-      data,
-    }: {
-      entryId: string
-      data: UpdateEntryStateRequest
-    }) => entryService.updateEntryState(entryId, data),
-    onSuccess: (_, variables) => {
-      // Invalidate entry lists and detail
+    mutationFn: ({ entryId, data }: { entryId: string; data: UpdateEntryStateRequest }) =>
+      entryService.updateEntryState(entryId, data),
+    onSuccess: (updatedEntry, variables) => {
+      // Update the specific entry in cache
+      queryClient.setQueryData(entryKeys.detail(variables.entryId), updatedEntry)
+      
+      // Invalidate all entry lists to refetch with updated data
       queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
-      queryClient.invalidateQueries({
-        queryKey: entryKeys.detail(variables.entryId),
-      })
+      
+      // Invalidate subscriptions to update unread counts
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.lists() })
     },
   })
 }
@@ -79,6 +78,8 @@ export function useMarkAllRead() {
     mutationFn: (feedId?: string) => entryService.markAllRead(feedId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
+      // Invalidate subscriptions to update unread counts
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.lists() })
     },
   })
 }

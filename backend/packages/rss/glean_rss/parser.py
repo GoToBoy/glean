@@ -4,11 +4,37 @@ RSS/Atom feed parser.
 Parses RSS and Atom feeds using feedparser.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse
 
 import feedparser
 from feedparser import FeedParserDict
+
+
+def _get_favicon_url(site_url: str | None) -> str | None:
+    """
+    Generate favicon URL from site URL.
+
+    Args:
+        site_url: Website URL.
+
+    Returns:
+        Favicon URL or None if site_url is invalid.
+    """
+    if not site_url:
+        return None
+
+    try:
+        parsed = urlparse(site_url)
+        if not parsed.scheme or not parsed.netloc:
+            return None
+
+        # Use Google's favicon service for reliable favicon fetching
+        domain = parsed.netloc
+        return f"https://www.google.com/s2/favicons?domain={domain}&sz=64"
+    except Exception:
+        return None
 
 
 class ParsedFeed:
@@ -26,7 +52,14 @@ class ParsedFeed:
         self.description = feed_info.get("description", "")
         self.site_url = feed_info.get("link", "")
         self.language = feed_info.get("language")
-        self.icon_url = feed_info.get("icon") or feed_info.get("logo")
+
+        # Try to get icon from feed, fallback to favicon
+        self.icon_url = (
+            feed_info.get("icon")
+            or feed_info.get("logo")
+            or _get_favicon_url(self.site_url)
+        )
+
         self.entries = [ParsedEntry(entry) for entry in data.get("entries", [])]
 
 
@@ -57,7 +90,7 @@ class ParsedEntry:
         published = data.get("published_parsed") or data.get("updated_parsed")
         if published:
             try:
-                self.published_at = datetime(*published[:6], tzinfo=timezone.utc)
+                self.published_at = datetime(*published[:6], tzinfo=UTC)
             except (TypeError, ValueError):
                 self.published_at = None
         else:

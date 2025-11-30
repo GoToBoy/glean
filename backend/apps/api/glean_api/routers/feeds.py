@@ -6,6 +6,7 @@ Provides endpoints for feed discovery, subscription management, and OPML import/
 
 from typing import Annotated
 
+from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Response, UploadFile, status
 
 from glean_core.schemas import (
@@ -17,7 +18,7 @@ from glean_core.schemas import (
 from glean_core.services import FeedService
 from glean_rss import discover_feed, generate_opml, parse_opml
 
-from ..dependencies import get_current_user, get_feed_service
+from ..dependencies import get_current_user, get_feed_service, get_redis_pool
 
 router = APIRouter()
 
@@ -63,22 +64,28 @@ async def get_subscription(
     try:
         return await feed_service.get_subscription(subscription_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
-@router.post("/discover")
+@router.post("/discover", status_code=status.HTTP_201_CREATED)
 async def discover_feed_url(
     data: DiscoverFeedRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> SubscriptionResponse:
     """
     Discover and subscribe to a feed from URL.
+
+    This endpoint performs feed discovery (tries to fetch and parse the URL).
+    For direct subscription without discovery, the feed service will create
+    a basic feed if discovery fails.
 
     Args:
         data: Feed discovery request with URL.
         current_user: Current authenticated user.
         feed_service: Feed service.
+        redis: Redis connection pool for task queue.
 
     Returns:
         Created subscription.
@@ -86,15 +93,25 @@ async def discover_feed_url(
     Raises:
         HTTPException: If feed discovery fails or already subscribed.
     """
-    try:
-        # Discover feed
-        feed_url, feed_title = await discover_feed(str(data.url))
+    feed_url = str(data.url)
+    feed_title = None
 
-        # Create subscription
-        subscription = await feed_service.create_subscription(current_user.id, feed_url)
+    import contextlib
+
+    with contextlib.suppress(ValueError):
+        # Try to discover feed (fetch and parse)
+        feed_url, feed_title = await discover_feed(feed_url)
+
+    try:
+        # Create subscription (will create feed if needed)
+        subscription = await feed_service.create_subscription(current_user.id, feed_url, feed_title)
+
+        # Immediately enqueue feed fetch task for new feed
+        await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+
         return subscription
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.patch("/{subscription_id}")
@@ -124,7 +141,7 @@ async def update_subscription(
             subscription_id, current_user.id, data.custom_title
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
 @router.delete("/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -147,7 +164,38 @@ async def delete_subscription(
     try:
         await feed_service.delete_subscription(subscription_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+
+
+@router.post("/{subscription_id}/refresh", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_feed(
+    subscription_id: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    feed_service: Annotated[FeedService, Depends(get_feed_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, str]:
+    """
+    Manually trigger a feed refresh.
+
+    Args:
+        subscription_id: Subscription identifier.
+        current_user: Current authenticated user.
+        feed_service: Feed service.
+        redis: Redis connection pool for task queue.
+
+    Returns:
+        Job status message.
+
+    Raises:
+        HTTPException: If subscription not found or unauthorized.
+    """
+    try:
+        subscription = await feed_service.get_subscription(subscription_id, current_user.id)
+        # Enqueue feed fetch task
+        job = await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+        return {"status": "queued", "job_id": job.job_id, "feed_id": subscription.feed.id}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
 @router.post("/import")
@@ -155,6 +203,7 @@ async def import_opml(
     file: UploadFile,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, int]:
     """
     Import subscriptions from OPML file.
@@ -163,6 +212,7 @@ async def import_opml(
         file: OPML file upload.
         current_user: Current authenticated user.
         feed_service: Feed service.
+        redis: Redis connection pool for task queue.
 
     Returns:
         Import statistics (success and failed counts).
@@ -179,7 +229,11 @@ async def import_opml(
 
         for opml_feed in opml_feeds:
             try:
-                await feed_service.create_subscription(current_user.id, opml_feed.xml_url)
+                subscription = await feed_service.create_subscription(
+                    current_user.id, opml_feed.xml_url
+                )
+                # Immediately enqueue feed fetch task for new feed
+                await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
                 success_count += 1
             except ValueError:
                 # Already subscribed or invalid feed
@@ -187,7 +241,7 @@ async def import_opml(
 
         return {"success": success_count, "failed": failed_count, "total": len(opml_feeds)}
     except Exception as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.get("/export")

@@ -34,9 +34,7 @@ class UserEntry(Base, TimestampMixin):
     __tablename__ = "user_entries"
 
     # Primary key
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Foreign keys
     user_id: Mapped[str] = mapped_column(
@@ -69,6 +67,4 @@ class UserEntry(Base, TimestampMixin):
     entry = relationship("Entry", back_populates="user_entries")
 
     # Constraints: One record per user-entry pair
-    __table_args__ = (
-        UniqueConstraint("user_id", "entry_id", name="uq_user_entry"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "entry_id", name="uq_user_entry"),)

@@ -3,6 +3,7 @@ import {
   useSubscriptions,
   useDiscoverFeed,
   useDeleteSubscription,
+  useRefreshFeed,
   useImportOPML,
   useExportOPML,
 } from '../hooks/useSubscriptions'
@@ -15,8 +16,28 @@ import {
   Rss,
   ExternalLink,
   Loader2,
+  RefreshCw,
+  X,
+  Sparkles,
 } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
+import {
+  Button,
+  Input,
+  Label,
+  Alert,
+  AlertTitle,
+  AlertDescription,
+  Badge,
+  AlertDialog,
+  AlertDialogPopup,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogClose,
+} from '@glean/ui'
+import type { Subscription } from '@glean/types'
 
 /**
  * Subscriptions management page.
@@ -29,155 +50,211 @@ export default function SubscriptionsPage() {
   const [showAddDialog, setShowAddDialog] = useState(false)
 
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Subscriptions</h1>
-        <p className="text-gray-600 mt-2">Manage your RSS feed subscriptions</p>
-      </div>
-
-      {/* Actions bar */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={() => setShowAddDialog(true)}
-            className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Feed</span>
-          </button>
-          <ImportOPMLButton />
-          <ExportOPMLButton />
+    <div className="min-h-full bg-background p-6 lg:p-8">
+      <div className="mx-auto max-w-6xl">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="font-display text-3xl font-bold text-foreground">Subscriptions</h1>
+          <p className="mt-2 text-muted-foreground">Manage your RSS feed subscriptions</p>
         </div>
 
-        {subscriptions && (
-          <div className="text-sm text-gray-600">
-            {subscriptions.length} {subscriptions.length === 1 ? 'subscription' : 'subscriptions'}
+        {/* Actions bar */}
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Button onClick={() => setShowAddDialog(true)} className="btn-glow">
+              <Plus className="h-4 w-4" />
+              <span>Add Feed</span>
+            </Button>
+            <ImportOPMLButton />
+            <ExportOPMLButton />
+          </div>
+
+          {subscriptions && (
+            <div className="text-sm text-muted-foreground">
+              {subscriptions.length} {subscriptions.length === 1 ? 'subscription' : 'subscriptions'}
+            </div>
+          )}
+        </div>
+
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex items-center justify-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
-      </div>
 
-      {/* Loading state */}
-      {isLoading && (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-        </div>
-      )}
+        {/* Error state */}
+        {error && (
+          <Alert variant="error" className="mb-6">
+            <AlertCircle />
+            <AlertTitle>Failed to load subscriptions</AlertTitle>
+            <AlertDescription>{(error as Error).message}</AlertDescription>
+          </Alert>
+        )}
 
-      {/* Error state */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
-          <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-800">Failed to load subscriptions</p>
-            <p className="text-sm text-red-700 mt-1">{(error as Error).message}</p>
+        {/* Empty state */}
+        {subscriptions && subscriptions.length === 0 && (
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/50 py-16">
+            <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl bg-muted">
+              <Rss className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h3 className="mb-2 font-display text-xl font-semibold text-foreground">
+              No subscriptions yet
+            </h3>
+            <p className="mb-6 max-w-sm text-center text-muted-foreground">
+              Start by adding your first RSS feed or importing an OPML file
+            </p>
+            <Button onClick={() => setShowAddDialog(true)} className="btn-glow">
+              <Plus className="h-4 w-4" />
+              <span>Add Your First Feed</span>
+            </Button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Subscriptions list */}
-      {subscriptions && subscriptions.length === 0 && (
-        <div className="text-center py-12">
-          <Rss className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No subscriptions yet</h3>
-          <p className="text-gray-600 mb-6">
-            Start by adding your first RSS feed or importing an OPML file
-          </p>
-          <button
-            onClick={() => setShowAddDialog(true)}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Add Your First Feed</span>
-          </button>
-        </div>
-      )}
+        {/* Subscriptions grid */}
+        {subscriptions && subscriptions.length > 0 && (
+          <div className="stagger-children grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {subscriptions.map((subscription) => (
+              <SubscriptionCard key={subscription.id} subscription={subscription} />
+            ))}
+          </div>
+        )}
 
-      {subscriptions && subscriptions.length > 0 && (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {subscriptions.map((subscription) => (
-            <SubscriptionCard key={subscription.id} subscription={subscription} />
-          ))}
-        </div>
-      )}
-
-      {/* Add feed dialog */}
-      {showAddDialog && <AddFeedDialog onClose={() => setShowAddDialog(false)} />}
+        {/* Add feed dialog */}
+        {showAddDialog && <AddFeedDialog onClose={() => setShowAddDialog(false)} />}
+      </div>
     </div>
   )
 }
 
-function SubscriptionCard({ subscription }: { subscription: any }) {
+function SubscriptionCard({ subscription }: { subscription: Subscription }) {
   const deleteMutation = useDeleteSubscription()
+  const refreshMutation = useRefreshFeed()
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to unsubscribe from this feed?')) {
-      await deleteMutation.mutateAsync(subscription.id)
-    }
+    await deleteMutation.mutateAsync(subscription.id)
+    setShowDeleteConfirm(false)
+  }
+
+  const handleRefresh = async () => {
+    await refreshMutation.mutateAsync(subscription.id)
   }
 
   const feed = subscription.feed
   const title = subscription.custom_title || feed.title || feed.url
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-5 hover:shadow-lg transition-shadow">
+    <div className="card-hover group rounded-xl border border-border bg-card p-5">
       {/* Feed icon and title */}
-      <div className="flex items-start space-x-3 mb-3">
+      <div className="mb-4 flex items-start gap-3">
         {feed.icon_url ? (
-          <img src={feed.icon_url} alt="" className="w-10 h-10 rounded flex-shrink-0" />
+          <img 
+            src={feed.icon_url} 
+            alt="" 
+            className="h-12 w-12 shrink-0 rounded-lg bg-muted object-cover" 
+          />
         ) : (
-          <div className="w-10 h-10 bg-blue-100 rounded flex items-center justify-center flex-shrink-0">
-            <Rss className="w-5 h-5 text-blue-600" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-primary-500/20 to-primary-600/20">
+            <Rss className="h-6 w-6 text-primary" />
           </div>
         )}
 
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-900 truncate">{title}</h3>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <h3 className="truncate font-display font-semibold text-foreground">{title}</h3>
+            {subscription.unread_count > 0 && (
+              <Badge size="sm" className="shrink-0">
+                {subscription.unread_count}
+              </Badge>
+            )}
+          </div>
           {feed.description && (
-            <p className="text-sm text-gray-600 line-clamp-2 mt-1">{feed.description}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{feed.description}</p>
           )}
         </div>
       </div>
 
       {/* Feed metadata */}
-      <div className="space-y-2 text-sm text-gray-600 mb-4">
+      <div className="mb-4 space-y-2 text-sm">
         {feed.site_url && (
           <a
             href={feed.site_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center space-x-1 hover:text-blue-600"
+            className="flex items-center gap-1.5 text-muted-foreground transition-colors hover:text-primary"
           >
-            <ExternalLink className="w-4 h-4" />
+            <ExternalLink className="h-3.5 w-3.5" />
             <span className="truncate">Visit site</span>
           </a>
         )}
 
         {feed.last_fetched_at && (
-          <div className="text-xs">
-            Last updated: {formatDistanceToNow(new Date(feed.last_fetched_at), { addSuffix: true })}
+          <div className="text-xs text-muted-foreground/70">
+            Updated {formatDistanceToNow(new Date(feed.last_fetched_at), { addSuffix: true })}
           </div>
         )}
 
         {feed.status === 'ERROR' && (
-          <div className="text-xs text-red-600 flex items-center space-x-1">
-            <AlertCircle className="w-3 h-3" />
+          <div className="flex items-center gap-1.5 text-xs text-destructive">
+            <AlertCircle className="h-3.5 w-3.5" />
             <span>Fetch error ({feed.error_count} failures)</span>
           </div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex items-center justify-end space-x-2 pt-3 border-t border-gray-200">
-        <button
-          onClick={handleDelete}
-          disabled={deleteMutation.isPending}
-          className="flex items-center space-x-1 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleRefresh}
+          disabled={refreshMutation.isPending}
+          title="Refresh this feed now"
+          className="text-muted-foreground hover:text-foreground"
         >
-          <Trash2 className="w-4 h-4" />
-          <span>Unsubscribe</span>
-        </button>
+          <RefreshCw className={`h-4 w-4 ${refreshMutation.isPending ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </Button>
+        <Button
+          variant="destructive-outline"
+          size="sm"
+          onClick={() => setShowDeleteConfirm(true)}
+          disabled={deleteMutation.isPending}
+        >
+          <Trash2 className="h-4 w-4" />
+          <span>Remove</span>
+        </Button>
       </div>
+
+      {/* Delete confirmation dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Unsubscribe from feed?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to unsubscribe from this feed? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button variant="ghost" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose
+              render={<Button variant="destructive" />}
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Removing...</span>
+                </>
+              ) : (
+                'Unsubscribe'
+              )}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </div>
   )
 }
@@ -200,52 +277,81 @@ function AddFeedDialog({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-        <h2 className="text-xl font-bold text-gray-900 mb-4">Add Feed</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
+      <div 
+        className="animate-fade-in w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl"
+      >
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <h2 className="font-display text-xl font-bold text-foreground">Add Feed</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {discoverMutation.error && (
-            <div className="bg-red-50 border border-red-200 rounded p-3 flex items-start space-x-2">
-              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
-              <p className="text-sm text-red-700">{(discoverMutation.error as Error).message}</p>
-            </div>
+            <Alert variant="error">
+              <AlertCircle />
+              <AlertDescription>
+                {(discoverMutation.error as Error).message}
+              </AlertDescription>
+            </Alert>
           )}
 
-          <div>
-            <label htmlFor="feedUrl" className="block text-sm font-medium text-gray-700 mb-2">
+          <div className="space-y-2">
+            <Label htmlFor="feedUrl" className="text-foreground">
               Feed URL or Website URL
-            </label>
-            <input
+            </Label>
+            <Input
               id="feedUrl"
               type="url"
               value={url}
               onChange={(e) => setUrl(e.target.value)}
               placeholder="https://example.com/feed"
-              className="block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               disabled={discoverMutation.isPending}
+              className="w-full"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              Enter a feed URL or website URL - we'll try to discover the feed automatically
+            <p className="text-xs text-muted-foreground">
+              Enter a feed URL or website URL — we&apos;ll try to discover the feed automatically
             </p>
           </div>
 
-          <div className="flex items-center justify-end space-x-3 pt-4">
-            <button
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <Button
               type="button"
+              variant="ghost"
               onClick={onClose}
               disabled={discoverMutation.isPending}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
             >
               Cancel
-            </button>
-            <button
-              type="submit"
+            </Button>
+            <Button 
+              type="submit" 
               disabled={discoverMutation.isPending || !url.trim()}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="btn-glow"
             >
-              {discoverMutation.isPending ? 'Adding...' : 'Add Feed'}
-            </button>
+              {discoverMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Adding...</span>
+                </>
+              ) : (
+                <>
+                  <Plus className="h-4 w-4" />
+                  <span>Add Feed</span>
+                </>
+              )}
+            </Button>
           </div>
         </form>
       </div>
@@ -256,6 +362,12 @@ function AddFeedDialog({ onClose }: { onClose: () => void }) {
 function ImportOPMLButton() {
   const importMutation = useImportOPML()
   const [fileInputKey, setFileInputKey] = useState(0)
+  const [importResult, setImportResult] = useState<{
+    success: number
+    failed: number
+    total: number
+  } | null>(null)
+  const [importError, setImportError] = useState<string | null>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -263,28 +375,65 @@ function ImportOPMLButton() {
 
     try {
       const result = await importMutation.mutateAsync(file)
-      alert(
-        `Import completed!\nSuccess: ${result.success}\nFailed: ${result.failed}\nTotal: ${result.total}`
-      )
+      setImportResult(result)
       setFileInputKey((prev) => prev + 1)
     } catch (err) {
-      alert(`Import failed: ${(err as Error).message}`)
+      setImportError((err as Error).message)
     }
   }
 
   return (
-    <label className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-      <Upload className="w-5 h-5" />
-      <span>Import OPML</span>
-      <input
-        key={fileInputKey}
-        type="file"
-        accept=".opml,.xml"
-        onChange={handleFileChange}
-        disabled={importMutation.isPending}
-        className="hidden"
-      />
-    </label>
+    <>
+      <Button 
+        variant="outline" 
+        render={(props: React.HTMLAttributes<HTMLLabelElement> & { className?: string }) => (
+          <label {...props} className={`${props.className} cursor-pointer`} />
+        )}
+      >
+        <Upload className="h-4 w-4" />
+        <span>Import OPML</span>
+        <input
+          key={fileInputKey}
+          type="file"
+          accept=".opml,.xml"
+          onChange={handleFileChange}
+          disabled={importMutation.isPending}
+          className="hidden"
+        />
+      </Button>
+
+      {/* Import result dialog */}
+      <AlertDialog open={!!importResult} onOpenChange={() => setImportResult(null)}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Completed</AlertDialogTitle>
+            <AlertDialogDescription>
+              <div className="space-y-1 text-left">
+                <div>Success: {importResult?.success}</div>
+                <div>Failed: {importResult?.failed}</div>
+                <div>Total: {importResult?.total}</div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button />}>OK</AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+
+      {/* Import error dialog */}
+      <AlertDialog open={!!importError} onOpenChange={() => setImportError(null)}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Import Failed</AlertDialogTitle>
+            <AlertDialogDescription>{importError}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose render={<Button />}>OK</AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -296,13 +445,13 @@ function ExportOPMLButton() {
   }
 
   return (
-    <button
-      onClick={handleExport}
+    <Button 
+      variant="outline" 
+      onClick={handleExport} 
       disabled={exportMutation.isPending}
-      className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors disabled:opacity-50"
     >
-      <Download className="w-5 h-5" />
+      <Download className="h-4 w-4" />
       <span>Export OPML</span>
-    </button>
+    </Button>
   )
 }

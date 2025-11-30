@@ -1,8 +1,4 @@
-import type {
-  EntryWithState,
-  EntryListResponse,
-  UpdateEntryStateRequest,
-} from '@glean/types'
+import type { EntryWithState, EntryListResponse, UpdateEntryStateRequest } from '@glean/types'
 import { ApiClient } from '../client'
 
 /**
@@ -37,10 +33,7 @@ export class EntryService {
   /**
    * Update entry state (read, liked, read later).
    */
-  async updateEntryState(
-    entryId: string,
-    data: UpdateEntryStateRequest
-  ): Promise<EntryWithState> {
+  async updateEntryState(entryId: string, data: UpdateEntryStateRequest): Promise<EntryWithState> {
     return this.client.patch<EntryWithState>(`/entries/${entryId}`, data)
   }
 

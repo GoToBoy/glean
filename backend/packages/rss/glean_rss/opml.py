@@ -4,7 +4,7 @@ OPML import/export.
 Handles OPML file parsing and generation for feed subscription management.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -42,7 +42,7 @@ def parse_opml(content: str) -> list[OPMLFeed]:
     try:
         root = ET.fromstring(content)
     except ET.ParseError as e:
-        raise ValueError(f"Invalid OPML format: {e}")
+        raise ValueError(f"Invalid OPML format: {e}") from e
 
     feeds = []
     body = root.find("body")
@@ -84,7 +84,7 @@ def generate_opml(feeds: list[dict[str, Any]], title: str = "Glean Subscriptions
     title_elem.text = title
 
     date_created = ET.SubElement(head, "dateCreated")
-    date_created.text = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT")
+    date_created.text = datetime.now(UTC).strftime("%a, %d %b %Y %H:%M:%S GMT")
 
     # Create body
     body = ET.SubElement(opml, "body")

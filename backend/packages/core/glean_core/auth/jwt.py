@@ -4,7 +4,7 @@ JWT token creation and verification utilities.
 Implements access and refresh token generation with configurable expiration.
 """
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from jose import JWTError, jwt
@@ -56,7 +56,7 @@ def create_access_token(user_id: str, config: JWTConfig) -> str:
     Returns:
         Encoded JWT access token.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(minutes=config.access_token_expire_minutes)
 
     payload = {
@@ -80,7 +80,7 @@ def create_refresh_token(user_id: str, config: JWTConfig) -> str:
     Returns:
         Encoded JWT refresh token.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + timedelta(days=config.refresh_token_expire_days)
 
     payload = {

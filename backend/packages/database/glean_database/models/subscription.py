@@ -27,9 +27,7 @@ class Subscription(Base, TimestampMixin):
     __tablename__ = "subscriptions"
 
     # Primary key
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Foreign keys
     user_id: Mapped[str] = mapped_column(
@@ -53,6 +51,4 @@ class Subscription(Base, TimestampMixin):
     feed = relationship("Feed", back_populates="subscriptions")
 
     # Constraints: User can only subscribe to a feed once
-    __table_args__ = (
-        UniqueConstraint("user_id", "feed_id", name="uq_user_feed"),
-    )
+    __table_args__ = (UniqueConstraint("user_id", "feed_id", name="uq_user_feed"),)

@@ -6,7 +6,7 @@ Request and response models for entry-related operations.
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class EntryBase(BaseModel):
@@ -18,6 +18,8 @@ class EntryBase(BaseModel):
 
 class EntryResponse(BaseModel):
     """Entry response model."""
+
+    model_config = ConfigDict(from_attributes=True)
 
     id: str
     feed_id: str
@@ -33,9 +35,6 @@ class EntryResponse(BaseModel):
     is_liked: bool | None = None
     read_later: bool = False
     read_at: datetime | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class EntryListResponse(BaseModel):

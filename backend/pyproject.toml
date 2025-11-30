@@ -53,5 +53,6 @@ venv = ".venv"
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["apps/*/tests", "packages/*/tests"]
+testpaths = ["tests", "apps/api/tests", "apps/worker/tests", "packages/rss/tests"]
+pythonpath = ["."]
 addopts = "-v --cov --cov-report=term-missing"

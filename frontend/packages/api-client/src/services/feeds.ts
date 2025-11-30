@@ -54,6 +54,17 @@ export class FeedService {
   }
 
   /**
+   * Manually refresh a feed.
+   */
+  async refreshFeed(
+    subscriptionId: string
+  ): Promise<{ status: string; job_id: string; feed_id: string }> {
+    return this.client.post<{ status: string; job_id: string; feed_id: string }>(
+      `/feeds/${subscriptionId}/refresh`
+    )
+  }
+
+  /**
    * Import subscriptions from OPML file.
    */
   async importOPML(file: File): Promise<OPMLImportResponse> {

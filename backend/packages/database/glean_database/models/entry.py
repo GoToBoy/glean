@@ -34,9 +34,7 @@ class Entry(Base, TimestampMixin):
     __tablename__ = "entries"
 
     # Primary key
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Parent feed reference
     feed_id: Mapped[str] = mapped_column(
@@ -55,15 +53,11 @@ class Entry(Base, TimestampMixin):
 
     # Metadata
     guid: Mapped[str | None] = mapped_column(String(500), index=True)
-    published_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), index=True
-    )
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     # Relationships
     feed = relationship("Feed", back_populates="entries")
-    user_entries = relationship(
-        "UserEntry", back_populates="entry", cascade="all, delete-orphan"
-    )
+    user_entries = relationship("UserEntry", back_populates="entry", cascade="all, delete-orphan")
 
     # Constraints: Unique entry per feed
     __table_args__ = (UniqueConstraint("feed_id", "guid", name="uq_feed_guid"),)

@@ -4,12 +4,12 @@ Feed and subscription service.
 Handles feed discovery, subscription management, and OPML import/export.
 """
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from glean_core.schemas import FeedResponse, SubscriptionResponse
-from glean_database.models import Feed, Subscription, User
+from glean_core.schemas import SubscriptionResponse
+from glean_database.models import Entry, Feed, Subscription, UserEntry
 
 
 class FeedService:
@@ -43,7 +43,37 @@ class FeedService:
         result = await self.session.execute(stmt)
         subscriptions = result.scalars().all()
 
-        return [SubscriptionResponse.model_validate(sub) for sub in subscriptions]
+        # Calculate unread counts for each subscription
+        responses = []
+        for sub in subscriptions:
+            # Count entries in this feed that are either:
+            # 1. Not in user_entries (never seen)
+            # 2. In user_entries but is_read = False
+            unread_stmt = (
+                select(func.count(Entry.id))
+                .where(Entry.feed_id == sub.feed_id)
+                .outerjoin(
+                    UserEntry,
+                    (UserEntry.entry_id == Entry.id) & (UserEntry.user_id == user_id),
+                )
+                .where((UserEntry.id.is_(None)) | (UserEntry.is_read.is_(False)))
+            )
+            unread_result = await self.session.execute(unread_stmt)
+            unread_count = unread_result.scalar() or 0
+
+            # Create response with unread count
+            response_dict = {
+                "id": sub.id,
+                "user_id": sub.user_id,
+                "feed_id": sub.feed_id,
+                "custom_title": sub.custom_title,
+                "created_at": sub.created_at,
+                "feed": sub.feed,
+                "unread_count": unread_count,
+            }
+            responses.append(SubscriptionResponse.model_validate(response_dict))
+
+        return responses
 
     async def get_subscription(self, subscription_id: str, user_id: str) -> SubscriptionResponse:
         """
@@ -72,15 +102,16 @@ class FeedService:
 
         return SubscriptionResponse.model_validate(subscription)
 
-    async def create_subscription(self, user_id: str, feed_url: str) -> SubscriptionResponse:
+    async def create_subscription(
+        self, user_id: str, feed_url: str, feed_title: str | None = None
+    ) -> SubscriptionResponse:
         """
         Create a new subscription.
-
-        This will be enhanced with RSS discovery in the RSS package.
 
         Args:
             user_id: User identifier.
             feed_url: Feed URL.
+            feed_title: Optional feed title (if None, uses URL as title).
 
         Returns:
             Subscription response.
@@ -94,8 +125,9 @@ class FeedService:
         feed = result.scalar_one_or_none()
 
         if not feed:
-            # Create new feed (basic version, will be enhanced with RSS discovery)
-            feed = Feed(url=feed_url, title=feed_url, status="active")
+            # Create new feed
+            title = feed_title if feed_title else feed_url
+            feed = Feed(url=feed_url, title=title, status="active")
             self.session.add(feed)
             await self.session.flush()
 
@@ -112,10 +144,9 @@ class FeedService:
         # Create subscription
         subscription = Subscription(user_id=user_id, feed_id=feed.id)
         self.session.add(subscription)
-        await self.session.commit()
-        await self.session.refresh(subscription)
+        await self.session.flush()
 
-        # Load feed relationship
+        # Load feed relationship before commit
         stmt = (
             select(Subscription)
             .where(Subscription.id == subscription.id)
@@ -124,7 +155,12 @@ class FeedService:
         result = await self.session.execute(stmt)
         subscription = result.scalar_one()
 
-        return SubscriptionResponse.model_validate(subscription)
+        # Validate to Pydantic model while session is still open
+        response = SubscriptionResponse.model_validate(subscription)
+
+        await self.session.commit()
+
+        return response
 
     async def delete_subscription(self, subscription_id: str, user_id: str) -> None:
         """

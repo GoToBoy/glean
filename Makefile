@@ -1,5 +1,5 @@
 .PHONY: help setup up down api worker web admin db-migrate db-upgrade db-downgrade \
-        test lint format clean logs install-backend install-frontend verify
+        test lint format clean logs install-backend install-frontend install-root verify dev-all
 
 # Default target
 help:
@@ -21,6 +21,7 @@ help:
 	@echo "  make worker         - Start background worker"
 	@echo "  make web            - Start web app (port 3000)"
 	@echo "  make admin          - Start admin dashboard"
+	@echo "  make dev-all        - Start all services concurrently (api + worker + web)"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate MSG=\"description\"  - Create new migration"
@@ -43,7 +44,11 @@ help:
 setup:
 	@./scripts/setup.sh
 
-install: install-backend install-frontend
+install: install-root install-backend install-frontend
+
+install-root:
+	@echo "📦 Installing root dependencies (concurrently)..."
+	@npm install
 
 install-backend:
 	@echo "🐍 Installing Python dependencies..."
@@ -165,13 +170,20 @@ clean:
 # Shortcuts
 # =============================================================================
 
+# Start everything concurrently
+dev-all:
+	@echo "🚀 Starting all services concurrently (API + Worker + Web + Admin)..."
+	@npm run dev
+
 # Start everything (run in separate terminals)
 dev:
-	@echo "To start development, run these in separate terminals:"
+	@echo "To start development, you can:"
 	@echo ""
-	@echo "  Terminal 1: make api"
-	@echo "  Terminal 2: make worker"
-	@echo "  Terminal 3: make web"
+	@echo "  Option 1: Start all at once"
+	@echo "    make dev-all"
 	@echo ""
-	@echo "Or use tmux/screen to run all at once"
+	@echo "  Option 2: Run in separate terminals"
+	@echo "    Terminal 1: make api"
+	@echo "    Terminal 2: make worker"
+	@echo "    Terminal 3: make web"
 

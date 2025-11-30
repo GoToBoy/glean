@@ -15,13 +15,24 @@ make down            # Stop Docker services
 make logs            # View Docker service logs
 ```
 
-### Development Servers (run in separate terminals)
+### Development Servers
+
+**Option 1: Start all services concurrently (recommended):**
+```bash
+make dev-all         # Start API + Worker + Web concurrently using concurrently
+npm run dev          # Alternative: use npm script directly
+npm run dev:all      # Start all services including admin dashboard
+```
+
+**Option 2: Run in separate terminals:**
 ```bash
 make api             # Start FastAPI server (http://localhost:8000)
 make worker          # Start arq background worker
 make web             # Start React web app (http://localhost:3000)
-make admin           # Start admin dashboard
+make admin           # Start admin dashboard (http://localhost:3001)
 ```
+
+**Note**: The project uses `concurrently` to run multiple services in a single terminal. Install root dependencies with `npm install` to use `make dev-all`.
 
 ### Database Migrations
 ```bash
@@ -44,6 +55,9 @@ make format          # Format code with ruff (backend), prettier (frontend)
 
 ### Package Management
 ```bash
+# Root: npm (for concurrently tool)
+npm install                               # Install concurrently for dev-all command
+
 # Backend: uv (Python 3.11+)
 cd backend && uv sync --all-packages     # Install all workspace packages
 cd backend && uv add <package>           # Add dependency to specific package
@@ -105,6 +119,9 @@ The frontend uses **pnpm workspaces + Turborepo**:
   - Uses Tailwind CSS, Zustand, TanStack Query
 
 - `apps/admin/` - Admin dashboard
+  - Port 3001
+  - Requires admin account to access
+  - Create admin account: `cd backend && uv run python ../scripts/create-admin.py`
 
 **Packages**:
 - `packages/ui/` - Shared React components
@@ -293,3 +310,98 @@ glean/                              # Project root
 ### Executing Commands
 - Note that this project uses monorepo structure, so you need to check your current working directory before executing commands.
 - Use `uv` instead of `python` to avoid virtual environment issues.
+
+### Test Account
+- Always use this account for automated testing
+- email: claude.test@example.com
+- password: TestPass123!
+- feed: https://ameow.xyz/feed.xml
+
+### Admin Dashboard Access
+- **URL**: http://localhost:3001
+- **Create admin account**: `cd backend && uv run python ../scripts/create-admin.py`
+- **Default credentials**: admin / Admin123! (if using default script)
+- **Requirements**: 
+  - API server must be running (port 8000)
+  - Admin service must be running (port 3001)
+  - Admin account must exist in database
+
+### MCPs
+- When debugging frontend issues, use chrome-devtools to help you
+
+### UI Components
+
+**IMPORTANT**: This project uses [COSS UI](https://coss.com/ui/) for UI components. 
+
+- **When adding new components**: Always check COSS UI first at https://coss.com/ui/docs/components/
+- **Component library**: 50+ components including Button, Input, Alert, Dialog, Table, etc.
+- **Documentation**: `https://coss.com/ui/llms.txt` (optimized for LLMs)
+- **Installation**: Components are added to `frontend/packages/ui/src/components/`
+- **Dependencies**: Built on Base UI and Tailwind CSS, uses `class-variance-authority` for variants
+
+Available components include: Accordion, Alert, Alert Dialog, Autocomplete, Avatar, Badge, Breadcrumb, Button, Card, Checkbox, Combobox, Dialog, Form, Input, Label, Menu, Popover, Select, Table, Tabs, Toast, Tooltip, and more.
+
+To add a new component:
+1. Visit https://coss.com/ui/r/{component-name}.json to get the component code
+2. Copy the component to `frontend/packages/ui/src/components/`
+3. Export it from `frontend/packages/ui/src/components/index.ts`
+4. Update imports in your pages to use `@glean/ui`
+
+### Frontend Design System
+
+**CRITICAL**: All frontend development MUST follow the design system documented in `docs/design.md`.
+
+**Key Design Principles**:
+- **Warm Dark Theme**: Default theme with amber (`hsl(38 92% 50%)`) as primary color
+- **Typography**: DM Sans for UI/headings, Crimson Pro for reading content
+- **Color Variables**: Always use CSS variables (e.g., `hsl(var(--primary))`) instead of hard-coded colors
+- **Animations**: Fade In (400ms), Slide In (300ms), Pulse Glow (2s) - use sparingly
+- **Spacing**: 4px base unit, consistent border radius (--radius-lg: 0.75rem)
+- **Reading Experience**: Max-width 3xl (768px), generous line-height (1.75) for prose
+
+**Component Styling Guidelines**:
+- Buttons: Primary (with glow effect), Ghost (transparent), Outline (bordered)
+- Cards: Glass morphism effect with `backdrop-filter: blur(16px)`
+- Navigation: Collapsible sidebar (72px ↔ 256px), active state with primary/10 background
+- Lists: Stagger animations with 50ms delay increments
+- Focus states: Custom focus ring with 4px ring in primary color
+
+**Color Usage**:
+```tsx
+// ✅ Correct - Use semantic color variables
+className="bg-primary text-primary-foreground"
+className="text-muted-foreground hover:text-foreground"
+
+// ❌ Incorrect - Hard-coded colors
+className="bg-amber-500 text-slate-900"
+className="text-gray-600 hover:text-black"
+```
+
+**Typography Usage**:
+```tsx
+// ✅ Correct - Semantic font classes
+<h1 className="font-display text-2xl font-bold">Heading</h1>
+<article className="prose font-reading">Content</article>
+
+// ❌ Incorrect - Generic fonts
+<h1 className="text-2xl font-bold">Heading</h1>
+<article className="text-lg">Content</article>
+```
+
+**Animation Usage**:
+```tsx
+// ✅ Correct - Use predefined animations
+<div className="animate-fade-in">Content</div>
+<div className="stagger-children">{items}</div>
+
+// ❌ Incorrect - Custom animations without coordination
+<div className="animate-bounce">Content</div>
+```
+
+**Component Patterns**:
+- Glass effect: Use `.glass` class for modal overlays
+- Card hover: Use `.card-hover` class for interactive cards
+- Button glow: Use `.btn-glow` class for primary action buttons
+- Unread indicators: 2px rounded dot with primary color and shadow
+
+Refer to `docs/design.md` for complete color palettes, spacing scales, component patterns, and accessibility guidelines.

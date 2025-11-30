@@ -39,6 +39,9 @@ env/
 .project
 .classpath
 .settings/
+.claude
+.cursor
+.cursorrules
 
 # Testing
 .coverage

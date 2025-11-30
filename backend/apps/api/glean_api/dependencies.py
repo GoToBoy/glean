@@ -4,21 +4,41 @@ FastAPI dependencies.
 Provides dependency injection for database sessions, authentication, and services.
 """
 
-from typing import Annotated, AsyncGenerator
+from typing import Annotated
 
+from arq.connections import ArqRedis
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.auth import JWTConfig, verify_token
 from glean_core.schemas import UserResponse
-from glean_core.services import AuthService, EntryService, FeedService, UserService
+from glean_core.schemas.admin import AdminUserResponse
+from glean_core.services import (
+    AdminService,
+    AuthService,
+    EntryService,
+    FeedService,
+    UserService,
+)
 from glean_database.session import get_session
 
 from .config import settings
 
 # Security scheme for JWT bearer tokens
 security = HTTPBearer()
+
+
+async def get_redis_pool() -> ArqRedis:
+    """
+    Get Redis connection pool for task queue.
+
+    Returns:
+        ArqRedis connection pool.
+    """
+    from .main import get_redis_pool as _get_redis_pool
+
+    return await _get_redis_pool()
 
 
 def get_jwt_config() -> JWTConfig:
@@ -74,7 +94,7 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
 
 # Service dependencies
@@ -99,3 +119,87 @@ def get_feed_service(session: Annotated[AsyncSession, Depends(get_session)]) -> 
 def get_entry_service(session: Annotated[AsyncSession, Depends(get_session)]) -> EntryService:
     """Get entry service instance."""
     return EntryService(session)
+
+
+def get_admin_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> AdminService:
+    """Get admin service instance."""
+    return AdminService(session)
+
+
+async def get_current_admin(
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+    jwt_config: Annotated[JWTConfig, Depends(get_jwt_config)],
+) -> AdminUserResponse:
+    """
+    Get current authenticated admin from JWT token.
+
+    Args:
+        credentials: HTTP bearer credentials.
+        session: Database session.
+        jwt_config: JWT configuration.
+
+    Returns:
+        Current admin information.
+
+    Raises:
+        HTTPException: If token is invalid, not admin token, or admin not found.
+    """
+    from jose import JWTError, jwt
+
+    token = credentials.credentials
+
+    # Decode admin token directly instead of using verify_token
+    # (which expects "access" or "refresh" type, not "admin")
+    try:
+        payload = jwt.decode(
+            token, jwt_config.secret_key, algorithms=[jwt_config.algorithm]
+        )
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from None
+
+    # Check if token is admin type
+    if payload.get("type") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+
+    # Get admin ID from token
+    admin_id = payload.get("sub")
+    if not admin_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token payload",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Get admin from database
+    admin_service = AdminService(session)
+    admin = await admin_service.get_admin_by_id(admin_id)
+
+    if not admin or not admin.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Admin not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # Build response with explicit field values to avoid lazy loading issues
+    role_value = admin.role if isinstance(admin.role, str) else admin.role.value
+
+    return AdminUserResponse(
+        id=admin.id,
+        username=admin.username,
+        role=role_value,
+        is_active=admin.is_active,
+        last_login_at=admin.last_login_at,
+        created_at=admin.created_at,
+        updated_at=admin.updated_at,
+    )

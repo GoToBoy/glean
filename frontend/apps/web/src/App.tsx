@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { Layout } from './components/Layout'
+import { Rss } from 'lucide-react'
 
 // Lazy load pages
 import { lazy, Suspense } from 'react'
@@ -12,19 +13,32 @@ const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 /**
+ * Loading spinner component with branding
+ */
+function LoadingSpinner() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center gap-4">
+        <div className="relative">
+          <div className="absolute inset-0 animate-ping rounded-xl bg-primary/30" />
+          <div className="relative flex h-16 w-16 items-center justify-center rounded-xl bg-gradient-to-br from-primary-500 to-primary-600">
+            <Rss className="h-8 w-8 text-primary-foreground" />
+          </div>
+        </div>
+        <div className="text-sm font-medium text-muted-foreground">Loading...</div>
+      </div>
+    </div>
+  )
+}
+
+/**
  * Root application component.
  *
  * Defines the main routing structure for the web application.
  */
 function App() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex items-center justify-center min-h-screen">
-          <div className="text-gray-600">Loading...</div>
-        </div>
-      }
-    >
+    <Suspense fallback={<LoadingSpinner />}>
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />

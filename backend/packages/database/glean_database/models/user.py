@@ -35,14 +35,10 @@ class User(Base, TimestampMixin):
     __tablename__ = "users"
 
     # Primary key
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Authentication
-    email: Mapped[str] = mapped_column(
-        String(255), unique=True, nullable=False, index=True
-    )
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
 
     # Profile
@@ -63,6 +59,4 @@ class User(Base, TimestampMixin):
     subscriptions = relationship(
         "Subscription", back_populates="user", cascade="all, delete-orphan"
     )
-    user_entries = relationship(
-        "UserEntry", back_populates="user", cascade="all, delete-orphan"
-    )
+    user_entries = relationship("UserEntry", back_populates="user", cascade="all, delete-orphan")

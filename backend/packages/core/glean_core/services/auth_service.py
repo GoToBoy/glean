@@ -4,7 +4,7 @@ Authentication service.
 Handles user registration, login, and token management.
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -70,13 +70,11 @@ class AuthService:
         await self.session.refresh(user)
 
         # Generate tokens
-        access_token = create_access_token(user.id, self.jwt_config)
-        refresh_token = create_refresh_token(user.id, self.jwt_config)
+        access_token = create_access_token(str(user.id), self.jwt_config)
+        refresh_token = create_refresh_token(str(user.id), self.jwt_config)
 
         user_response = UserResponse.model_validate(user)
-        token_response = TokenResponse(
-            access_token=access_token, refresh_token=refresh_token
-        )
+        token_response = TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
         return user_response, token_response
 
@@ -105,18 +103,16 @@ class AuthService:
             raise ValueError("Account is disabled")
 
         # Update last login
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.now(UTC)
         await self.session.commit()
         await self.session.refresh(user)
 
         # Generate tokens
-        access_token = create_access_token(user.id, self.jwt_config)
-        refresh_token = create_refresh_token(user.id, self.jwt_config)
+        access_token = create_access_token(str(user.id), self.jwt_config)
+        refresh_token = create_refresh_token(str(user.id), self.jwt_config)
 
         user_response = UserResponse.model_validate(user)
-        token_response = TokenResponse(
-            access_token=access_token, refresh_token=refresh_token
-        )
+        token_response = TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
         return user_response, token_response
 
@@ -147,8 +143,8 @@ class AuthService:
             raise ValueError("User not found or inactive")
 
         # Generate new tokens
-        access_token = create_access_token(user.id, self.jwt_config)
-        new_refresh_token = create_refresh_token(user.id, self.jwt_config)
+        access_token = create_access_token(str(user.id), self.jwt_config)
+        new_refresh_token = create_refresh_token(str(user.id), self.jwt_config)
 
         return TokenResponse(access_token=access_token, refresh_token=new_refresh_token)
 

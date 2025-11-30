@@ -5,14 +5,34 @@ This module initializes the FastAPI application and configures
 middleware, routers, and lifecycle events.
 """
 
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
+from arq import create_pool
+from arq.connections import ArqRedis, RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
 from .routers import admin, auth, entries, feeds
+
+# Global Redis connection pool for task queue
+redis_pool: ArqRedis | None = None
+
+
+async def get_redis_pool() -> ArqRedis:
+    """
+    Get the global Redis connection pool for arq.
+
+    Returns:
+        ArqRedis connection pool.
+
+    Raises:
+        RuntimeError: If Redis pool not initialized.
+    """
+    if redis_pool is None:
+        raise RuntimeError("Redis pool not initialized")
+    return redis_pool
 
 
 @asynccontextmanager
@@ -29,9 +49,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         None during application runtime.
     """
     # Startup: Initialize resources
+    from glean_database.session import init_database
+
+    global redis_pool
+
     print(f"Starting Glean API v{settings.version}")
+    init_database(settings.database_url)
+
+    # Initialize Redis pool for task queue
+    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    redis_pool = await create_pool(redis_settings)
+    print("Redis pool initialized")
+
     yield
+
     # Shutdown: Cleanup resources
+    if redis_pool:
+        await redis_pool.close()
+        print("Redis pool closed")
     print("Shutting down Glean API")
 
 

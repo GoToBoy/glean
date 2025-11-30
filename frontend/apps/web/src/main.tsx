@@ -3,8 +3,15 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-import App from './App'
+import 'lightgallery/css/lightgallery.css'
+import 'lightgallery/css/lg-thumbnail.css'
+// Custom highlight.js theme is defined in globals.css
 import './styles/globals.css'
+import App from './App'
+import { initializeTheme } from './stores/themeStore'
+
+// Initialize theme before rendering to avoid flash of wrong theme
+initializeTheme()
 
 // Initialize React Query client with default options
 const queryClient = new QueryClient({

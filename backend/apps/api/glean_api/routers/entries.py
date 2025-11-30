@@ -8,7 +8,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from glean_core.schemas import EntryListResponse, EntryResponse, UpdateEntryStateRequest, UserResponse
+from glean_core.schemas import (
+    EntryListResponse,
+    EntryResponse,
+    UpdateEntryStateRequest,
+    UserResponse,
+)
 from glean_core.services import EntryService
 
 from ..dependencies import get_current_user, get_entry_service
@@ -77,7 +82,7 @@ async def get_entry(
     try:
         return await entry_service.get_entry(entry_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
 @router.patch("/{entry_id}")
@@ -105,7 +110,7 @@ async def update_entry_state(
     try:
         return await entry_service.update_entry_state(entry_id, current_user.id, data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
 @router.post("/mark-all-read")

@@ -15,6 +15,8 @@
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
+    "@base-ui-components/react": "1.0.0-beta.7",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.2.0"
   },

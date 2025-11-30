@@ -44,7 +44,7 @@ async def register(
         user, tokens = await auth_service.register(data)
         return {"user": user, "tokens": tokens}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
 @router.post("/login")
@@ -69,7 +69,7 @@ async def login(
         user, tokens = await auth_service.login(data)
         return {"user": user, "tokens": tokens}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
 
 
 @router.post("/refresh")
@@ -94,7 +94,7 @@ async def refresh_token(
         tokens = await auth_service.refresh_access_token(data.refresh_token)
         return tokens
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
 
 
 @router.post("/logout")

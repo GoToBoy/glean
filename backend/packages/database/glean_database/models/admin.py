@@ -39,14 +39,10 @@ class AdminUser(Base, TimestampMixin):
 
     __tablename__ = "admin_users"
 
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[AdminRole] = mapped_column(
-        String(20), default=AdminRole.ADMIN, nullable=False
-    )
+    role: Mapped[AdminRole] = mapped_column(String(20), default=AdminRole.ADMIN, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

@@ -49,14 +49,10 @@ class Feed(Base, TimestampMixin):
     __tablename__ = "feeds"
 
     # Primary key
-    id: Mapped[str] = mapped_column(
-        String(36), primary_key=True, default=generate_uuid
-    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Feed metadata
-    url: Mapped[str] = mapped_column(
-        String(2000), unique=True, nullable=False, index=True
-    )
+    url: Mapped[str] = mapped_column(String(2000), unique=True, nullable=False, index=True)
     title: Mapped[str | None] = mapped_column(String(500))
     site_url: Mapped[str | None] = mapped_column(String(2000))
     description: Mapped[str | None] = mapped_column(String(2000))
@@ -73,18 +69,14 @@ class Feed(Base, TimestampMixin):
     fetch_error_message: Mapped[str | None] = mapped_column(String(1000))
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_entry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    next_fetch_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), index=True
-    )
+    next_fetch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
 
     # Conditional request headers
     etag: Mapped[str | None] = mapped_column(String(255))
     last_modified: Mapped[str | None] = mapped_column(String(255))
 
     # Relationships
-    entries = relationship(
-        "Entry", back_populates="feed", cascade="all, delete-orphan"
-    )
+    entries = relationship("Entry", back_populates="feed", cascade="all, delete-orphan")
     subscriptions = relationship(
         "Subscription", back_populates="feed", cascade="all, delete-orphan"
     )
