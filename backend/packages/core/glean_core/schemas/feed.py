@@ -45,6 +45,7 @@ class SubscriptionResponse(BaseModel):
     user_id: str
     feed_id: str
     custom_title: str | None
+    folder_id: str | None = None
     created_at: datetime
     feed: FeedResponse
     unread_count: int = 0
@@ -54,9 +55,31 @@ class DiscoverFeedRequest(BaseModel):
     """Discover feed from URL request."""
 
     url: HttpUrl
+    folder_id: str | None = None
 
 
 class UpdateSubscriptionRequest(BaseModel):
-    """Update subscription request."""
+    """Update subscription request.
+    
+    Note: folder_id uses a special sentinel to distinguish between 
+    "not provided" and "explicitly set to null".
+    """
 
     custom_title: str | None = None
+    # Use __unset__ sentinel to detect if folder_id was explicitly provided
+    folder_id: str | None = "__unset__"
+    # Feed URL update (updates the underlying feed)
+    feed_url: HttpUrl | None = None
+
+
+class BatchDeleteSubscriptionsRequest(BaseModel):
+    """Batch delete subscriptions request."""
+
+    subscription_ids: list[str]
+
+
+class BatchDeleteSubscriptionsResponse(BaseModel):
+    """Batch delete subscriptions response."""
+
+    deleted_count: int
+    failed_count: int

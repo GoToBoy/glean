@@ -17,8 +17,11 @@ from glean_core.schemas.admin import AdminUserResponse
 from glean_core.services import (
     AdminService,
     AuthService,
+    BookmarkService,
     EntryService,
     FeedService,
+    FolderService,
+    TagService,
     UserService,
 )
 from glean_database.session import get_session
@@ -128,6 +131,28 @@ def get_admin_service(
     return AdminService(session)
 
 
+# M2 service dependencies
+def get_folder_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> FolderService:
+    """Get folder service instance."""
+    return FolderService(session)
+
+
+def get_tag_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TagService:
+    """Get tag service instance."""
+    return TagService(session)
+
+
+def get_bookmark_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> BookmarkService:
+    """Get bookmark service instance."""
+    return BookmarkService(session)
+
+
 async def get_current_admin(
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     session: Annotated[AsyncSession, Depends(get_session)],
@@ -190,8 +215,8 @@ async def get_current_admin(
         )
 
     # Build response with explicit field values to avoid lazy loading issues
-    # AdminRole is a str Enum, so .value gives us the string representation
-    role_value = admin.role.value
+    # Handle both enum (in-memory) and string (from database) cases
+    role_value = admin.role.value if hasattr(admin.role, "value") else admin.role
 
     return AdminUserResponse(
         id=admin.id,

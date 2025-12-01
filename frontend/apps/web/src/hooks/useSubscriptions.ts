@@ -1,6 +1,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { feedService } from '@glean/api-client'
-import type { DiscoverFeedRequest, UpdateSubscriptionRequest } from '@glean/types'
+import type {
+  DiscoverFeedRequest,
+  UpdateSubscriptionRequest,
+  BatchDeleteSubscriptionsRequest,
+} from '@glean/types'
 
 /**
  * Query key factory for subscriptions.
@@ -84,6 +88,21 @@ export function useDeleteSubscription() {
 }
 
 /**
+ * Hook to batch delete subscriptions.
+ */
+export function useBatchDeleteSubscriptions() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (data: BatchDeleteSubscriptionsRequest) =>
+      feedService.batchDeleteSubscriptions(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.lists() })
+    },
+  })
+}
+
+/**
  * Hook to manually refresh a feed.
  */
 export function useRefreshFeed() {
@@ -93,6 +112,20 @@ export function useRefreshFeed() {
     mutationFn: (subscriptionId: string) => feedService.refreshFeed(subscriptionId),
     onSuccess: () => {
       // Optionally invalidate queries to show updated feed data
+      queryClient.invalidateQueries({ queryKey: subscriptionKeys.lists() })
+    },
+  })
+}
+
+/**
+ * Hook to manually refresh all user's subscribed feeds.
+ */
+export function useRefreshAllFeeds() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: () => feedService.refreshAllFeeds(),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.lists() })
     },
   })

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { User } from '@glean/types'
+import type { User, UserSettings } from '@glean/types'
 import { authService } from '@glean/api-client'
 
 interface AuthState {
@@ -14,6 +14,7 @@ interface AuthState {
   register: (email: string, password: string, name: string) => Promise<void>
   logout: () => Promise<void>
   loadUser: () => Promise<void>
+  updateSettings: (settings: UserSettings) => Promise<void>
   clearError: () => void
 }
 
@@ -104,6 +105,21 @@ export const useAuthStore = create<AuthState>((set) => ({
         isLoading: false,
         error: 'Failed to load user',
       })
+    }
+  },
+
+  updateSettings: async (settings) => {
+    set({ isLoading: true, error: null })
+    try {
+      const user = await authService.updateUser({ settings })
+      set({
+        user,
+        isLoading: false,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update settings'
+      set({ error: message, isLoading: false })
+      throw error
     }
   },
 

@@ -53,6 +53,10 @@ export default {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))',
         },
+        popover: {
+          DEFAULT: 'hsl(var(--popover))',
+          foreground: 'hsl(var(--popover-foreground))',
+        },
       },
       borderRadius: {
         lg: 'var(--radius-lg)',
@@ -64,6 +68,10 @@ export default {
         xs: '0 1px 2px 0 rgb(0 0 0 / 0.05)',
         glow: '0 0 20px -5px hsl(var(--primary))',
         'card-hover': '0 8px 30px -8px hsl(0 0% 0% / 0.3)',
+      },
+      transitionProperty: {
+        width: 'width',
+        'width-transform': 'width, transform',
       },
       animation: {
         'fade-in': 'fadeIn 0.4s ease-out forwards',

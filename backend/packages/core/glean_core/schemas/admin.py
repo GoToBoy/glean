@@ -77,3 +77,93 @@ class DashboardStatsResponse(BaseModel):
     total_subscriptions: int
     new_users_today: int
     new_entries_today: int
+
+
+# M2: Admin feed management schemas
+class AdminFeedListItem(BaseModel):
+    """Admin feed list item schema."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    url: str
+    title: str
+    status: str
+    subscriber_count: int = 0
+    last_fetched_at: datetime | None
+    error_count: int = 0
+    fetch_error_message: str | None = None
+    created_at: datetime
+
+
+class AdminFeedListResponse(BaseModel):
+    """Admin feed list response schema."""
+
+    items: list[AdminFeedListItem]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+
+class AdminFeedDetailResponse(AdminFeedListItem):
+    """Admin feed detail response schema."""
+
+    description: str | None
+    icon_url: str | None
+    last_error_message: str | None
+
+
+class AdminFeedUpdateRequest(BaseModel):
+    """Admin feed update request schema."""
+
+    url: str | None = None
+    title: str | None = None
+    status: str | None = None
+
+
+class AdminBatchFeedRequest(BaseModel):
+    """Admin batch feed operation request schema."""
+
+    action: str = Field(..., pattern="^(enable|disable|delete)$")
+    feed_ids: list[str]
+
+
+# M2: Admin entry management schemas
+class AdminEntryListItem(BaseModel):
+    """Admin entry list item schema."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    feed_id: str
+    feed_title: str = ""
+    url: str
+    title: str
+    author: str | None
+    published_at: datetime | None
+    created_at: datetime
+
+
+class AdminEntryListResponse(BaseModel):
+    """Admin entry list response schema."""
+
+    items: list[AdminEntryListItem]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int
+
+
+class AdminEntryDetailResponse(AdminEntryListItem):
+    """Admin entry detail response schema."""
+
+    content: str | None
+    summary: str | None
+
+
+class AdminBatchEntryRequest(BaseModel):
+    """Admin batch entry operation request schema."""
+
+    action: str = Field(..., pattern="^(delete)$")
+    entry_ids: list[str]

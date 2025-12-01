@@ -14,6 +14,7 @@ export class EntryService {
    */
   async getEntries(params?: {
     feed_id?: string
+    folder_id?: string
     is_read?: boolean
     is_liked?: boolean
     read_later?: boolean
@@ -40,9 +41,10 @@ export class EntryService {
   /**
    * Mark all entries as read.
    */
-  async markAllRead(feedId?: string): Promise<{ message: string }> {
+  async markAllRead(feedId?: string, folderId?: string): Promise<{ message: string }> {
     return this.client.post<{ message: string }>('/entries/mark-all-read', {
       feed_id: feedId,
+      folder_id: folderId,
     })
   }
 }

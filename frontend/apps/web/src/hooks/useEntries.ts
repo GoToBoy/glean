@@ -18,6 +18,7 @@ export const entryKeys = {
  */
 export interface EntryFilters {
   feed_id?: string
+  folder_id?: string
   is_read?: boolean
   is_liked?: boolean
   read_later?: boolean
@@ -75,7 +76,8 @@ export function useMarkAllRead() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (feedId?: string) => entryService.markAllRead(feedId),
+    mutationFn: ({ feedId, folderId }: { feedId?: string; folderId?: string }) =>
+      entryService.markAllRead(feedId, folderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
       // Invalidate subscriptions to update unread counts

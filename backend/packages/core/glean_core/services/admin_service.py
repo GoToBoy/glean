@@ -4,7 +4,7 @@ Admin service.
 Provides business logic for administrative operations.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +14,7 @@ from glean_database.models.entry import Entry
 from glean_database.models.feed import Feed
 from glean_database.models.subscription import Subscription
 from glean_database.models.user import User
+from glean_database.models.user_entry import UserEntry
 
 from ..auth.password import hash_password, verify_password
 
@@ -159,8 +160,9 @@ class AdminService:
         total_users = total_users_result.scalar_one()
 
         # Active users (last 7 days)
-        seven_days_ago = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        seven_days_ago = seven_days_ago.replace(day=seven_days_ago.day - 7)
+        seven_days_ago = (datetime.now(UTC) - timedelta(days=7)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         active_users_result = await self.session.execute(
             select(func.count()).select_from(User).where(User.last_login_at >= seven_days_ago)
         )
@@ -202,3 +204,369 @@ class AdminService:
             "new_users_today": new_users_today,
             "new_entries_today": new_entries_today,
         }
+
+    # M2: Feed management methods
+    async def list_feeds(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        status: str | None = None,
+        search: str | None = None,
+        sort: str = "created_at",
+        order: str = "desc",
+    ) -> tuple[list[dict], int]:
+        """
+        List all feeds with pagination and filtering.
+
+        Args:
+            page: Page number (1-based).
+            per_page: Items per page.
+            status: Filter by status.
+            search: Search in title or URL.
+            sort: Sort field.
+            order: Sort order.
+
+        Returns:
+            Tuple of (feed list with subscriber counts, total count).
+        """
+        # Build base query
+        query = select(Feed)
+        count_query = select(func.count()).select_from(Feed)
+
+        # Apply filters
+        if status:
+            query = query.where(Feed.status == status)
+            count_query = count_query.where(Feed.status == status)
+
+        if search:
+            search_filter = Feed.title.ilike(f"%{search}%") | Feed.url.ilike(f"%{search}%")
+            query = query.where(search_filter)
+            count_query = count_query.where(search_filter)
+
+        # Get total count
+        result = await self.session.execute(count_query)
+        total = result.scalar_one()
+
+        # Apply sorting
+        sort_column = getattr(Feed, sort, Feed.created_at)
+        if order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+
+        # Apply pagination
+        query = query.offset((page - 1) * per_page).limit(per_page)
+
+        result = await self.session.execute(query)
+        feeds = list(result.scalars().all())
+
+        # Get subscriber counts for each feed
+        feed_data = []
+        for feed in feeds:
+            sub_count_result = await self.session.execute(
+                select(func.count()).select_from(Subscription).where(Subscription.feed_id == feed.id)
+            )
+            subscriber_count = sub_count_result.scalar_one()
+
+            feed_data.append({
+                "id": feed.id,
+                "url": feed.url,
+                "title": feed.title,
+                "status": feed.status,
+                "subscriber_count": subscriber_count,
+                "last_fetched_at": feed.last_fetched_at,
+                "error_count": feed.error_count,
+                "fetch_error_message": feed.fetch_error_message,
+                "created_at": feed.created_at,
+            })
+
+        return feed_data, total
+
+    async def get_feed(self, feed_id: str) -> dict | None:
+        """
+        Get feed details by ID.
+
+        Args:
+            feed_id: Feed identifier.
+
+        Returns:
+            Feed details or None if not found.
+        """
+        result = await self.session.execute(select(Feed).where(Feed.id == feed_id))
+        feed = result.scalar_one_or_none()
+
+        if not feed:
+            return None
+
+        # Get subscriber count
+        sub_count_result = await self.session.execute(
+            select(func.count()).select_from(Subscription).where(Subscription.feed_id == feed.id)
+        )
+        subscriber_count = sub_count_result.scalar_one()
+
+        return {
+            "id": feed.id,
+            "url": feed.url,
+            "title": feed.title,
+            "description": feed.description,
+            "icon_url": feed.icon_url,
+            "status": feed.status,
+            "subscriber_count": subscriber_count,
+            "last_fetched_at": feed.last_fetched_at,
+            "error_count": feed.error_count,
+            "last_error_message": feed.fetch_error_message,
+            "created_at": feed.created_at,
+        }
+
+    async def update_feed(self, feed_id: str, url: str | None = None, title: str | None = None, status: str | None = None) -> dict | None:
+        """
+        Update a feed.
+
+        Args:
+            feed_id: Feed identifier.
+            url: New URL.
+            title: New title.
+            status: New status.
+
+        Returns:
+            Updated feed or None if not found.
+        """
+        result = await self.session.execute(select(Feed).where(Feed.id == feed_id))
+        feed = result.scalar_one_or_none()
+
+        if not feed:
+            return None
+
+        if url is not None:
+            feed.url = url
+        if title is not None:
+            feed.title = title
+        if status is not None:
+            feed.status = status
+
+        await self.session.commit()
+        await self.session.refresh(feed)
+
+        return await self.get_feed(feed_id)
+
+    async def reset_feed_error(self, feed_id: str) -> dict | None:
+        """
+        Reset error count for a feed.
+
+        Args:
+            feed_id: Feed identifier.
+
+        Returns:
+            Updated feed or None if not found.
+        """
+        result = await self.session.execute(select(Feed).where(Feed.id == feed_id))
+        feed = result.scalar_one_or_none()
+
+        if not feed:
+            return None
+
+        feed.error_count = 0
+        feed.fetch_error_message = None
+        feed.status = "active"
+
+        await self.session.commit()
+        await self.session.refresh(feed)
+
+        return await self.get_feed(feed_id)
+
+    async def delete_feed(self, feed_id: str) -> bool:
+        """
+        Delete a feed and all related data.
+
+        Args:
+            feed_id: Feed identifier.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        result = await self.session.execute(select(Feed).where(Feed.id == feed_id))
+        feed = result.scalar_one_or_none()
+
+        if not feed:
+            return False
+
+        await self.session.delete(feed)
+        await self.session.commit()
+        return True
+
+    async def batch_feed_operation(self, action: str, feed_ids: list[str]) -> int:
+        """
+        Perform batch operation on feeds.
+
+        Args:
+            action: Action to perform (enable, disable, delete).
+            feed_ids: List of feed IDs.
+
+        Returns:
+            Number of affected feeds.
+        """
+        result = await self.session.execute(select(Feed).where(Feed.id.in_(feed_ids)))
+        feeds = list(result.scalars().all())
+
+        count = 0
+        for feed in feeds:
+            if action == "enable":
+                feed.status = "active"
+                count += 1
+            elif action == "disable":
+                feed.status = "inactive"
+                count += 1
+            elif action == "delete":
+                await self.session.delete(feed)
+                count += 1
+
+        await self.session.commit()
+        return count
+
+    # M2: Entry management methods
+    async def list_entries(
+        self,
+        page: int = 1,
+        per_page: int = 20,
+        feed_id: str | None = None,
+        search: str | None = None,
+        sort: str = "created_at",
+        order: str = "desc",
+    ) -> tuple[list[dict], int]:
+        """
+        List all entries with pagination and filtering.
+
+        Args:
+            page: Page number (1-based).
+            per_page: Items per page.
+            feed_id: Filter by feed.
+            search: Search in title.
+            sort: Sort field.
+            order: Sort order.
+
+        Returns:
+            Tuple of (entry list, total count).
+        """
+        # Build base query
+        query = select(Entry, Feed.title.label("feed_title")).join(Feed, Entry.feed_id == Feed.id)
+        count_query = select(func.count()).select_from(Entry)
+
+        # Apply filters
+        if feed_id:
+            query = query.where(Entry.feed_id == feed_id)
+            count_query = count_query.where(Entry.feed_id == feed_id)
+
+        if search:
+            query = query.where(Entry.title.ilike(f"%{search}%"))
+            count_query = count_query.where(Entry.title.ilike(f"%{search}%"))
+
+        # Get total count
+        result = await self.session.execute(count_query)
+        total = result.scalar_one()
+
+        # Apply sorting
+        sort_column = getattr(Entry, sort, Entry.created_at)
+        if order == "desc":
+            query = query.order_by(sort_column.desc())
+        else:
+            query = query.order_by(sort_column.asc())
+
+        # Apply pagination
+        query = query.offset((page - 1) * per_page).limit(per_page)
+
+        result = await self.session.execute(query)
+        rows = result.all()
+
+        entries = [
+            {
+                "id": row.Entry.id,
+                "feed_id": row.Entry.feed_id,
+                "feed_title": row.feed_title,
+                "url": row.Entry.url,
+                "title": row.Entry.title,
+                "author": row.Entry.author,
+                "published_at": row.Entry.published_at,
+                "created_at": row.Entry.created_at,
+            }
+            for row in rows
+        ]
+
+        return entries, total
+
+    async def get_entry(self, entry_id: str) -> dict | None:
+        """
+        Get entry details by ID.
+
+        Args:
+            entry_id: Entry identifier.
+
+        Returns:
+            Entry details or None if not found.
+        """
+        result = await self.session.execute(
+            select(Entry, Feed.title.label("feed_title"))
+            .join(Feed, Entry.feed_id == Feed.id)
+            .where(Entry.id == entry_id)
+        )
+        row = result.one_or_none()
+
+        if not row:
+            return None
+
+        return {
+            "id": row.Entry.id,
+            "feed_id": row.Entry.feed_id,
+            "feed_title": row.feed_title,
+            "url": row.Entry.url,
+            "title": row.Entry.title,
+            "author": row.Entry.author,
+            "content": row.Entry.content,
+            "summary": row.Entry.summary,
+            "published_at": row.Entry.published_at,
+            "created_at": row.Entry.created_at,
+        }
+
+    async def delete_entry(self, entry_id: str) -> bool:
+        """
+        Delete an entry.
+
+        Args:
+            entry_id: Entry identifier.
+
+        Returns:
+            True if deleted, False if not found.
+        """
+        result = await self.session.execute(select(Entry).where(Entry.id == entry_id))
+        entry = result.scalar_one_or_none()
+
+        if not entry:
+            return False
+
+        await self.session.delete(entry)
+        await self.session.commit()
+        return True
+
+    async def batch_entry_operation(self, action: str, entry_ids: list[str]) -> int:
+        """
+        Perform batch operation on entries.
+
+        Args:
+            action: Action to perform (delete).
+            entry_ids: List of entry IDs.
+
+        Returns:
+            Number of affected entries.
+        """
+        if action != "delete":
+            return 0
+
+        result = await self.session.execute(select(Entry).where(Entry.id.in_(entry_ids)))
+        entries = list(result.scalars().all())
+
+        count = 0
+        for entry in entries:
+            await self.session.delete(entry)
+            count += 1
+
+        await self.session.commit()
+        return count

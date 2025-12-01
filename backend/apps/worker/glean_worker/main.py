@@ -13,7 +13,7 @@ from arq.connections import RedisSettings
 from glean_database.session import init_database
 
 from .config import settings
-from .tasks import feed_fetcher
+from .tasks import bookmark_metadata, cleanup, feed_fetcher
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -36,8 +36,11 @@ async def startup(ctx: dict[str, Any]) -> None:
     print("Registered task functions:")
     print("  - fetch_feed_task")
     print("  - fetch_all_feeds")
+    print("  - cleanup_read_later")
+    print("  - fetch_bookmark_metadata_task")
     print("Scheduled cron jobs:")
     print("  - scheduled_fetch (every 15 minutes: 0, 15, 30, 45)")
+    print("  - scheduled_cleanup (hourly at minute 0)")
     print("=" * 60)
 
 
@@ -64,11 +67,16 @@ class WorkerSettings:
     functions = [
         feed_fetcher.fetch_feed_task,
         feed_fetcher.fetch_all_feeds,
+        cleanup.cleanup_read_later,
+        bookmark_metadata.fetch_bookmark_metadata_task,
     ]
 
-    # Scheduled cron jobs (runs every 15 minutes)
+    # Scheduled cron jobs
     cron_jobs = [
+        # Feed fetch (every 15 minutes)
         cron(feed_fetcher.scheduled_fetch, minute={0, 15, 30, 45}),
+        # Read-later cleanup (hourly at minute 0)
+        cron(cleanup.scheduled_cleanup, minute=0),
     ]
 
     # Lifecycle handlers

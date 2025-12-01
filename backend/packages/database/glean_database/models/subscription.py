@@ -46,9 +46,18 @@ class Subscription(Base, TimestampMixin):
     # Customization
     custom_title: Mapped[str | None] = mapped_column(String(500))
 
+    # Folder organization (M2)
+    folder_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("folders.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
     # Relationships
     user = relationship("User", back_populates="subscriptions")
     feed = relationship("Feed", back_populates="subscriptions")
+    folder = relationship("Folder", back_populates="subscriptions")
 
     # Constraints: User can only subscribe to a feed once
     __table_args__ = (UniqueConstraint("user_id", "feed_id", name="uq_user_feed"),)

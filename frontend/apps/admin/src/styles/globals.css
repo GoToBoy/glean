@@ -144,24 +144,44 @@ body {
   line-height: 1.6;
   }
   
-  /* Custom scrollbar for dark theme */
+  /* Custom scrollbar for dark theme - auto-hide */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s ease;
+  }
+  
+  *:hover {
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   
   ::-webkit-scrollbar-track {
-    background: hsl(var(--muted));
+    background: transparent;
     border-radius: 4px;
   }
   
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.3);
+    background: transparent;
     border-radius: 4px;
+    transition: background 0.3s ease;
   }
   
-  ::-webkit-scrollbar-thumb:hover {
+  *:hover::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+  
+  *:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
+  }
+  
+  /* Show scrollbar while actively scrolling */
+  .is-scrolling::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
   }
   
   /* Typography enhancements */
@@ -332,6 +352,11 @@ body {
   *:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring));
+  }
+
+  /* Remove focus ring from inputs inside custom input containers */
+  .input-container input:focus-visible {
+    box-shadow: none;
   }
   
   /* Selection color */
@@ -671,16 +696,28 @@ body {
     color: hsl(230 80% 45%);
   }
   
-  /* Light theme scrollbar */
+  /* Light theme scrollbar - auto-hide */
+  [data-theme="light"] * {
+    scrollbar-color: transparent transparent;
+  }
+  
+  [data-theme="light"] *:hover {
+    scrollbar-color: hsl(220 10% 75%) transparent;
+  }
+  
   [data-theme="light"] ::-webkit-scrollbar-track {
-    background: hsl(45 20% 94%);
+    background: transparent;
   }
   
   [data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+  
+  [data-theme="light"] *:hover::-webkit-scrollbar-thumb {
     background: hsl(220 10% 75%);
   }
   
-  [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  [data-theme="light"] *:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(220 10% 60%);
   }
   

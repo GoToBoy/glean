@@ -56,17 +56,20 @@ export interface RefreshTokenRequest {
 /** Discover feed request */
 export interface DiscoverFeedRequest {
   url: string
+  folder_id?: string | null
 }
 
 /** Update subscription request */
 export interface UpdateSubscriptionRequest {
-  custom_title: string | null
+  custom_title?: string | null
+  folder_id?: string | null
+  feed_url?: string | null
 }
 
 /** Update entry state request */
 export interface UpdateEntryStateRequest {
   is_read?: boolean
-  is_liked?: boolean
+  is_liked?: boolean | null  // null to clear like/dislike
   read_later?: boolean
 }
 
@@ -81,4 +84,16 @@ export interface OPMLImportResponse {
   success: number
   failed: number
   total: number
+  folders_created: number
+}
+
+/** Batch delete subscriptions request */
+export interface BatchDeleteSubscriptionsRequest {
+  subscription_ids: string[]
+}
+
+/** Batch delete subscriptions response */
+export interface BatchDeleteSubscriptionsResponse {
+  deleted_count: number
+  failed_count: number
 }

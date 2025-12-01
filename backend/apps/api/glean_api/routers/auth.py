@@ -14,10 +14,11 @@ from glean_core.schemas import (
     RegisterRequest,
     TokenResponse,
     UserResponse,
+    UserUpdate,
 )
-from glean_core.services import AuthService
+from glean_core.services import AuthService, UserService
 
-from ..dependencies import get_auth_service, get_current_user
+from ..dependencies import get_auth_service, get_current_user, get_user_service
 
 router = APIRouter()
 
@@ -124,3 +125,23 @@ async def get_me(
         User profile data.
     """
     return current_user
+
+
+@router.patch("/me")
+async def update_me(
+    data: UserUpdate,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    user_service: Annotated[UserService, Depends(get_user_service)],
+) -> UserResponse:
+    """
+    Update current user profile and settings.
+
+    Args:
+        data: Update data (name, avatar_url, settings).
+        current_user: Current authenticated user from token.
+        user_service: User service.
+
+    Returns:
+        Updated user profile data.
+    """
+    return await user_service.update_user(current_user.id, data)

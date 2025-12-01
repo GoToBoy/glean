@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
-from .routers import admin, auth, entries, feeds
+from .routers import admin, auth, bookmarks, entries, feeds, folders, tags
 
 # Global Redis connection pool for task queue
 redis_pool: ArqRedis | None = None
@@ -93,6 +93,10 @@ app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(feeds.router, prefix="/api/feeds", tags=["Feeds"])
 app.include_router(entries.router, prefix="/api/entries", tags=["Entries"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+# M2 routers
+app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
+app.include_router(tags.router, prefix="/api/tags", tags=["Tags"])
+app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["Bookmarks"])
 
 
 @app.get("/api/health")

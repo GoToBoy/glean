@@ -3,6 +3,8 @@
 import asyncio
 import os
 from collections.abc import AsyncGenerator, Generator
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -13,6 +15,21 @@ from sqlalchemy.pool import NullPool
 from glean_api.main import app
 from glean_database import Base
 from glean_database.session import get_session
+
+
+class MockArqRedis:
+    """Mock ArqRedis for testing."""
+
+    def __init__(self):
+        self.enqueued_jobs: list[tuple[str, tuple[Any, ...]]] = []
+
+    async def enqueue_job(self, func_name: str, *args: Any, **kwargs: Any) -> None:
+        """Mock enqueue_job that records calls without actually queuing."""
+        self.enqueued_jobs.append((func_name, args))
+
+
+# Global mock redis instance for testing
+mock_redis = MockArqRedis()
 
 # Test database URL - check TEST_DATABASE_URL first, then DATABASE_URL, then fallback to default
 TEST_DATABASE_URL = os.getenv(
@@ -77,18 +94,32 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 
 @pytest_asyncio.fixture
 async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """Create test HTTP client with database override."""
+    """Create test HTTP client with database and redis overrides."""
+    from glean_api.dependencies import get_redis_pool
 
     async def override_get_session():
         yield db_session
 
+    async def override_get_redis_pool():
+        return mock_redis
+
     app.dependency_overrides[get_session] = override_get_session
+    app.dependency_overrides[get_redis_pool] = override_get_redis_pool
+
+    # Reset mock redis state before each test
+    mock_redis.enqueued_jobs.clear()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def test_mock_redis():
+    """Provide access to the mock redis instance for testing."""
+    return mock_redis
 
 
 @pytest_asyncio.fixture

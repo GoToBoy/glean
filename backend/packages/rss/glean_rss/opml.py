@@ -12,7 +12,13 @@ from xml.etree import ElementTree as ET
 class OPMLFeed:
     """OPML feed entry."""
 
-    def __init__(self, title: str, xml_url: str, html_url: str | None = None):
+    def __init__(
+        self,
+        title: str,
+        xml_url: str,
+        html_url: str | None = None,
+        folder: str | None = None,
+    ):
         """
         Initialize OPML feed entry.
 
@@ -20,15 +26,32 @@ class OPMLFeed:
             title: Feed title.
             xml_url: Feed XML URL.
             html_url: Optional feed website URL.
+            folder: Optional folder/category name.
         """
         self.title = title
         self.xml_url = xml_url
         self.html_url = html_url
+        self.folder = folder
+
+
+class OPMLParseResult:
+    """Result of OPML parsing with feeds and folder information."""
+
+    def __init__(self, feeds: list[OPMLFeed], folders: list[str]):
+        """
+        Initialize OPML parse result.
+
+        Args:
+            feeds: List of feed entries.
+            folders: List of unique folder names (in order of appearance).
+        """
+        self.feeds = feeds
+        self.folders = folders
 
 
 def parse_opml(content: str) -> list[OPMLFeed]:
     """
-    Parse OPML file.
+    Parse OPML file (legacy function for backward compatibility).
 
     Args:
         content: OPML XML content.
@@ -39,37 +62,84 @@ def parse_opml(content: str) -> list[OPMLFeed]:
     Raises:
         ValueError: If OPML parsing fails.
     """
+    result = parse_opml_with_folders(content)
+    return result.feeds
+
+
+def parse_opml_with_folders(content: str) -> OPMLParseResult:
+    """
+    Parse OPML file with folder structure.
+
+    Args:
+        content: OPML XML content.
+
+    Returns:
+        OPMLParseResult with feeds and folders.
+
+    Raises:
+        ValueError: If OPML parsing fails.
+    """
     try:
         root = ET.fromstring(content)
     except ET.ParseError as e:
         raise ValueError(f"Invalid OPML format: {e}") from e
 
-    feeds = []
+    feeds: list[OPMLFeed] = []
+    folders: list[str] = []
+    seen_folders: set[str] = set()
     body = root.find("body")
     if body is None:
-        return feeds
+        return OPMLParseResult(feeds=feeds, folders=folders)
 
-    # Find all outline elements
-    for outline in body.iter("outline"):
-        # Skip outline elements without xmlUrl (folders/categories)
+    def process_outline(
+        outline: ET.Element, parent_folder: str | None = None
+    ) -> None:
+        """Recursively process outline elements."""
         xml_url = outline.get("xmlUrl")
-        if not xml_url:
-            continue
 
-        title = outline.get("title") or outline.get("text", "")
-        html_url = outline.get("htmlUrl")
+        if xml_url:
+            # This is a feed entry
+            title = outline.get("title") or outline.get("text", "")
+            html_url = outline.get("htmlUrl")
+            feeds.append(
+                OPMLFeed(
+                    title=title,
+                    xml_url=xml_url,
+                    html_url=html_url,
+                    folder=parent_folder,
+                )
+            )
+        else:
+            # This is a folder/category - process children
+            folder_name = outline.get("title") or outline.get("text")
+            if folder_name:
+                # Track unique folders in order of appearance
+                if folder_name not in seen_folders:
+                    folders.append(folder_name)
+                    seen_folders.add(folder_name)
 
-        feeds.append(OPMLFeed(title=title, xml_url=xml_url, html_url=html_url))
+                # Process child elements with this folder as parent
+                for child in outline:
+                    process_outline(child, folder_name)
+            else:
+                # No folder name, process children without folder
+                for child in outline:
+                    process_outline(child, parent_folder)
 
-    return feeds
+    # Process top-level outlines
+    for outline in body:
+        process_outline(outline)
+
+    return OPMLParseResult(feeds=feeds, folders=folders)
 
 
 def generate_opml(feeds: list[dict[str, Any]], title: str = "Glean Subscriptions") -> str:
     """
-    Generate OPML file from feeds.
+    Generate OPML file from feeds with folder structure.
 
     Args:
-        feeds: List of feed dictionaries with 'title', 'url', and optional 'site_url'.
+        feeds: List of feed dictionaries with 'title', 'url', optional 'site_url',
+               and optional 'folder' (folder name).
         title: OPML document title.
 
     Returns:
@@ -89,19 +159,47 @@ def generate_opml(feeds: list[dict[str, Any]], title: str = "Glean Subscriptions
     # Create body
     body = ET.SubElement(opml, "body")
 
-    # Add feeds
+    # Group feeds by folder
+    folder_map: dict[str | None, list[dict[str, Any]]] = {}
     for feed in feeds:
+        folder_name = feed.get("folder")
+        if folder_name not in folder_map:
+            folder_map[folder_name] = []
+        folder_map[folder_name].append(feed)
+
+    def add_feed_outline(parent: ET.Element, feed: dict[str, Any]) -> None:
+        """Add a feed outline element to parent."""
         outline = ET.SubElement(
-            body,
+            parent,
             "outline",
             type="rss",
             text=feed.get("title", ""),
             title=feed.get("title", ""),
             xmlUrl=feed.get("url", ""),
         )
-
         if feed.get("site_url"):
             outline.set("htmlUrl", feed["site_url"])
+
+    # Add ungrouped feeds first (those without folder)
+    for feed in folder_map.get(None, []):
+        add_feed_outline(body, feed)
+
+    # Add folder groups
+    for folder_name, folder_feeds in folder_map.items():
+        if folder_name is None:
+            continue  # Already handled above
+
+        # Create folder outline
+        folder_outline = ET.SubElement(
+            body,
+            "outline",
+            text=folder_name,
+            title=folder_name,
+        )
+
+        # Add feeds to folder
+        for feed in folder_feeds:
+            add_feed_outline(folder_outline, feed)
 
     # Generate XML
     tree = ET.ElementTree(opml)

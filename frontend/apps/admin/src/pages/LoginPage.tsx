@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
+import { Button, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
 import { Lock, User, Rss, AlertCircle } from 'lucide-react'
 
 /**
@@ -57,14 +57,14 @@ export default function LoginPage() {
 
             <div className="space-y-2">
               <Label htmlFor="username">Username</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                <Input
+              <div className="input-container flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 shadow-2xs ring-ring/24 transition-shadow focus-within:border-ring focus-within:ring-[3px] dark:bg-input/32">
+                <User className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <input
                   id="username"
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="pl-10"
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/64"
                   placeholder="Enter your username"
                   required
                   autoComplete="username"
@@ -74,14 +74,14 @@ export default function LoginPage() {
 
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-                <Input
+              <div className="input-container flex items-center gap-3 rounded-lg border border-input bg-background px-3 py-2 shadow-2xs ring-ring/24 transition-shadow focus-within:border-ring focus-within:ring-[3px] dark:bg-input/32">
+                <Lock className="h-5 w-5 shrink-0 text-muted-foreground" />
+                <input
                   id="password"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10"
+                  className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground/64"
                   placeholder="Enter your password"
                   required
                   autoComplete="current-password"

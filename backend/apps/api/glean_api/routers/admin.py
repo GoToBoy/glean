@@ -12,6 +12,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import jwt
 
 from glean_core.schemas.admin import (
+    AdminBatchEntryRequest,
+    AdminBatchFeedRequest,
+    AdminEntryDetailResponse,
+    AdminEntryListItem,
+    AdminEntryListResponse,
+    AdminFeedDetailResponse,
+    AdminFeedListItem,
+    AdminFeedListResponse,
+    AdminFeedUpdateRequest,
     AdminLoginRequest,
     AdminLoginResponse,
     AdminUserResponse,
@@ -58,8 +67,8 @@ async def admin_login(
     now = datetime.now(UTC)
     expire = now + timedelta(minutes=settings.jwt_access_token_expire_minutes)
 
-    # AdminRole is a str Enum, so .value gives us the string representation
-    role_value = admin.role.value
+    # Handle both enum (in-memory) and string (from database) cases
+    role_value = admin.role.value if hasattr(admin.role, "value") else admin.role
 
     payload = {
         "sub": admin.id,
@@ -192,3 +201,299 @@ async def toggle_user_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return UserListItem.model_validate(user)
+
+
+# M2: Feed management endpoints
+@router.get("/feeds", response_model=AdminFeedListResponse)
+async def list_feeds(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    search: str | None = Query(None, description="Search in title or URL"),
+    sort: str = Query("created_at", description="Sort field"),
+    order: str = Query("desc", description="Sort order"),
+) -> AdminFeedListResponse:
+    """
+    List all feeds with pagination.
+
+    Args:
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+        page: Page number.
+        per_page: Items per page.
+        status_filter: Filter by status.
+        search: Search query.
+        sort: Sort field.
+        order: Sort order.
+
+    Returns:
+        Paginated feed list.
+    """
+    feeds, total = await admin_service.list_feeds(
+        page=page,
+        per_page=per_page,
+        status=status_filter,
+        search=search,
+        sort=sort,
+        order=order,
+    )
+
+    return AdminFeedListResponse(
+        items=[AdminFeedListItem(**feed) for feed in feeds],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=ceil(total / per_page) if total > 0 else 1,
+    )
+
+
+@router.get("/feeds/{feed_id}", response_model=AdminFeedDetailResponse)
+async def get_feed(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> AdminFeedDetailResponse:
+    """
+    Get feed details.
+
+    Args:
+        feed_id: Feed ID.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Feed details.
+
+    Raises:
+        HTTPException: If feed not found.
+    """
+    feed = await admin_service.get_feed(feed_id)
+
+    if not feed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    return AdminFeedDetailResponse(**feed)
+
+
+@router.patch("/feeds/{feed_id}", response_model=AdminFeedDetailResponse)
+async def update_feed(
+    feed_id: str,
+    request: AdminFeedUpdateRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> AdminFeedDetailResponse:
+    """
+    Update a feed.
+
+    Args:
+        feed_id: Feed ID.
+        request: Update data.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Updated feed.
+
+    Raises:
+        HTTPException: If feed not found.
+    """
+    feed = await admin_service.update_feed(
+        feed_id, url=request.url, title=request.title, status=request.status
+    )
+
+    if not feed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    return AdminFeedDetailResponse(**feed)
+
+
+@router.post("/feeds/{feed_id}/reset-error", response_model=AdminFeedDetailResponse)
+async def reset_feed_error(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> AdminFeedDetailResponse:
+    """
+    Reset error count for a feed.
+
+    Args:
+        feed_id: Feed ID.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Updated feed.
+
+    Raises:
+        HTTPException: If feed not found.
+    """
+    feed = await admin_service.reset_feed_error(feed_id)
+
+    if not feed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    return AdminFeedDetailResponse(**feed)
+
+
+@router.delete("/feeds/{feed_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_feed(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> None:
+    """
+    Delete a feed.
+
+    Args:
+        feed_id: Feed ID.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Raises:
+        HTTPException: If feed not found.
+    """
+    deleted = await admin_service.delete_feed(feed_id)
+
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+
+@router.post("/feeds/batch")
+async def batch_feed_operation(
+    request: AdminBatchFeedRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> dict[str, int]:
+    """
+    Perform batch operation on feeds.
+
+    Args:
+        request: Batch operation data.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Number of affected feeds.
+    """
+    count = await admin_service.batch_feed_operation(request.action, request.feed_ids)
+    return {"affected": count}
+
+
+# M2: Entry management endpoints
+@router.get("/entries", response_model=AdminEntryListResponse)
+async def list_entries(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(20, ge=1, le=100, description="Items per page"),
+    feed_id: str | None = Query(None, description="Filter by feed"),
+    search: str | None = Query(None, description="Search in title"),
+    sort: str = Query("created_at", description="Sort field"),
+    order: str = Query("desc", description="Sort order"),
+) -> AdminEntryListResponse:
+    """
+    List all entries with pagination.
+
+    Args:
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+        page: Page number.
+        per_page: Items per page.
+        feed_id: Filter by feed.
+        search: Search query.
+        sort: Sort field.
+        order: Sort order.
+
+    Returns:
+        Paginated entry list.
+    """
+    entries, total = await admin_service.list_entries(
+        page=page,
+        per_page=per_page,
+        feed_id=feed_id,
+        search=search,
+        sort=sort,
+        order=order,
+    )
+
+    return AdminEntryListResponse(
+        items=[AdminEntryListItem(**entry) for entry in entries],
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=ceil(total / per_page) if total > 0 else 1,
+    )
+
+
+@router.get("/entries/{entry_id}", response_model=AdminEntryDetailResponse)
+async def get_entry(
+    entry_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> AdminEntryDetailResponse:
+    """
+    Get entry details.
+
+    Args:
+        entry_id: Entry ID.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Entry details.
+
+    Raises:
+        HTTPException: If entry not found.
+    """
+    entry = await admin_service.get_entry(entry_id)
+
+    if not entry:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+
+    return AdminEntryDetailResponse(**entry)
+
+
+@router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_entry(
+    entry_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> None:
+    """
+    Delete an entry.
+
+    Args:
+        entry_id: Entry ID.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Raises:
+        HTTPException: If entry not found.
+    """
+    deleted = await admin_service.delete_entry(entry_id)
+
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
+
+
+@router.post("/entries/batch")
+async def batch_entry_operation(
+    request: AdminBatchEntryRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+) -> dict[str, int]:
+    """
+    Perform batch operation on entries.
+
+    Args:
+        request: Batch operation data.
+        current_admin: Current authenticated admin.
+        admin_service: Admin service instance.
+
+    Returns:
+        Number of affected entries.
+    """
+    count = await admin_service.batch_entry_operation(request.action, request.entry_ids)
+    return {"affected": count}

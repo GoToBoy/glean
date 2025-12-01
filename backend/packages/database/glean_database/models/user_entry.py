@@ -55,6 +55,9 @@ class UserEntry(Base, TimestampMixin):
     is_liked: Mapped[bool | None] = mapped_column(Boolean)
     read_later: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Read later expiration (M2)
+    read_later_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
     # Recommendation data
     preference_score: Mapped[float | None] = mapped_column(Float)
 
@@ -65,6 +68,9 @@ class UserEntry(Base, TimestampMixin):
     # Relationships
     user = relationship("User", back_populates="user_entries")
     entry = relationship("Entry", back_populates="user_entries")
+    user_entry_tags = relationship(
+        "UserEntryTag", back_populates="user_entry", cascade="all, delete-orphan"
+    )
 
     # Constraints: One record per user-entry pair
     __table_args__ = (UniqueConstraint("user_id", "entry_id", name="uq_user_entry"),)

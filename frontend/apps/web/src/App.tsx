@@ -9,8 +9,10 @@ import { lazy, Suspense } from 'react'
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ReaderPage = lazy(() => import('./pages/ReaderPage'))
-const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
+// M2 pages
+const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 
 /**
  * Loading spinner component with branding
@@ -56,6 +58,7 @@ function App() {
           <Route index element={<Navigate to="/reader" replace />} />
           <Route path="reader" element={<ReaderPage />} />
           <Route path="subscriptions" element={<SubscriptionsPage />} />
+          <Route path="bookmarks" element={<BookmarksPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 

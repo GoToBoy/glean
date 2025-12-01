@@ -11,6 +11,9 @@ from sqlalchemy.orm import selectinload
 from glean_core.schemas import SubscriptionResponse
 from glean_database.models import Entry, Feed, Subscription, UserEntry
 
+# Sentinel for unset values
+UNSET: object = object()
+
 
 class FeedService:
     """Feed and subscription management service."""
@@ -24,12 +27,16 @@ class FeedService:
         """
         self.session = session
 
-    async def get_user_subscriptions(self, user_id: str) -> list[SubscriptionResponse]:
+    async def get_user_subscriptions(
+        self, user_id: str, folder_id: str | None = None
+    ) -> list[SubscriptionResponse]:
         """
         Get all subscriptions for a user.
 
         Args:
             user_id: User identifier.
+            folder_id: Optional folder filter. If provided, returns only subscriptions in that folder.
+                       Use empty string "" to get ungrouped subscriptions (folder_id is None).
 
         Returns:
             List of subscription responses.
@@ -40,6 +47,14 @@ class FeedService:
             .options(selectinload(Subscription.feed))
             .order_by(Subscription.created_at.desc())
         )
+
+        # Apply folder filter if provided
+        if folder_id == "":
+            # Empty string means get ungrouped subscriptions
+            stmt = stmt.where(Subscription.folder_id.is_(None))
+        elif folder_id is not None:
+            stmt = stmt.where(Subscription.folder_id == folder_id)
+
         result = await self.session.execute(stmt)
         subscriptions = result.scalars().all()
 
@@ -67,6 +82,7 @@ class FeedService:
                 "user_id": sub.user_id,
                 "feed_id": sub.feed_id,
                 "custom_title": sub.custom_title,
+                "folder_id": sub.folder_id,
                 "created_at": sub.created_at,
                 "feed": sub.feed,
                 "unread_count": unread_count,
@@ -103,7 +119,11 @@ class FeedService:
         return SubscriptionResponse.model_validate(subscription)
 
     async def create_subscription(
-        self, user_id: str, feed_url: str, feed_title: str | None = None
+        self,
+        user_id: str,
+        feed_url: str,
+        feed_title: str | None = None,
+        folder_id: str | None = None,
     ) -> SubscriptionResponse:
         """
         Create a new subscription.
@@ -112,6 +132,7 @@ class FeedService:
             user_id: User identifier.
             feed_url: Feed URL.
             feed_title: Optional feed title (if None, uses URL as title).
+            folder_id: Optional folder to place the subscription in.
 
         Returns:
             Subscription response.
@@ -142,7 +163,7 @@ class FeedService:
             raise ValueError("Already subscribed to this feed")
 
         # Create subscription
-        subscription = Subscription(user_id=user_id, feed_id=feed.id)
+        subscription = Subscription(user_id=user_id, feed_id=feed.id, folder_id=folder_id)
         self.session.add(subscription)
         await self.session.flush()
 
@@ -186,7 +207,12 @@ class FeedService:
         await self.session.commit()
 
     async def update_subscription(
-        self, subscription_id: str, user_id: str, custom_title: str | None
+        self,
+        subscription_id: str,
+        user_id: str,
+        custom_title: str | None = None,
+        folder_id: str | None | object = UNSET,
+        feed_url: str | None = None,
     ) -> SubscriptionResponse:
         """
         Update subscription settings.
@@ -194,7 +220,10 @@ class FeedService:
         Args:
             subscription_id: Subscription identifier.
             user_id: User identifier for authorization.
-            custom_title: Custom title override.
+            custom_title: Custom title override. None clears the title.
+            folder_id: Folder to move subscription to. None removes from folder.
+                       Use UNSET sentinel to keep unchanged.
+            feed_url: New URL for the feed. Updates the underlying feed.
 
         Returns:
             Updated subscription response.
@@ -202,8 +231,10 @@ class FeedService:
         Raises:
             ValueError: If subscription not found or unauthorized.
         """
-        stmt = select(Subscription).where(
-            Subscription.id == subscription_id, Subscription.user_id == user_id
+        stmt = (
+            select(Subscription)
+            .where(Subscription.id == subscription_id, Subscription.user_id == user_id)
+            .options(selectinload(Subscription.feed))
         )
         result = await self.session.execute(stmt)
         subscription = result.scalar_one_or_none()
@@ -211,7 +242,17 @@ class FeedService:
         if not subscription:
             raise ValueError("Subscription not found")
 
-        subscription.custom_title = custom_title
+        if custom_title is not None or custom_title is None:
+            subscription.custom_title = custom_title
+
+        # Only update folder_id if explicitly provided (not the sentinel)
+        if folder_id is not UNSET:
+            subscription.folder_id = folder_id  # type: ignore[assignment]
+
+        # Update feed URL if provided
+        if feed_url and subscription.feed:
+            subscription.feed.url = feed_url
+
         await self.session.commit()
 
         # Reload with feed
@@ -224,3 +265,35 @@ class FeedService:
         subscription = result.scalar_one()
 
         return SubscriptionResponse.model_validate(subscription)
+
+    async def batch_delete_subscriptions(
+        self, subscription_ids: list[str], user_id: str
+    ) -> tuple[int, int]:
+        """
+        Delete multiple subscriptions at once.
+
+        Args:
+            subscription_ids: List of subscription identifiers.
+            user_id: User identifier for authorization.
+
+        Returns:
+            Tuple of (deleted_count, failed_count).
+        """
+        deleted_count = 0
+        failed_count = 0
+
+        for subscription_id in subscription_ids:
+            stmt = select(Subscription).where(
+                Subscription.id == subscription_id, Subscription.user_id == user_id
+            )
+            result = await self.session.execute(stmt)
+            subscription = result.scalar_one_or_none()
+
+            if subscription:
+                await self.session.delete(subscription)
+                deleted_count += 1
+            else:
+                failed_count += 1
+
+        await self.session.commit()
+        return deleted_count, failed_count

@@ -7,6 +7,7 @@ Provides endpoints for reading and managing feed entries.
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 
 from glean_core.schemas import (
     EntryListResponse,
@@ -26,6 +27,7 @@ async def list_entries(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     entry_service: Annotated[EntryService, Depends(get_entry_service)],
     feed_id: str | None = None,
+    folder_id: str | None = None,
     is_read: bool | None = None,
     is_liked: bool | None = None,
     read_later: bool | None = None,
@@ -39,6 +41,7 @@ async def list_entries(
         current_user: Current authenticated user.
         entry_service: Entry service.
         feed_id: Optional filter by feed ID.
+        folder_id: Optional filter by folder ID (gets entries from all feeds in folder).
         is_read: Optional filter by read status.
         is_liked: Optional filter by liked status.
         read_later: Optional filter by read later status.
@@ -51,6 +54,7 @@ async def list_entries(
     return await entry_service.get_entries(
         user_id=current_user.id,
         feed_id=feed_id,
+        folder_id=folder_id,
         is_read=is_read,
         is_liked=is_liked,
         read_later=read_later,
@@ -113,11 +117,18 @@ async def update_entry_state(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
+class MarkAllReadRequest(BaseModel):
+    """Mark all read request body."""
+
+    feed_id: str | None = None
+    folder_id: str | None = None
+
+
 @router.post("/mark-all-read")
 async def mark_all_read(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     entry_service: Annotated[EntryService, Depends(get_entry_service)],
-    feed_id: str | None = None,
+    data: MarkAllReadRequest,
 ) -> dict[str, str]:
     """
     Mark all entries as read.
@@ -125,10 +136,10 @@ async def mark_all_read(
     Args:
         current_user: Current authenticated user.
         entry_service: Entry service.
-        feed_id: Optional filter by feed ID.
+        data: Request body with optional feed_id and folder_id filters.
 
     Returns:
         Success message.
     """
-    await entry_service.mark_all_read(current_user.id, feed_id)
+    await entry_service.mark_all_read(current_user.id, data.feed_id, data.folder_id)
     return {"message": "All entries marked as read"}

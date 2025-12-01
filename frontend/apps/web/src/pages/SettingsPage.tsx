@@ -1,7 +1,15 @@
+import { useState } from 'react'
 import { useAuthStore } from '../stores/authStore'
-import { useThemeStore, type Theme } from '../stores/themeStore'
-import { User, Mail, Shield, CheckCircle, AlertCircle, Sun, Moon, Palette, Monitor } from 'lucide-react'
-import { Label } from '@glean/ui'
+import { User, Mail, Shield, CheckCircle, AlertCircle, Clock, Loader2, Eye } from 'lucide-react'
+import { Label, Button } from '@glean/ui'
+
+// Read later expiration options
+const READ_LATER_OPTIONS = [
+  { value: 1, label: '1 day' },
+  { value: 7, label: '7 days' },
+  { value: 30, label: '30 days' },
+  { value: 0, label: 'Never expire' },
+]
 
 /**
  * Settings page.
@@ -9,16 +17,49 @@ import { Label } from '@glean/ui'
  * User profile and application settings.
  */
 export default function SettingsPage() {
-  const { user } = useAuthStore()
-  const { theme, resolvedTheme, setTheme } = useThemeStore()
+  const { user, updateSettings, isLoading } = useAuthStore()
+  const [isSaving, setIsSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
+
+  // Get current read_later_days from user settings, default to 7
+  const currentReadLaterDays = user?.settings?.read_later_days ?? 7
+  const showReadLaterRemaining = user?.settings?.show_read_later_remaining ?? true
+
+  const handleReadLaterDaysChange = async (days: number) => {
+    setIsSaving(true)
+    setSaveSuccess(false)
+    try {
+      await updateSettings({ read_later_days: days })
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch {
+      // Error is handled by the store
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleToggleShowRemaining = async () => {
+    setIsSaving(true)
+    setSaveSuccess(false)
+    try {
+      await updateSettings({ show_read_later_remaining: !showReadLaterRemaining })
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 2000)
+    } catch {
+      // Error is handled by the store
+    } finally {
+      setIsSaving(false)
+    }
+  }
 
   return (
-    <div className="min-h-full bg-background p-6 lg:p-8">
+    <div className="min-h-full bg-background p-4 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-3xl">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-display text-3xl font-bold text-foreground">Settings</h1>
-          <p className="mt-2 text-muted-foreground">Manage your account and preferences</p>
+        <div className="mb-6 sm:mb-8">
+          <h1 className="font-display text-2xl font-bold text-foreground sm:text-3xl">Settings</h1>
+          <p className="mt-2 text-sm text-muted-foreground sm:text-base">Manage your account and preferences</p>
         </div>
 
         {/* Profile section */}
@@ -82,47 +123,79 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Preferences section */}
-        <section 
-          className="animate-fade-in rounded-xl border border-border bg-card p-6"
-          style={{ animationDelay: '0.1s' }}
-        >
+        {/* Read Later Settings */}
+        <section className="animate-fade-in mb-6 rounded-xl border border-border bg-card p-6" style={{ animationDelay: '50ms' }}>
           <div className="mb-6 flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-secondary/10">
-              <Palette className="h-5 w-5 text-secondary" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <Clock className="h-5 w-5 text-primary" />
             </div>
-            <h2 className="font-display text-xl font-semibold text-foreground">Preferences</h2>
+            <h2 className="font-display text-xl font-semibold text-foreground">Read Later</h2>
           </div>
-          
-          <div className="space-y-5">
-            {/* Theme */}
+
+          <div className="space-y-6">
             <div>
-              <Label className="mb-3 block text-sm text-muted-foreground">Theme</Label>
-              <div className="grid grid-cols-3 gap-3">
-                <ThemeOption
-                  value="dark"
-                  label="Night"
-                  icon={<Moon className="h-5 w-5" />}
-                  isActive={theme === 'dark'}
-                  onClick={() => setTheme('dark')}
-                />
-                <ThemeOption
-                  value="light"
-                  label="Day"
-                  icon={<Sun className="h-5 w-5" />}
-                  isActive={theme === 'light'}
-                  onClick={() => setTheme('light')}
-                />
-                <ThemeOption
-                  value="system"
-                  label="System"
-                  icon={<Monitor className="h-5 w-5" />}
-                  isActive={theme === 'system'}
-                  onClick={() => setTheme('system')}
-                  subtitle={theme === 'system' ? `(${resolvedTheme === 'dark' ? 'Night' : 'Day'})` : undefined}
-                />
+              <Label className="mb-2 block text-sm text-muted-foreground">
+                Auto-cleanup Period
+              </Label>
+              <p className="mb-4 text-xs text-muted-foreground">
+                Items marked as "Read Later" will be automatically removed after this period.
+                Set to "Never expire" to keep them indefinitely.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {READ_LATER_OPTIONS.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={currentReadLaterDays === option.value ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleReadLaterDaysChange(option.value)}
+                    disabled={isSaving || isLoading}
+                    className="min-w-[100px]"
+                  >
+                    {isSaving && currentReadLaterDays !== option.value ? null : currentReadLaterDays === option.value && isSaving ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {option.label}
+                  </Button>
+                ))}
               </div>
             </div>
+
+            {/* Show remaining time toggle */}
+            <div className="border-t border-border pt-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Eye className="h-5 w-5 text-muted-foreground" />
+                  <div>
+                    <Label className="block text-sm font-medium text-foreground">
+                      Show Remaining Time
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Display how much time is left before items expire in the Read Later list
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleToggleShowRemaining}
+                  disabled={isSaving || isLoading}
+                  className={`relative h-6 w-11 rounded-full transition-colors ${
+                    showReadLaterRemaining ? 'bg-primary' : 'bg-muted'
+                  } ${isSaving || isLoading ? 'opacity-50' : ''}`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      showReadLaterRemaining ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {saveSuccess && (
+              <p className="flex items-center gap-1.5 text-sm text-green-500">
+                <CheckCircle className="h-4 w-4" />
+                Settings saved
+              </p>
+            )}
           </div>
         </section>
 
@@ -133,55 +206,5 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
-  )
-}
-
-interface ThemeOptionProps {
-  value: Theme
-  label: string
-  icon: React.ReactNode
-  isActive: boolean
-  onClick: () => void
-  subtitle?: string
-}
-
-function ThemeOption({ label, icon, isActive, onClick, subtitle }: ThemeOptionProps) {
-  return (
-    <button
-      onClick={onClick}
-      className={`group flex flex-col items-center gap-2.5 rounded-xl border-2 p-4 transition-all duration-200 ${
-        isActive
-          ? 'border-primary bg-primary/5 shadow-md shadow-primary/10'
-          : 'border-border bg-muted/30 hover:border-muted-foreground/30 hover:bg-muted/50'
-      }`}
-    >
-      <div
-        className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
-          isActive
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-muted text-muted-foreground group-hover:bg-accent group-hover:text-foreground'
-        }`}
-      >
-        {icon}
-      </div>
-      <div className="flex flex-col items-center gap-0.5">
-        <span
-          className={`text-sm font-medium ${
-            isActive ? 'text-foreground' : 'text-muted-foreground'
-          }`}
-        >
-          {label}
-        </span>
-        {subtitle && (
-          <span className="text-xs text-muted-foreground">{subtitle}</span>
-        )}
-      </div>
-      {isActive && (
-        <span className="flex items-center gap-1 text-xs text-primary">
-          <CheckCircle className="h-3.5 w-3.5" />
-          Active
-        </span>
-      )}
-    </button>
   )
 }

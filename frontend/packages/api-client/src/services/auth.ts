@@ -5,6 +5,7 @@ import type {
   AuthResponse,
   TokenResponse,
   User,
+  UserUpdateRequest,
 } from '@glean/types'
 import { ApiClient } from '../client'
 
@@ -51,6 +52,13 @@ export class AuthService {
    */
   async getCurrentUser(): Promise<User> {
     return this.client.get<User>('/auth/me')
+  }
+
+  /**
+   * Update current user profile and settings.
+   */
+  async updateUser(data: UserUpdateRequest): Promise<User> {
+    return this.client.patch<User>('/auth/me', data)
   }
 
   /**

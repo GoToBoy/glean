@@ -144,24 +144,82 @@ body {
   line-height: 1.6;
   }
   
-  /* Custom scrollbar for dark theme */
+  /* ==========================================================================
+     Theme Transition Animation
+     Smooth color transitions when switching between light/dark themes
+     ========================================================================== */
+  
+  /* Enable theme transitions - use lower specificity to not override component transitions */
+  .theme-transitioning {
+    transition: 
+      background-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .theme-transitioning *:not([style*="transform"]):not(.theme-slider) {
+    transition: 
+      background-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      border-color 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      fill 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      stroke 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      box-shadow 400ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Theme slider keeps its own transform transition */
+  .theme-slider {
+    transition: 
+      transform 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      background-color 400ms cubic-bezier(0.4, 0, 0.2, 1) !important;
+  }
+  
+  /* Exclude certain elements from theme transition */
+  .theme-transitioning .no-theme-transition,
+  .theme-transitioning video,
+  .theme-transitioning iframe,
+  .theme-transitioning img {
+    transition: none !important;
+  }
+  
+  /* Custom scrollbar for dark theme - auto-hide */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+    transition: scrollbar-color 0.3s ease;
+  }
+  
+  *:hover {
+    scrollbar-color: hsl(var(--muted-foreground) / 0.3) transparent;
+  }
+  
   ::-webkit-scrollbar {
     width: 8px;
     height: 8px;
   }
   
   ::-webkit-scrollbar-track {
-    background: hsl(var(--muted));
+    background: transparent;
     border-radius: 4px;
   }
   
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.3);
+    background: transparent;
     border-radius: 4px;
+    transition: background 0.3s ease;
   }
   
-  ::-webkit-scrollbar-thumb:hover {
+  *:hover::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
+  }
+  
+  *:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(var(--muted-foreground) / 0.5);
+  }
+  
+  /* Show scrollbar while actively scrolling */
+  .is-scrolling::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.3);
   }
   
   /* Typography enhancements */
@@ -265,6 +323,28 @@ body {
       transform: translateX(0);
     }
   }
+
+  @keyframes slideFromLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideFromRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
   
   @keyframes pulse-glow {
   
@@ -284,6 +364,14 @@ body {
   
   .animate-slideIn {
     animation: slideIn 0.3s ease-out forwards;
+  }
+
+  .animate-slide-from-left {
+    animation: slideFromLeft 0.25s ease-out forwards;
+  }
+
+  .animate-slide-from-right {
+    animation: slideFromRight 0.25s ease-out forwards;
   }
   
   .animate-pulse-glow {
@@ -671,20 +759,630 @@ body {
     color: hsl(230 80% 45%);
   }
   
-  /* Light theme scrollbar */
+  /* Light theme scrollbar - auto-hide */
+  [data-theme="light"] * {
+    scrollbar-color: transparent transparent;
+  }
+  
+  [data-theme="light"] *:hover {
+    scrollbar-color: hsl(220 10% 75%) transparent;
+  }
+  
   [data-theme="light"] ::-webkit-scrollbar-track {
-    background: hsl(45 20% 94%);
+    background: transparent;
   }
   
   [data-theme="light"] ::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+  
+  [data-theme="light"] *:hover::-webkit-scrollbar-thumb {
     background: hsl(220 10% 75%);
   }
   
-  [data-theme="light"] ::-webkit-scrollbar-thumb:hover {
+  [data-theme="light"] *:hover::-webkit-scrollbar-thumb:hover {
     background: hsl(220 10% 60%);
   }
   
   /* Light theme card hover effect */
   [data-theme="light"] .card-hover:hover {
     box-shadow: 0 8px 30px -8px hsl(0 0% 0% / 0.15);
+}
+
+  /* Light theme blockquote - improved readability */
+  [data-theme="light"] .prose blockquote {
+    background: hsl(var(--muted) / 0.6);
+    color: hsl(var(--foreground));
+  }
+
+  [data-theme="light"] .prose blockquote p {
+    color: hsl(var(--foreground));
+    opacity: 1;
+  }
+
+  /* Light theme list items - improved readability */
+  [data-theme="light"] .prose li {
+    color: hsl(var(--foreground));
+  }
+
+  [data-theme="light"] .prose li::marker {
+    color: hsl(var(--muted-foreground));
+  }
+
+  /* Light theme general text elements */
+  [data-theme="light"] .prose p,
+  [data-theme="light"] .prose ul,
+  [data-theme="light"] .prose ol {
+    color: hsl(var(--foreground));
+  }
+
+/* ==========================================================================
+   Scrollbar Utilities
+   ========================================================================== */
+
+/* Hide scrollbars while keeping scroll functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ==========================================================================
+   Mobile & Touch Optimizations
+   ========================================================================== */
+
+/* Improve touch targets */
+@media (max-width: 768px) {
+  /* Larger touch targets for interactive elements */
+  button,
+  a,
+  [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Smaller touch targets for dense UIs - opt in with class */
+  .touch-target-sm {
+    min-height: 36px;
+    min-width: 36px;
+  }
+  
+  /* Remove hover effects on touch devices */
+  @media (hover: none) {
+    .card-hover:hover {
+      transform: none;
+      box-shadow: none;
+    }
+    
+    .btn-glow:hover {
+      box-shadow: none;
+    }
+  }
+  
+  /* Better text selection prevention during swipe */
+  .no-select {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+  
+  /* Smooth scrolling for mobile */
+  .scroll-smooth {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Prevent text size adjustment */
+  body {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  
+  /* Mobile-friendly prose */
+  .prose {
+    font-size: 1rem;
+  }
+  
+  .prose img {
+    max-width: 100%;
+    height: auto;
+  }
+  
+  /* Prevent horizontal scroll */
+  html,
+  body {
+    overflow-x: hidden;
+  }
+}
+
+/* Safe area insets for notched devices */
+@supports (padding: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+  
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+/* Active state for touch feedback */
+@media (hover: none) {
+  button:active,
+  a:active,
+  [role="button"]:active {
+    opacity: 0.7;
+    transition: opacity 0.1s ease;
+  }
+}
+
+/* Mobile sidebar animation */
+@keyframes slideInFromLeft {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-left {
+  animation: slideInFromLeft 0.3s ease-out forwards;
+}
+
+/* Desktop sidebar collapse/expand animation */
+.sidebar-transition {
+  transition: width 300ms ease-out, transform 300ms ease-out;
+}
+
+.sidebar-no-transition {
+  transition: none !important;
+}
+
+/* Prevent pull-to-refresh on Chrome mobile */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* ==========================================================================
+   Base UI Animation Styles
+   For popover, menu, dialog animations with data attributes
+   ========================================================================== */
+
+/* Popup backdrop animation */
+[data-slot="dialog-backdrop"],
+[data-slot="alert-dialog-backdrop"] {
+  transition: opacity 200ms ease-out, backdrop-filter 200ms ease-out;
+}
+
+[data-slot="dialog-backdrop"][data-starting-style],
+[data-slot="alert-dialog-backdrop"][data-starting-style],
+[data-slot="dialog-backdrop"][data-ending-style],
+[data-slot="alert-dialog-backdrop"][data-ending-style] {
+  opacity: 0;
+  backdrop-filter: blur(0);
+}
+
+/* Dialog popup animations */
+[data-slot="dialog-popup"],
+[data-slot="alert-dialog-popup"] {
+  transition: opacity 250ms cubic-bezier(0.16, 1, 0.3, 1), 
+              transform 250ms cubic-bezier(0.16, 1, 0.3, 1),
+              scale 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-slot="dialog-popup"][data-starting-style],
+[data-slot="alert-dialog-popup"][data-starting-style] {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+[data-slot="dialog-popup"][data-ending-style],
+[data-slot="alert-dialog-popup"][data-ending-style] {
+  opacity: 0;
+  transform: translateY(4px);
+}
+
+/* Menu/Popover popup animations */
+[data-slot="menu-popup"],
+[data-slot="popover-popup"],
+[data-slot="select-popup"] {
+  transition: opacity 150ms cubic-bezier(0.16, 1, 0.3, 1), 
+              transform 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-slot="menu-popup"][data-starting-style],
+[data-slot="popover-popup"][data-starting-style],
+[data-slot="select-popup"][data-starting-style] {
+  opacity: 0;
+  transform: scale(0.96) translateY(-4px);
+}
+
+[data-slot="menu-popup"][data-ending-style],
+[data-slot="popover-popup"][data-ending-style],
+[data-slot="select-popup"][data-ending-style] {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+/* Menu items stagger animation */
+[data-slot="menu-popup"] [data-slot="menu-item"],
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"],
+[data-slot="menu-popup"] [data-slot="menu-radio-item"] {
+  animation: menuItemFadeIn 150ms ease-out forwards;
+  opacity: 0;
+}
+
+@keyframes menuItemFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Stagger menu items */
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(1),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(1),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(1) { animation-delay: 0ms; }
+
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(2),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(2),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(2) { animation-delay: 25ms; }
+
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(3),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(3),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(3) { animation-delay: 50ms; }
+
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(4),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(4),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(4) { animation-delay: 75ms; }
+
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(5),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(5),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(5) { animation-delay: 100ms; }
+
+[data-slot="menu-popup"] [data-slot="menu-item"]:nth-child(n+6),
+[data-slot="menu-popup"] [data-slot="menu-checkbox-item"]:nth-child(n+6),
+[data-slot="menu-popup"] [data-slot="menu-radio-item"]:nth-child(n+6) { animation-delay: 125ms; }
+
+/* Select items animation */
+[data-slot="select-popup"] [data-slot="select-item"] {
+  animation: menuItemFadeIn 150ms ease-out forwards;
+  opacity: 0;
+}
+
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(1) { animation-delay: 0ms; }
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(2) { animation-delay: 20ms; }
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(3) { animation-delay: 40ms; }
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(4) { animation-delay: 60ms; }
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(5) { animation-delay: 80ms; }
+[data-slot="select-popup"] [data-slot="select-item"]:nth-child(n+6) { animation-delay: 100ms; }
+
+/* ==========================================================================
+   Page & Content Transition Animations
+   ========================================================================== */
+
+/* Page enter animation */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Content crossfade animation */
+@keyframes contentFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Content slide animation for feed switching */
+@keyframes contentSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Page transition wrapper */
+.page-transition {
+  animation: pageEnter 0.3s ease-out forwards;
+}
+
+/* Content fade transition */
+.content-fade {
+  animation: contentFadeIn 0.25s ease-out forwards;
+}
+
+/* Content slide transition */
+.content-slide {
+  animation: contentSlideIn 0.25s ease-out forwards;
+}
+
+/* Feed list transition - used when feed selection changes */
+.feed-content-transition {
+  animation: contentSlideIn 0.2s ease-out forwards;
+}
+
+/* Reading pane transition */
+.reader-transition {
+  animation: contentFadeIn 0.25s ease-out forwards;
+}
+
+/* ==========================================================================
+   Article Outline Styles
+   ========================================================================== */
+
+/* Outline sidebar fade animation */
+@keyframes outlineFadeIn {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.outline-sidebar {
+  animation: outlineFadeIn 0.4s ease-out forwards;
+  animation-delay: 0.2s;
+  opacity: 0;
+}
+
+/* Outline item hover effect */
+.outline-sidebar button:hover {
+  background: hsl(var(--accent) / 0.5);
+}
+
+/* Active outline item glow */
+.outline-sidebar button[data-active="true"] span:first-child {
+  box-shadow: 0 0 8px 2px hsl(var(--primary) / 0.4);
+}
+
+/* Mobile outline drawer slide animation */
+@keyframes outlineDrawerSlide {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* Mobile outline floating button pulse */
+@keyframes outlineButtonPulse {
+  0%, 100% {
+    box-shadow: 0 4px 12px -2px hsl(0 0% 0% / 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 20px -2px hsl(var(--primary) / 0.3);
+  }
+}
+
+/* Subtle pulse animation for the outline floating button */
+.outline-float-btn {
+  animation: outlineButtonPulse 3s ease-in-out infinite;
+}
+
+/* Outline progress indicator glow */
+.outline-progress-active {
+  box-shadow: 0 0 12px 2px hsl(var(--primary) / 0.5);
+}
+
+/* ==========================================================================
+   Reader Action Button Animations
+   ========================================================================== */
+
+/* Base action button styles */
+.action-btn {
+  position: relative;
+  transition: transform 150ms cubic-bezier(0.4, 0, 0.2, 1),
+              color 200ms ease,
+              background-color 200ms ease;
+}
+
+/* Press effect - scales down slightly on active */
+.action-btn:active {
+  transform: scale(0.92);
+}
+
+/* Icon transition for smooth fill changes */
+.action-btn svg {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              fill 200ms ease,
+              color 200ms ease;
+}
+
+/* Heart bounce animation when liked */
+@keyframes heartBounce {
+  0% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.3);
+  }
+  50% {
+    transform: scale(0.9);
+  }
+  75% {
+    transform: scale(1.15);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.action-btn-heart-active svg {
+  animation: heartBounce 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Pop animation for state changes (archive, read later, etc.) */
+@keyframes iconPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.action-btn-pop svg {
+  animation: iconPop 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Checkmark animation for mark read */
+@keyframes checkSlide {
+  0% {
+    transform: scale(0.8) translateY(2px);
+    opacity: 0.5;
+  }
+  50% {
+    transform: scale(1.15) translateY(-2px);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+  }
+}
+
+.action-btn-check svg {
+  animation: checkSlide 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Thumbs down shake animation */
+@keyframes thumbShake {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  40% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-4deg);
+  }
+  80% {
+    transform: rotate(4deg);
+  }
+}
+
+.action-btn-dislike-active svg {
+  animation: thumbShake 400ms ease-out;
+}
+
+/* Clock pulse animation for read later */
+@keyframes clockPulse {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.2) rotate(-10deg);
+  }
+  60% {
+    transform: scale(1.1) rotate(5deg);
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.action-btn-clock-active svg {
+  animation: clockPulse 400ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Archive drop animation */
+@keyframes archiveDrop {
+  0% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-4px) scale(1.1);
+  }
+  70% {
+    transform: translateY(2px) scale(0.95);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+.action-btn-archive-active svg {
+  animation: archiveDrop 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* External link fly-out animation */
+@keyframes linkFlyOut {
+  0% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(3px, -3px);
+  }
+  100% {
+    transform: translate(0, 0);
+  }
+}
+
+.action-btn-external:hover svg {
+  animation: linkFlyOut 400ms ease-out;
+}
+
+/* Mobile action button ripple effect */
+.action-btn-mobile {
+  position: relative;
+  overflow: hidden;
+}
+
+.action-btn-mobile::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  background: hsl(var(--primary) / 0.2);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  transition: width 300ms ease-out, height 300ms ease-out, opacity 300ms ease-out;
+  opacity: 0;
+}
+
+.action-btn-mobile:active::after {
+  width: 120%;
+  height: 120%;
+  opacity: 1;
 }

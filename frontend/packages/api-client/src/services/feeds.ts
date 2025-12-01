@@ -4,6 +4,8 @@ import type {
   DiscoverFeedRequest,
   UpdateSubscriptionRequest,
   OPMLImportResponse,
+  BatchDeleteSubscriptionsRequest,
+  BatchDeleteSubscriptionsResponse,
 } from '@glean/types'
 import { ApiClient } from '../client'
 
@@ -54,6 +56,18 @@ export class FeedService {
   }
 
   /**
+   * Delete multiple subscriptions at once.
+   */
+  async batchDeleteSubscriptions(
+    data: BatchDeleteSubscriptionsRequest
+  ): Promise<BatchDeleteSubscriptionsResponse> {
+    return this.client.post<BatchDeleteSubscriptionsResponse>(
+      '/feeds/batch-delete',
+      data
+    )
+  }
+
+  /**
    * Manually refresh a feed.
    */
   async refreshFeed(
@@ -62,6 +76,13 @@ export class FeedService {
     return this.client.post<{ status: string; job_id: string; feed_id: string }>(
       `/feeds/${subscriptionId}/refresh`
     )
+  }
+
+  /**
+   * Manually refresh all user's subscribed feeds.
+   */
+  async refreshAllFeeds(): Promise<{ status: string; queued_count: number }> {
+    return this.client.post<{ status: string; queued_count: number }>('/feeds/refresh-all')
   }
 
   /**

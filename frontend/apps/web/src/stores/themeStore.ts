@@ -29,11 +29,32 @@ function resolveTheme(theme: Theme): ResolvedTheme {
   return theme
 }
 
+// Track transition timeout to avoid multiple timers
+let transitionTimeout: ReturnType<typeof setTimeout> | null = null
+
 /**
- * Apply theme to the document root element.
+ * Apply theme to the document root element with smooth transition.
  */
-function applyTheme(resolvedTheme: ResolvedTheme) {
+function applyTheme(resolvedTheme: ResolvedTheme, animate = true) {
   const root = document.documentElement
+  const body = document.body
+  
+  // Add transition class for smooth animation
+  if (animate && body) {
+    // Clear any existing transition timeout
+    if (transitionTimeout) {
+      clearTimeout(transitionTimeout)
+    }
+    
+    body.classList.add('theme-transitioning')
+    
+    // Remove transition class after animation completes
+    transitionTimeout = setTimeout(() => {
+      body.classList.remove('theme-transitioning')
+      transitionTimeout = null
+    }, 450)
+  }
+  
   if (resolvedTheme === 'light') {
     root.setAttribute('data-theme', 'light')
   } else {
@@ -97,18 +118,18 @@ export const useThemeStore = create<ThemeState>()(
     {
       name: 'glean-theme',
       onRehydrateStorage: () => (state) => {
-        // Apply theme on hydration
+        // Apply theme on hydration (no animation to avoid flash)
         if (state) {
           const resolved = resolveTheme(state.theme)
           state.resolvedTheme = resolved
-          applyTheme(resolved)
+          applyTheme(resolved, false)
 
           // Setup system theme listener if needed
           if (state.theme === 'system') {
             setupSystemThemeListener(() => {
               const newResolved = getSystemTheme()
               useThemeStore.setState({ resolvedTheme: newResolved })
-              applyTheme(newResolved)
+              applyTheme(newResolved, true)
             })
           }
         }
@@ -137,14 +158,16 @@ export function initializeTheme() {
   }
 
   const resolved = resolveTheme(theme)
-  applyTheme(resolved)
+  // Don't animate on initial load to avoid flash
+  applyTheme(resolved, false)
 
   // Setup system theme listener if needed
   if (theme === 'system') {
     setupSystemThemeListener(() => {
       const newResolved = getSystemTheme()
       useThemeStore.setState({ resolvedTheme: newResolved })
-      applyTheme(newResolved)
+      // Animate when system theme changes
+      applyTheme(newResolved, true)
     })
   }
 }

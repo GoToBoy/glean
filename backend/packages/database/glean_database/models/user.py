@@ -60,3 +60,10 @@ class User(Base, TimestampMixin):
         "Subscription", back_populates="user", cascade="all, delete-orphan"
     )
     user_entries = relationship("UserEntry", back_populates="user", cascade="all, delete-orphan")
+    folders = relationship(
+        "Folder", back_populates="user", cascade="all, delete-orphan"
+    )
+    tags = relationship("Tag", back_populates="user", cascade="all, delete-orphan")
+    bookmarks = relationship(
+        "Bookmark", back_populates="user", cascade="all, delete-orphan"
+    )

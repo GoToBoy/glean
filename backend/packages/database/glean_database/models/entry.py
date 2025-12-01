@@ -58,6 +58,7 @@ class Entry(Base, TimestampMixin):
     # Relationships
     feed = relationship("Feed", back_populates="entries")
     user_entries = relationship("UserEntry", back_populates="entry", cascade="all, delete-orphan")
+    bookmarks = relationship("Bookmark", back_populates="entry")
 
     # Constraints: Unique entry per feed
     __table_args__ = (UniqueConstraint("feed_id", "guid", name="uq_feed_guid"),)

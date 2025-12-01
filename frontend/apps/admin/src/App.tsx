@@ -5,6 +5,8 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import UsersPage from './pages/UsersPage'
+import FeedsPage from './pages/FeedsPage'
+import EntriesPage from './pages/EntriesPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -32,6 +34,8 @@ function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="feeds" element={<FeedsPage />} />
+            <Route path="entries" element={<EntriesPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

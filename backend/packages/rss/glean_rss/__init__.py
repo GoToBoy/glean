@@ -5,8 +5,9 @@ Provides RSS/Atom parsing, feed discovery, and OPML import/export.
 """
 
 from .discoverer import discover_feed, fetch_feed
-from .opml import OPMLFeed, generate_opml, parse_opml
+from .opml import OPMLFeed, OPMLParseResult, generate_opml, parse_opml, parse_opml_with_folders
 from .parser import ParsedEntry, ParsedFeed, parse_feed
+from .utils import strip_html_tags
 
 __all__ = [
     "parse_feed",
@@ -15,6 +16,9 @@ __all__ = [
     "discover_feed",
     "fetch_feed",
     "parse_opml",
+    "parse_opml_with_folders",
     "generate_opml",
     "OPMLFeed",
+    "OPMLParseResult",
+    "strip_html_tags",
 ]
