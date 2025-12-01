@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useEntries, useEntry, useDeleteEntry } from '../hooks/useEntries'
 import { useFeeds } from '../hooks/useFeeds'
 import {

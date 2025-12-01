@@ -8,7 +8,8 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import and_, select, update
+from sqlalchemy import and_, update
+from sqlalchemy.engine import CursorResult
 
 from glean_database.models import UserEntry
 from glean_database.session import get_session
@@ -34,6 +35,7 @@ async def cleanup_read_later(ctx: dict[str, Any]) -> dict[str, int]:
     """
     print("[cleanup_read_later] Starting read-later cleanup")
 
+    cleaned_count = 0
     async for session in get_session():
         try:
             now = datetime.now(UTC)
@@ -50,18 +52,18 @@ async def cleanup_read_later(ctx: dict[str, Any]) -> dict[str, int]:
                 )
                 .values(read_later=False, read_later_until=None)
             )
-            result = await session.execute(stmt)
+            result: CursorResult[Any] = await session.execute(stmt)  # type: ignore[assignment]
             await session.commit()
 
-            cleaned_count = result.rowcount
+            cleaned_count = result.rowcount or 0
             print(f"[cleanup_read_later] Cleaned up {cleaned_count} expired read-later entries")
-
-            return {"cleaned_count": cleaned_count}
 
         except Exception as e:
             logger.error(f"[cleanup_read_later] Error during cleanup: {e}")
             await session.rollback()
             raise
+
+    return {"cleaned_count": cleaned_count}
 
 
 async def scheduled_cleanup(ctx: dict[str, Any]) -> dict[str, int]:

@@ -105,7 +105,7 @@ async def create_bookmark(
 
         return bookmark
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/{bookmark_id}", response_model=BookmarkResponse)
@@ -131,7 +131,7 @@ async def get_bookmark(
     try:
         return await bookmark_service.get_bookmark(bookmark_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch("/{bookmark_id}", response_model=BookmarkResponse)
@@ -161,7 +161,7 @@ async def update_bookmark(
             bookmark_id, current_user.id, data
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{bookmark_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -184,7 +184,7 @@ async def delete_bookmark(
     try:
         await bookmark_service.delete_bookmark(bookmark_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{bookmark_id}/folders", response_model=BookmarkResponse)
@@ -214,7 +214,7 @@ async def add_folder_to_bookmark(
             bookmark_id, current_user.id, data.folder_id
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{bookmark_id}/folders/{folder_id}", response_model=BookmarkResponse)
@@ -244,7 +244,7 @@ async def remove_folder_from_bookmark(
             bookmark_id, current_user.id, folder_id
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{bookmark_id}/tags", response_model=BookmarkResponse)
@@ -274,7 +274,7 @@ async def add_tag_to_bookmark(
             bookmark_id, current_user.id, data.tag_id
         )
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{bookmark_id}/tags/{tag_id}", response_model=BookmarkResponse)
@@ -302,5 +302,5 @@ async def remove_tag_from_bookmark(
     try:
         return await bookmark_service.remove_tag(bookmark_id, current_user.id, tag_id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 

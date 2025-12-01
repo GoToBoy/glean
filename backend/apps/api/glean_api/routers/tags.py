@@ -64,7 +64,7 @@ async def create_tag(
     try:
         return await tag_service.create_tag(current_user.id, data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
 
 
 @router.get("/{tag_id}", response_model=TagResponse)
@@ -90,7 +90,7 @@ async def get_tag(
     try:
         return await tag_service.get_tag(tag_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch("/{tag_id}", response_model=TagResponse)
@@ -119,8 +119,8 @@ async def update_tag(
         return await tag_service.update_tag(tag_id, current_user.id, data)
     except ValueError as e:
         if "already exists" in str(e):
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e)) from e
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -143,7 +143,7 @@ async def delete_tag(
     try:
         await tag_service.delete_tag(tag_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/batch", status_code=status.HTTP_200_OK)
@@ -177,5 +177,5 @@ async def batch_tag_operation(
             )
         return {"affected": count}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 

@@ -41,7 +41,7 @@ select = [
     "C4",  # flake8-comprehensions
     "SIM", # flake8-simplify
 ]
-ignore = ["E501"]
+ignore = ["E501", "B008"]  # B008 is a false positive for FastAPI Query() pattern
 
 [tool.ruff.lint.isort]
 known-first-party = ["glean_api", "glean_worker", "glean_database", "glean_core", "glean_rss"]
@@ -65,8 +65,8 @@ reportMissingTypeStubs = false
 reportUnknownMemberType = "warning"
 reportUnknownVariableType = "warning"
 reportUnknownArgumentType = "warning"
-# Exclude test files and virtual environment from strict checks
-exclude = ["**/tests/**", ".venv", "**/__pycache__"]
+# Exclude test files, migrations, and virtual environment from strict checks
+exclude = ["**/tests/**", "**/migrations/**", ".venv", "**/__pycache__"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -4,7 +4,6 @@ import asyncio
 import os
 from collections.abc import AsyncGenerator, Generator
 from typing import Any
-from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio

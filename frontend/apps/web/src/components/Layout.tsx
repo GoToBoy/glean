@@ -607,7 +607,7 @@ export function Layout() {
                       isActive={currentBookmarkFolderId === folder.id}
                       expandedFolders={expandedBookmarkFolders}
                       toggleFolder={toggleBookmarkFolder}
-                      currentFolderId={currentBookmarkFolderId}
+                      currentFolderId={currentBookmarkFolderId ?? undefined}
                       onCreateSubfolder={() => openCreateFolderDialog(folder.id, 'bookmark')}
                       onRename={updateFolder}
                       onDelete={deleteFolder}

@@ -67,7 +67,7 @@ async def create_folder(
     try:
         return await folder_service.create_folder(current_user.id, data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.get("/{folder_id}", response_model=FolderResponse)
@@ -93,7 +93,7 @@ async def get_folder(
     try:
         return await folder_service.get_folder(folder_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.patch("/{folder_id}", response_model=FolderResponse)
@@ -121,7 +121,7 @@ async def update_folder(
     try:
         return await folder_service.update_folder(folder_id, current_user.id, data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.delete("/{folder_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -144,7 +144,7 @@ async def delete_folder(
     try:
         await folder_service.delete_folder(folder_id, current_user.id)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
 @router.post("/{folder_id}/move", response_model=FolderResponse)
@@ -172,7 +172,7 @@ async def move_folder(
     try:
         return await folder_service.move_folder(folder_id, current_user.id, data)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/reorder", status_code=status.HTTP_204_NO_CONTENT)

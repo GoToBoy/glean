@@ -262,11 +262,11 @@ async def refresh_all_feeds(
     """
     subscriptions = await feed_service.get_user_subscriptions(current_user.id)
     queued_count = 0
-    
+
     for subscription in subscriptions:
         await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
         queued_count += 1
-    
+
     return {"status": "queued", "queued_count": queued_count}
 
 

@@ -5,16 +5,16 @@ Provides business logic for administrative operations.
 """
 
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models.admin import AdminRole, AdminUser
 from glean_database.models.entry import Entry
-from glean_database.models.feed import Feed
+from glean_database.models.feed import Feed, FeedStatus
 from glean_database.models.subscription import Subscription
 from glean_database.models.user import User
-from glean_database.models.user_entry import UserEntry
 
 from ..auth.password import hash_password, verify_password
 
@@ -214,7 +214,7 @@ class AdminService:
         search: str | None = None,
         sort: str = "created_at",
         order: str = "desc",
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         List all feeds with pagination and filtering.
 
@@ -282,7 +282,7 @@ class AdminService:
 
         return feed_data, total
 
-    async def get_feed(self, feed_id: str) -> dict | None:
+    async def get_feed(self, feed_id: str) -> dict[str, Any] | None:
         """
         Get feed details by ID.
 
@@ -318,7 +318,7 @@ class AdminService:
             "created_at": feed.created_at,
         }
 
-    async def update_feed(self, feed_id: str, url: str | None = None, title: str | None = None, status: str | None = None) -> dict | None:
+    async def update_feed(self, feed_id: str, url: str | None = None, title: str | None = None, status: str | None = None) -> dict[str, Any] | None:
         """
         Update a feed.
 
@@ -342,14 +342,14 @@ class AdminService:
         if title is not None:
             feed.title = title
         if status is not None:
-            feed.status = status
+            feed.status = FeedStatus(status)
 
         await self.session.commit()
         await self.session.refresh(feed)
 
         return await self.get_feed(feed_id)
 
-    async def reset_feed_error(self, feed_id: str) -> dict | None:
+    async def reset_feed_error(self, feed_id: str) -> dict[str, Any] | None:
         """
         Reset error count for a feed.
 
@@ -367,7 +367,7 @@ class AdminService:
 
         feed.error_count = 0
         feed.fetch_error_message = None
-        feed.status = "active"
+        feed.status = FeedStatus.ACTIVE
 
         await self.session.commit()
         await self.session.refresh(feed)
@@ -411,10 +411,10 @@ class AdminService:
         count = 0
         for feed in feeds:
             if action == "enable":
-                feed.status = "active"
+                feed.status = FeedStatus.ACTIVE
                 count += 1
             elif action == "disable":
-                feed.status = "inactive"
+                feed.status = FeedStatus.DISABLED
                 count += 1
             elif action == "delete":
                 await self.session.delete(feed)
@@ -432,7 +432,7 @@ class AdminService:
         search: str | None = None,
         sort: str = "created_at",
         order: str = "desc",
-    ) -> tuple[list[dict], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """
         List all entries with pagination and filtering.
 
@@ -493,7 +493,7 @@ class AdminService:
 
         return entries, total
 
-    async def get_entry(self, entry_id: str) -> dict | None:
+    async def get_entry(self, entry_id: str) -> dict[str, Any] | None:
         """
         Get entry details by ID.
 

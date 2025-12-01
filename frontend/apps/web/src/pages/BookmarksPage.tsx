@@ -1086,7 +1086,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
     if (!tagSearch.trim() || tagExactMatch) return
     setIsCreatingTag(true)
     try {
-      const newTag = await createTag(tagSearch.trim())
+      const newTag = await createTag({ name: tagSearch.trim() })
       if (newTag) {
         setSelectedTagIds((prev) => [...prev, newTag.id])
       }

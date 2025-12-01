@@ -60,8 +60,8 @@ class DiscoverFeedRequest(BaseModel):
 
 class UpdateSubscriptionRequest(BaseModel):
     """Update subscription request.
-    
-    Note: folder_id uses a special sentinel to distinguish between 
+
+    Note: folder_id uses a special sentinel to distinguish between
     "not provided" and "explicitly set to null".
     """
 

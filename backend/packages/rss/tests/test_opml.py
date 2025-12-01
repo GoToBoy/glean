@@ -44,26 +44,26 @@ class TestParseOPML:
         </opml>
         """
         result = parse_opml_with_folders(opml)
-        
+
         # Check folders
         assert len(result.folders) == 2
         assert "Blog" in result.folders
         assert "News" in result.folders
-        
+
         # Check feeds
         assert len(result.feeds) == 4
-        
+
         # Blog feeds
         blog_feeds = [f for f in result.feeds if f.folder == "Blog"]
         assert len(blog_feeds) == 2
         assert blog_feeds[0].title == "Feed 1"
         assert blog_feeds[1].title == "Feed 2"
-        
+
         # News feeds
         news_feeds = [f for f in result.feeds if f.folder == "News"]
         assert len(news_feeds) == 1
         assert news_feeds[0].title == "Feed 3"
-        
+
         # Root feed (no folder)
         root_feeds = [f for f in result.feeds if f.folder is None]
         assert len(root_feeds) == 1
@@ -84,7 +84,7 @@ class TestParseOPML:
     def test_parse_opml_invalid_xml(self) -> None:
         """Test parsing invalid XML raises ValueError."""
         import pytest
-        
+
         with pytest.raises(ValueError, match="Invalid OPML format"):
             parse_opml("not xml at all")
 
@@ -106,23 +106,23 @@ class TestParseOPML:
         </opml>
         """
         result = parse_opml_with_folders(opml)
-        
+
         # Check folders
         assert len(result.folders) == 2
         assert "Blog" in result.folders
         assert "Weekly" in result.folders
-        
+
         # Check feeds
         assert len(result.feeds) == 4
-        
+
         # Blog feeds
         blog_feeds = [f for f in result.feeds if f.folder == "Blog"]
         assert len(blog_feeds) == 2
-        
+
         # Weekly feeds
         weekly_feeds = [f for f in result.feeds if f.folder == "Weekly"]
         assert len(weekly_feeds) == 1
-        
+
         # Root feed (影视飓风)
         root_feeds = [f for f in result.feeds if f.folder is None]
         assert len(root_feeds) == 1
@@ -139,7 +139,7 @@ class TestGenerateOPML:
             {"title": "Feed 2", "url": "https://example.com/feed2.xml"},
         ]
         opml = generate_opml(feeds)
-        
+
         assert "<?xml version=" in opml
         assert "encoding=" in opml
         assert "<opml" in opml
@@ -156,18 +156,18 @@ class TestGenerateOPML:
             {"title": "Feed 3", "url": "https://example.com/feed3.xml", "folder": "News"},
         ]
         opml = generate_opml(feeds)
-        
+
         # Verify structure
         assert "<?xml version=" in opml
         assert "<opml" in opml
-        
+
         # Root feed should be at top level
         assert 'title="Root Feed"' in opml
-        
+
         # Folder outlines should exist
         assert 'text="Blog"' in opml
         assert 'text="News"' in opml
-        
+
         # Feeds should be inside folders
         assert 'xmlUrl="https://example.com/feed1.xml"' in opml
         assert 'xmlUrl="https://example.com/feed3.xml"' in opml
@@ -179,21 +179,21 @@ class TestGenerateOPML:
             {"title": "Feed 1", "url": "https://example.com/feed1.xml", "folder": "Blog"},
             {"title": "Feed 2", "url": "https://example.com/feed2.xml", "folder": "Blog"},
         ]
-        
+
         # Generate and parse back
         opml = generate_opml(original_feeds)
         result = parse_opml_with_folders(opml)
-        
+
         # Verify feeds count
         assert len(result.feeds) == 3
-        
+
         # Verify folder
         assert "Blog" in result.folders
-        
+
         # Verify folder assignment
         blog_feeds = [f for f in result.feeds if f.folder == "Blog"]
         assert len(blog_feeds) == 2
-        
+
         root_feeds = [f for f in result.feeds if f.folder is None]
         assert len(root_feeds) == 1
 

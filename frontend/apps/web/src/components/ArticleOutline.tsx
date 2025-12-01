@@ -98,11 +98,11 @@ export function ArticleOutline({
   const [isVisible, setIsVisible] = useState(true) // Start visible (unblurred) on initial load
   const [isHovered, setIsHovered] = useState(false)
   const [isInInitialPeriod, setIsInInitialPeriod] = useState(true) // Track initial 5-second visibility period
-  const hideTimeoutRef = useRef<NodeJS.Timeout | null>(null)
-  const initialHideTimeoutRef = useRef<NodeJS.Timeout | null>(null) // For the initial 5s delay
+  const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const initialHideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null) // For the initial 5s delay
   // Flag to prevent scroll handler from updating activeId during programmatic scroll
   const isScrollingToHeadingRef = useRef(false)
-  const scrollingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const scrollingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   
   // Track reading progress
   const progress = useReadingProgress(scrollContainerRef)

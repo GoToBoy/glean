@@ -562,7 +562,9 @@ function SubscriptionRow({
           <div className="flex items-center gap-2">
             <span className="truncate font-medium text-foreground">{title}</span>
             {hasError && (
-              <AlertCircle className="h-4 w-4 shrink-0 text-destructive" title="Feed has errors" />
+              <span title="Feed has errors">
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              </span>
             )}
           </div>
           <a

@@ -4,7 +4,10 @@ Tag service.
 Handles tag CRUD operations and batch tagging.
 """
 
+from typing import Any
+
 from sqlalchemy import delete, func, select
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas.tag import (
@@ -290,9 +293,9 @@ class TagService:
         else:
             raise ValueError(f"Invalid target type: {target_type}")
 
-        result = await self.session.execute(stmt)
+        result: CursorResult[Any] = await self.session.execute(stmt)  # type: ignore[assignment]
         await self.session.commit()
-        return result.rowcount
+        return result.rowcount or 0
 
     async def _get_tag_or_raise(self, tag_id: str, user_id: str) -> Tag:
         """Get a tag by ID or raise ValueError."""

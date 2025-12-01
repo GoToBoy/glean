@@ -98,10 +98,7 @@ class BookmarkService:
 
         # Sorting
         order_column = getattr(Bookmark, sort, Bookmark.created_at)
-        if order == "desc":
-            order_column = order_column.desc()
-        else:
-            order_column = order_column.asc()
+        order_column = order_column.desc() if order == "desc" else order_column.asc()
 
         # Pagination
         query = (

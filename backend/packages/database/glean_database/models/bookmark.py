@@ -4,7 +4,7 @@ Bookmark model definition.
 This module defines the Bookmark model for saving entries and external URLs.
 """
 
-from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_uuid
