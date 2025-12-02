@@ -10,11 +10,17 @@ import dotenv
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.pool import NullPool
 
 from glean_api.main import app
 from glean_database import Base
+from glean_database.models.user import User
 from glean_database.session import get_session
 
 with contextlib.suppress(OSError):
@@ -43,7 +49,7 @@ TEST_DATABASE_URL = os.getenv(
 
 
 @pytest.fixture(scope="session")
-def event_loop() -> Generator:
+def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
     """Create event loop for session scope."""
     loop = asyncio.new_event_loop()
     yield loop
@@ -51,7 +57,7 @@ def event_loop() -> Generator:
 
 
 @pytest_asyncio.fixture(scope="session")
-async def test_engine():
+async def test_engine() -> AsyncGenerator[AsyncEngine, None]:
     """Create test database engine."""
     engine = create_async_engine(
         TEST_DATABASE_URL,
@@ -74,7 +80,7 @@ async def test_engine():
 
 
 @pytest_asyncio.fixture
-async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
+async def db_session(test_engine: AsyncEngine) -> AsyncGenerator[AsyncSession, None]:
     """Create a fresh database session for each test."""
     # Create connection
     async with test_engine.connect() as connection:
@@ -127,7 +133,7 @@ def test_mock_redis():
 
 
 @pytest_asyncio.fixture
-async def test_user(db_session: AsyncSession):
+async def test_user(db_session: AsyncSession) -> User:
     """Create a test user."""
     from glean_core.schemas.user import UserCreate
     from glean_core.services.user_service import UserService
@@ -141,7 +147,7 @@ async def test_user(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(test_user) -> dict[str, str]:
+async def auth_headers(test_user: User) -> dict[str, str]:
     """Generate auth headers for test user."""
     from glean_api.config import settings
     from glean_core.auth.jwt import JWTConfig, create_access_token
@@ -172,7 +178,7 @@ async def admin_user(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def admin_headers(admin_user) -> dict[str, str]:
+async def admin_headers(admin_user: User) -> dict[str, str]:
     """Generate auth headers for admin user."""
     from glean_api.config import settings
     from glean_core.auth.jwt import JWTConfig, create_access_token
