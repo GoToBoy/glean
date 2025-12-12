@@ -22,6 +22,131 @@ import { processHtmlContent } from '../lib/html'
 import { Button, Skeleton } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 
+const ORIGINAL_PREF_KEY = 'glean:feed-original-pref-v1'
+
+function getFeedOriginalPreference(feedId?: string): boolean | null {
+  if (!feedId || typeof window === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(ORIGINAL_PREF_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Record<string, boolean>
+    return typeof parsed[feedId] === 'boolean' ? parsed[feedId] : null
+  } catch (error) {
+    console.warn('Failed to read original content preference', error)
+    return null
+  }
+}
+
+function setFeedOriginalPreference(feedId: string, value: boolean) {
+  if (typeof window === 'undefined') return
+  try {
+    const raw = localStorage.getItem(ORIGINAL_PREF_KEY)
+    const parsed: Record<string, boolean> = raw ? JSON.parse(raw) : {}
+    parsed[feedId] = value
+    localStorage.setItem(ORIGINAL_PREF_KEY, JSON.stringify(parsed))
+  } catch (error) {
+    console.warn('Failed to save original content preference', error)
+  }
+}
+
+type OriginalContentReason = 'short' | 'empty' | null
+
+interface OriginalContentViewerProps {
+  url: string
+  feedId?: string
+  feedTitle?: string | null
+  reason?: OriginalContentReason
+}
+
+function OriginalContentViewer({ url, feedId, feedTitle, reason = null }: OriginalContentViewerProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const [hasEverOpened, setHasEverOpened] = useState(false)
+  const [iframeLoaded, setIframeLoaded] = useState(false)
+  const [rememberFeed, setRememberFeed] = useState(false)
+
+  useEffect(() => {
+    const pref = getFeedOriginalPreference(feedId)
+    const openByDefault = pref === true
+    setIsOpen(openByDefault)
+    setRememberFeed(openByDefault)
+    setHasEverOpened(openByDefault)
+    setIframeLoaded(false)
+  }, [feedId, url])
+
+  useEffect(() => {
+    if (isOpen) {
+      setHasEverOpened(true)
+    }
+  }, [isOpen])
+
+  const handleToggleRemember = (checked: boolean) => {
+    if (!feedId) return
+    setRememberFeed(checked)
+    setFeedOriginalPreference(feedId, checked)
+    if (checked) {
+      setIsOpen(true)
+      setHasEverOpened(true)
+    }
+  }
+
+  const mountIframe = hasEverOpened || isOpen
+
+  return (
+    <div className="mt-6 rounded-lg border border-border/70 bg-card/60 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <div className="text-sm font-semibold text-foreground">Original article</div>
+          <p className="text-xs text-muted-foreground">
+            {rememberFeed
+              ? 'Opens by default for this feed.'
+              : reason === 'empty'
+                ? 'This entry did not include body content. Load the source page inline.'
+                : 'Open the source page inline without leaving the reader.'}
+          </p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setIsOpen((prev) => !prev)}>
+          {isOpen ? 'Hide original' : 'Show original'}
+        </Button>
+      </div>
+
+      {feedId && (
+        <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-3.5 w-3.5 rounded border-border bg-background accent-primary"
+            checked={rememberFeed}
+            onChange={(event) => handleToggleRemember(event.target.checked)}
+          />
+          <span>Always open for this feed{feedTitle ? ` (${feedTitle})` : ''}</span>
+        </label>
+      )}
+
+      {mountIframe && (
+        <div className="mt-4 overflow-hidden rounded-md border border-border bg-background/60">
+          <div className={`relative transition-[height] duration-300 ${isOpen ? 'h-[70vh]' : 'h-0'}`}>
+            {!iframeLoaded && isOpen && (
+              <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-muted/70 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span className="text-xs font-medium">Loading original…</span>
+              </div>
+            )}
+            <iframe
+              src={url}
+              title="Original content"
+              className="h-[70vh] w-full border-0"
+              loading="lazy"
+              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+              referrerPolicy="no-referrer"
+              style={{ display: isOpen ? 'block' : 'none' }}
+              onLoad={() => setIframeLoaded(true)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /**
  * Hook to track animation state for action buttons
  * Returns the animation class only once when state changes from false to true
@@ -145,6 +270,7 @@ export function ArticleReader({
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
+  const originalContentReason: OriginalContentReason = !entry.content && !entry.summary ? 'empty' : null
 
   // Reset outline state when entry changes
   useEffect(() => {
@@ -399,6 +525,12 @@ export function ArticleReader({
                 </Button>
               </div>
             )}
+            <OriginalContentViewer
+              url={entry.url}
+              feedId={entry.feed_id}
+              feedTitle={entry.feed_title}
+              reason={originalContentReason}
+            />
           </div>
         </div>
 
