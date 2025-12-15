@@ -23,13 +23,14 @@ console.log(`📦 Syncing version: ${version}\n`);
 
 // List of package.json files to sync
 const packageJsonPaths = [
-  'frontend/apps/web/package.json',
-  'frontend/apps/admin/package.json',
-  'frontend/packages/api-client/package.json',
-  'frontend/packages/i18n/package.json',
-  'frontend/packages/logger/package.json',
-  'frontend/packages/types/package.json',
-  'frontend/packages/ui/package.json',
+  "frontend/apps/web/package.json",
+  "frontend/apps/admin/package.json",
+  "frontend/packages/api-client/package.json",
+  "frontend/packages/i18n/package.json",
+  "frontend/packages/logger/package.json",
+  "frontend/packages/types/package.json",
+  "frontend/packages/ui/package.json",
+  "frontend/package.json",
 ];
 
 // Backend pyproject.toml files to sync
