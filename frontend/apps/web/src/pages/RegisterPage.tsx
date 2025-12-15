@@ -43,7 +43,7 @@ export default function RegisterPage() {
     try {
       await register(email, password, name)
       navigate('/reader', { replace: true })
-    } catch (err) {
+    } catch {
       // Error is handled by store
     }
   }
