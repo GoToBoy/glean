@@ -114,7 +114,9 @@ class PreferenceService:
                     score = (pos - neg) / total
                     author_scores.append({"name": author, "affinity_score": round(score, 2)})
 
-            top_authors: list[dict[str, Any]] = sorted(author_scores, key=lambda x: x["affinity_score"], reverse=True)[:5]
+            top_authors: list[dict[str, Any]] = sorted(
+                author_scores, key=lambda x: x["affinity_score"], reverse=True
+            )[:5]
 
         return {
             "total_likes": total_likes,
