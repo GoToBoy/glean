@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist node_modules .turbo"
   },

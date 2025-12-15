@@ -15,7 +15,7 @@
     "build:mac": "npm run build:electron -- --mac",
     "build:linux": "npm run build:electron -- --linux",
     "preview": "vite preview",
-    "lint": "eslint src --ext ts,tsx",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist dist-electron release node_modules .turbo"
   },
