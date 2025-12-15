@@ -3,12 +3,26 @@
 
 import asyncio
 
+import pytest
+
 from glean_vector.clients.embedding_client import EmbeddingClient
 from glean_vector.clients.embedding_factory import (
     EmbeddingProviderFactory,
 )
+from glean_vector.config import embedding_config
 
 
+def _requires_api_key() -> bool:
+    """Check if the current embedding provider requires an API key."""
+    # Providers that require API keys
+    api_key_providers = {"openai", "volcengine", "azure", "cohere"}
+    return embedding_config.provider in api_key_providers and not embedding_config.api_key
+
+
+@pytest.mark.skipif(
+    _requires_api_key(),
+    reason=f"Embedding provider '{embedding_config.provider}' requires an API key",
+)
 async def test_factory_providers():
     """Test factory with different providers."""
     print("=" * 70)

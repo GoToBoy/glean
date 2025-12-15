@@ -4,10 +4,23 @@
 import asyncio
 import time
 
+import pytest
+
 from glean_vector.clients.embedding_client import EmbeddingClient
 from glean_vector.config import embedding_config
 
 
+def _requires_api_key() -> bool:
+    """Check if the current embedding provider requires an API key."""
+    # Providers that require API keys
+    api_key_providers = {"openai", "volcengine", "azure", "cohere"}
+    return embedding_config.provider in api_key_providers and not embedding_config.api_key
+
+
+@pytest.mark.skipif(
+    _requires_api_key(),
+    reason=f"Embedding provider '{embedding_config.provider}' requires an API key",
+)
 async def test_single_embedding():
     """Test single text embedding."""
     print("=" * 60)
@@ -37,6 +50,10 @@ async def test_single_embedding():
     return elapsed, len(embedding)
 
 
+@pytest.mark.skipif(
+    _requires_api_key(),
+    reason=f"Embedding provider '{embedding_config.provider}' requires an API key",
+)
 async def test_batch_embedding():
     """Test batch embedding generation."""
     print("=" * 60)
@@ -81,6 +98,10 @@ async def test_batch_embedding():
     await client.close()
 
 
+@pytest.mark.skipif(
+    _requires_api_key(),
+    reason=f"Embedding provider '{embedding_config.provider}' requires an API key",
+)
 async def test_multilingual():
     """Test multilingual embedding (if using multilingual model)."""
     print("=" * 60)
