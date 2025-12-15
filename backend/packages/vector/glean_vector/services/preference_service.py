@@ -1,8 +1,10 @@
 """User preference model service."""
 
+import contextlib
 from datetime import datetime
 
 import numpy as np
+from redis.asyncio import Redis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +33,7 @@ class PreferenceService:
         self,
         db_session: AsyncSession,
         milvus_client: MilvusClient,
+        redis_client: Redis | None = None,
     ) -> None:
         """
         Initialize preference service.
@@ -38,9 +41,11 @@ class PreferenceService:
         Args:
             db_session: Database session
             milvus_client: Milvus vector database client
+            redis_client: Redis client for distributed locks (optional but recommended)
         """
         self.db = db_session
         self.milvus = milvus_client
+        self.redis = redis_client
         self.config = preference_config
 
     async def handle_preference_signal(
@@ -96,6 +101,9 @@ class PreferenceService:
         """
         Update user preference vector using weighted moving average.
 
+        Uses Redis locks to prevent race conditions when multiple signals
+        are processed concurrently for the same user.
+
         Args:
             user_id: User UUID
             article_embedding: Entry embedding vector
@@ -104,6 +112,52 @@ class PreferenceService:
         vector_type = "positive" if weight > 0 else "negative"
         abs_weight = abs(weight)
 
+        # Use Redis lock if available to prevent race conditions
+        if self.redis:
+            lock_key = f"preference_lock:{user_id}:{vector_type}"
+            lock = self.redis.lock(lock_key, timeout=10, blocking_timeout=5)
+
+            try:
+                # Acquire lock (blocks up to 5 seconds if another task holds it)
+                acquired = await lock.acquire()
+                if not acquired:
+                    raise TimeoutError(
+                        f"Failed to acquire lock for user {user_id} preference update"
+                    )
+
+                # Critical section: read-compute-write with lock protection
+                await self._update_preference_vector_locked(
+                    user_id, article_embedding, weight, vector_type, abs_weight
+                )
+            finally:
+                # Always release the lock
+                # Lock might have expired, ignore release errors
+                with contextlib.suppress(Exception):
+                    await lock.release()
+        else:
+            # No Redis available - proceed without lock (not recommended for production)
+            await self._update_preference_vector_locked(
+                user_id, article_embedding, weight, vector_type, abs_weight
+            )
+
+    async def _update_preference_vector_locked(
+        self,
+        user_id: str,
+        article_embedding: list[float],
+        weight: float,
+        vector_type: str,
+        abs_weight: float,
+    ) -> None:
+        """
+        Internal method to update preference vector (must be called with lock held).
+
+        Args:
+            user_id: User UUID
+            article_embedding: Entry embedding vector
+            weight: Signal weight (positive or negative)
+            vector_type: "positive" or "negative"
+            abs_weight: Absolute value of weight
+        """
         # Get current preference vectors
         prefs = await self.milvus.get_user_preferences(user_id)
         current = prefs.get(vector_type)

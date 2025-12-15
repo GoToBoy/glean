@@ -68,7 +68,7 @@ async def rebuild_embeddings(ctx: dict[str, Any], config: dict[str, Any] | None 
 
         # Recreate Milvus collections (drop + create) for new model
         # This also drops user_preferences collection, so we need to rebuild them
-        milvus_client.recreate_collections(dimension, settings.provider, settings.model)
+        await milvus_client.recreate_collections(dimension, settings.provider, settings.model)
         logger.info(f"Recreated Milvus collections with dimension={dimension}")
 
         # Mark all entries pending for new model

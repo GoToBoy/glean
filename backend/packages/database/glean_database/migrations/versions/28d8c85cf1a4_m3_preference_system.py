@@ -1,4 +1,4 @@
-"""m3 prefrerence system
+"""m3 preference system
 
 Revision ID: 28d8c85cf1a4
 Revises: 59c4bee34177

@@ -34,6 +34,16 @@ class ScoreService:
         self.db = db_session
         self.milvus = milvus_client
         self.pref_config = preference_config
+        self._user_stats_cache: dict[str, UserPreferenceStats | None] = {}
+
+    async def _get_user_stats(self, user_id: str) -> UserPreferenceStats | None:
+        """Get user preference stats with caching to avoid N+1 queries."""
+        if user_id not in self._user_stats_cache:
+            result = await self.db.execute(
+                select(UserPreferenceStats).where(UserPreferenceStats.user_id == user_id)
+            )
+            self._user_stats_cache[user_id] = result.scalar_one_or_none()
+        return self._user_stats_cache[user_id]
 
     async def calculate_score(
         self,
@@ -111,11 +121,8 @@ class ScoreService:
         base_score = (raw_score + 1) / 2 * 100
         score_with_confidence = base_score * confidence + 50 * (1 - confidence)
 
-        # Get affinity statistics
-        result = await self.db.execute(
-            select(UserPreferenceStats).where(UserPreferenceStats.user_id == user_id)
-        )
-        stats = result.scalar_one_or_none()
+        # Get affinity statistics (cached to avoid N+1 queries)
+        stats = await self._get_user_stats(user_id)
 
         # Apply affinity boosts
         source_boost = 0.0
@@ -189,11 +196,8 @@ class ScoreService:
         # Get user preferences once
         prefs = await self.milvus.get_user_preferences(user_id)
 
-        # Get affinity stats once
-        result = await self.db.execute(
-            select(UserPreferenceStats).where(UserPreferenceStats.user_id == user_id)
-        )
-        stats = result.scalar_one_or_none()
+        # Get affinity stats once (and cache for any subsequent individual calls)
+        stats = await self._get_user_stats(user_id)
 
         # Check if user has preference model
         has_preference = prefs.get("positive") or prefs.get("negative")

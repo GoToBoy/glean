@@ -1,5 +1,6 @@
 """Milvus client for vector operations."""
 
+import asyncio
 from contextlib import suppress
 from datetime import datetime
 from typing import Any
@@ -30,6 +31,20 @@ class MilvusClient:
         self._connected = False
         self._entries_collection: Collection | None = None
         self._prefs_collection: Collection | None = None
+
+    @staticmethod
+    def _escape_string(s: str) -> str:
+        """
+        Escape special characters in strings for Milvus filter expressions.
+
+        Args:
+            s: String to escape
+
+        Returns:
+            Escaped string safe for use in filter expressions
+        """
+        # Escape double quotes and backslashes
+        return s.replace("\\", "\\\\").replace('"', '\\"')
 
     @staticmethod
     def _build_model_signature(provider: str, model: str, dimension: int) -> str:
@@ -94,7 +109,7 @@ class MilvusClient:
             connections.disconnect("default")
             self._connected = False
 
-    def ensure_collections(
+    async def ensure_collections(
         self, dimension: int, provider: str | None = None, model: str | None = None
     ) -> None:
         """
@@ -124,7 +139,7 @@ class MilvusClient:
                 existing_signature = self._extract_model_signature(collection)
                 if existing_signature and existing_signature != expected_signature:
                     # Model changed - recreate collections
-                    self.recreate_collections(dimension, provider, model)
+                    await self.recreate_collections(dimension, provider, model)
                     return
 
             self._entries_collection = collection
@@ -143,7 +158,7 @@ class MilvusClient:
                 existing_signature = self._extract_model_signature(collection)
                 if existing_signature and existing_signature != expected_signature:
                     # Model changed - recreate collections
-                    self.recreate_collections(dimension, provider, model)
+                    await self.recreate_collections(dimension, provider, model)
                     return
 
             self._prefs_collection = collection
@@ -153,7 +168,7 @@ class MilvusClient:
                 dimension, provider, model
             )
 
-    def recreate_collections(
+    async def recreate_collections(
         self, dimension: int, provider: str | None = None, model: str | None = None
     ) -> None:
         """
@@ -164,8 +179,6 @@ class MilvusClient:
             provider: Embedding provider (optional, stored in collection metadata)
             model: Model name (optional, stored in collection metadata)
         """
-        import time
-
         self.connect()
 
         # Drop existing collections if present
@@ -175,7 +188,7 @@ class MilvusClient:
             for i in range(30):  # Increased from 10 to 30
                 if not utility.has_collection(self.config.entries_collection):
                     break
-                time.sleep(0.2)  # Increased from 0.1 to 0.2
+                await asyncio.sleep(0.2)  # Non-blocking async sleep
                 if i == 29:
                     raise RuntimeError(
                         f"Timeout waiting for collection {self.config.entries_collection} to drop"
@@ -187,14 +200,14 @@ class MilvusClient:
             for i in range(30):  # Increased from 10 to 30
                 if not utility.has_collection(self.config.prefs_collection):
                     break
-                time.sleep(0.2)  # Increased from 0.1 to 0.2
+                await asyncio.sleep(0.2)  # Non-blocking async sleep
                 if i == 29:
                     raise RuntimeError(
                         f"Timeout waiting for collection {self.config.prefs_collection} to drop"
                     )
 
         # Additional wait to ensure Milvus state is fully updated
-        time.sleep(0.5)
+        await asyncio.sleep(0.5)  # Non-blocking async sleep
 
         # Recreate with model metadata
         self._entries_collection = self._create_entries_collection(dimension, provider, model)
@@ -371,7 +384,7 @@ class MilvusClient:
         # Delete existing entry if present (upsert pattern)
         # Entry might not exist, ignore
         with suppress(MilvusException):
-            self._entries_collection.delete(expr=f'id == "{entry_id}"')
+            self._entries_collection.delete(expr=f'id == "{self._escape_string(entry_id)}"')
 
         data = [
             [entry_id],
@@ -399,7 +412,7 @@ class MilvusClient:
             raise RuntimeError("Collections not initialized. Call ensure_collections() first.")
 
         results = self._entries_collection.query(
-            expr=f'id == "{entry_id}"', output_fields=["embedding"]
+            expr=f'id == "{self._escape_string(entry_id)}"', output_fields=["embedding"]
         )
 
         if results:
@@ -425,7 +438,7 @@ class MilvusClient:
             return {}
 
         # Build IN expression for batch query
-        ids_str = ", ".join(f'"{eid}"' for eid in entry_ids)
+        ids_str = ", ".join(f'"{self._escape_string(eid)}"' for eid in entry_ids)
         expr = f"id in [{ids_str}]"
 
         results = self._entries_collection.query(
@@ -461,7 +474,7 @@ class MilvusClient:
         if filters:
             conditions = []
             if "feed_id" in filters:
-                conditions.append(f'feed_id == "{filters["feed_id"]}"')
+                conditions.append(f'feed_id == "{self._escape_string(filters["feed_id"])}"')
             if "min_published_at" in filters:
                 ts = int(filters["min_published_at"].timestamp())
                 conditions.append(f"published_at >= {ts}")
@@ -512,7 +525,7 @@ class MilvusClient:
         pref_id = f"{user_id}_{vector_type}"
 
         # Delete existing if present
-        self._prefs_collection.delete(expr=f'id == "{pref_id}"')
+        self._prefs_collection.delete(expr=f'id == "{self._escape_string(pref_id)}"')
 
         # Insert new
         data = [
@@ -540,7 +553,7 @@ class MilvusClient:
             raise RuntimeError("Collections not initialized. Call ensure_collections() first.")
 
         results = self._prefs_collection.query(
-            expr=f'user_id == "{user_id}"',
+            expr=f'user_id == "{self._escape_string(user_id)}"',
             output_fields=["vector_type", "embedding", "sample_count", "updated_at"],
         )
 
@@ -565,7 +578,7 @@ class MilvusClient:
         if not self._entries_collection:
             raise RuntimeError("Collections not initialized. Call ensure_collections() first.")
 
-        self._entries_collection.delete(expr=f'id == "{entry_id}"')
+        self._entries_collection.delete(expr=f'id == "{self._escape_string(entry_id)}"')
 
     async def delete_user_preferences(self, user_id: str) -> None:
         """
@@ -577,4 +590,4 @@ class MilvusClient:
         if not self._prefs_collection:
             raise RuntimeError("Collections not initialized. Call ensure_collections() first.")
 
-        self._prefs_collection.delete(expr=f'user_id == "{user_id}"')
+        self._prefs_collection.delete(expr=f'user_id == "{self._escape_string(user_id)}"')

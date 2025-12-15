@@ -118,7 +118,7 @@ async def generate_entry_embedding(ctx: dict[str, Any], entry_id: str) -> dict[s
 
         try:
             # Ensure Milvus collections exist with correct model
-            milvus_client.ensure_collections(
+            await milvus_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 
@@ -176,7 +176,7 @@ async def batch_generate_embeddings(
 
         try:
             # Ensure Milvus collections exist with correct model
-            milvus_client.ensure_collections(
+            await milvus_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 
@@ -234,7 +234,7 @@ async def retry_failed_embeddings(
 
         try:
             # Ensure Milvus collections exist with correct model
-            milvus_client.ensure_collections(
+            await milvus_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 

@@ -25,7 +25,7 @@ class VectorizationStatus(str, Enum):
 class RateLimitConfig(BaseModel):
     """Rate limit configuration for embedding providers."""
 
-    default: int = 10  # Default rate limit (requests per minute)
+    default: int = Field(10, ge=0, le=1000)  # Default rate limit (requests per minute)
     providers: dict[str, int] = Field(default_factory=dict)  # Per-provider overrides
 
 
@@ -44,12 +44,12 @@ class EmbeddingConfig(BaseModel):
     # Provider settings
     provider: str = "openai"
     model: str = "text-embedding-3-small"
-    dimension: int = 1536
+    dimension: int = Field(1536, gt=0, le=10000)
     api_key: str | None = None
     base_url: str | None = None
-    timeout: int = 30
-    batch_size: int = 20
-    max_retries: int = 3
+    timeout: int = Field(30, gt=0, le=300)
+    batch_size: int = Field(20, gt=0, le=1000)
+    max_retries: int = Field(3, ge=0, le=10)
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
     # System state
@@ -170,12 +170,12 @@ class EmbeddingConfigUpdateRequest(BaseModel):
     enabled: bool | None = None
     provider: str | None = None
     model: str | None = None
-    dimension: int | None = None  # Optional: auto-inferred if not provided
+    dimension: int | None = Field(None, gt=0, le=10000)  # Optional: auto-inferred if not provided
     api_key: str | None = None
     base_url: str | None = None
-    timeout: int | None = None
-    batch_size: int | None = None
-    max_retries: int | None = None
+    timeout: int | None = Field(None, gt=0, le=300)
+    batch_size: int | None = Field(None, gt=0, le=1000)
+    max_retries: int | None = Field(None, ge=0, le=10)
     rate_limit: RateLimitConfig | None = None
 
 

@@ -208,7 +208,7 @@ async def get_score_service(
 
         milvus_client = MilvusClient()
         milvus_client.connect()
-        milvus_client.ensure_collections(
+        await milvus_client.ensure_collections(
             config.dimension, config.provider, config.model
         )
 

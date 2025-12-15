@@ -117,7 +117,7 @@ class EmbeddingService:
             .where(Entry.id == entry_id)
             .values(embedding_status="processing", embedding_error=None)
         )
-        await self.db.commit()
+        await self.db.flush()
 
         try:
             # Extract text
@@ -156,7 +156,7 @@ class EmbeddingService:
                     embedding_error=None,
                 )
             )
-            await self.db.commit()
+            await self.db.flush()
 
             return True
 
@@ -172,7 +172,7 @@ class EmbeddingService:
             .where(Entry.id == entry_id)
             .values(embedding_status="failed", embedding_error=error)
         )
-        await self.db.commit()
+        await self.db.flush()
 
     def _detect_language(self, text: str) -> str:
         """
@@ -279,4 +279,4 @@ class EmbeddingService:
                 embedding_error=None,
             )
         )
-        await self.db.commit()
+        await self.db.flush()
