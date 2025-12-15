@@ -36,5 +36,6 @@ function Badge({ className, variant, size, ...props }: BadgeProps) {
   return <span className={badgeVariants({ variant, size, className })} {...props} />
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants }
 

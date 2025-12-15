@@ -307,9 +307,10 @@ export function Layout() {
   const ungroupedSubscriptions = subscriptionsByFolder['__ungrouped__'] || []
 
   // Close mobile sidebar on navigation
+  const searchParamsString = searchParams.toString()
   useEffect(() => {
     setIsMobileSidebarOpen(false)
-  }, [location.pathname, searchParams.toString()])
+  }, [location.pathname, searchParamsString])
 
   return (
     <div className="flex h-screen flex-col bg-background md:flex-row">

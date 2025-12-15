@@ -10,16 +10,16 @@
     "./utils": "./src/utils/index.ts"
   },
   "scripts": {
-    "lint": "eslint src --ext ts,tsx",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf node_modules .turbo"
   },
   "dependencies": {
-    "@base-ui-components/react": "1.0.0-beta.7",
+    "@base-ui-components/react": "1.0.0-rc.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.0",
-    "lucide-react": "^0.468.0",
-    "tailwind-merge": "^2.2.0"
+    "lucide-react": "^0.561.0",
+    "tailwind-merge": "^3.0.0"
   },
   "peerDependencies": {
     "react": "^18.2.0",

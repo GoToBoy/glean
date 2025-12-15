@@ -33,7 +33,7 @@ export default function LoginPage() {
     try {
       await login(email, password)
       navigate(from, { replace: true })
-    } catch (err) {
+    } catch {
       // Error is handled by store
     }
   }

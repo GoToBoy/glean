@@ -191,7 +191,7 @@ export class ApiClient {
       // Validate URL before caching
       if (this.isValidUrl(url)) {
         this.cachedApiUrl = url
-        return this.cachedApiUrl
+        return url
       } else {
         console.error('Invalid API URL retrieved from Electron:', url)
         return ''
