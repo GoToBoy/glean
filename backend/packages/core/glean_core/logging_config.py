@@ -8,15 +8,14 @@ log rotation, and structured logging support.
 import os
 import sys
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
 
 def setup_logging(
     log_level: str = "INFO",
-    log_file: Optional[str] = None,
-    log_format: Optional[str] = None,
+    log_file: str | None = None,
+    log_format: str | None = None,
     rotation: str = "100 MB",
     retention: str = "30 days",
     compression: str = "gz",
@@ -164,7 +163,7 @@ def intercept_standard_logging() -> None:
         logging.getLogger(logger_name).setLevel(logging.INFO)
 
 
-def get_logger(name: Optional[str] = None):
+def get_logger(name: str | None = None):
     """
     Get Loguru logger instance.
 
@@ -179,12 +178,12 @@ def get_logger(name: Optional[str] = None):
         import inspect
         frame = inspect.currentframe().f_back
         name = frame.f_globals.get("__name__", "unknown")
-    
+
     return logger.bind(name=name)
 
 
 # Initialize logging configuration
-def init_logging(config_file: Optional[str] = None) -> None:
+def init_logging(config_file: str | None = None) -> None:
     """
     Initialize logging system.
 
@@ -197,6 +196,6 @@ def init_logging(config_file: Optional[str] = None) -> None:
     else:
         # Configure from environment variables
         setup_logging_from_env()
-    
+
     # Intercept standard logging
     intercept_standard_logging()

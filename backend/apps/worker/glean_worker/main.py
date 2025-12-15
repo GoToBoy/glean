@@ -10,7 +10,7 @@ from typing import Any
 from arq import cron
 from arq.connections import RedisSettings
 
-from glean_core import init_logging, get_logger
+from glean_core import get_logger, init_logging
 from glean_database.session import init_database
 from glean_vector.clients.milvus_client import MilvusClient
 

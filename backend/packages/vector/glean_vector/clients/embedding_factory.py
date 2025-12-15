@@ -103,17 +103,7 @@ class EmbeddingProviderFactory:
         }
 
         # Add provider-specific config
-        if provider in ("openai",):
-            base_config.update(
-                {
-                    "api_key": config.api_key,
-                    "base_url": config.base_url,
-                    "timeout": config.timeout,
-                    "max_retries": config.max_retries,
-                    "batch_size": config.batch_size,
-                }
-            )
-        elif provider in ("volc-engine", "volc_engine", "volcengine"):
+        if provider in ("openai",) or provider in ("volc-engine", "volc_engine", "volcengine"):
             base_config.update(
                 {
                     "api_key": config.api_key,

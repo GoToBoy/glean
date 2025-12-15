@@ -11,7 +11,11 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from glean_core.schemas import SubscriptionListResponse, SubscriptionResponse, SubscriptionSyncResponse
+from glean_core.schemas import (
+    SubscriptionListResponse,
+    SubscriptionResponse,
+    SubscriptionSyncResponse,
+)
 from glean_database.models import Entry, Feed, Subscription, UserEntry, UserPreferenceStats
 
 # Sentinel for unset values

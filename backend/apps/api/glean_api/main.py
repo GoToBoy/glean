@@ -13,7 +13,8 @@ from arq.connections import ArqRedis, RedisSettings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from glean_core import init_logging, get_logger
+from glean_core import get_logger, init_logging
+
 from .config import settings
 from .middleware import LoggingMiddleware
 from .routers import admin, auth, bookmarks, entries, feeds, folders, preference, system, tags

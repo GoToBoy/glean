@@ -11,6 +11,7 @@ Usage:
 import argparse
 import asyncio
 import hashlib
+import os
 import sys
 from pathlib import Path
 
@@ -18,13 +19,12 @@ from pathlib import Path
 backend_path = Path(__file__).parent.parent / "backend"
 sys.path.insert(0, str(backend_path))
 
-import os
+# Imports below need to come after sys.path modification
+from sqlalchemy import delete, select  # noqa: E402
 
-from sqlalchemy import delete, select
-
-from glean_core.services import AdminService
-from glean_database.models.admin import AdminRole, AdminUser
-from glean_database.session import get_session, init_database
+from glean_core.services import AdminService  # noqa: E402
+from glean_database.models.admin import AdminRole, AdminUser  # noqa: E402
+from glean_database.session import get_session, init_database  # noqa: E402
 
 
 def hash_password_sha256(password: str) -> str:

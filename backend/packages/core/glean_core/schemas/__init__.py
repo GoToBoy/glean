@@ -11,6 +11,18 @@ from .bookmark import (
     BookmarkTagRequest,
     BookmarkUpdate,
 )
+from .config import (
+    EmbeddingConfig,
+    EmbeddingConfigResponse,
+    EmbeddingConfigUpdateRequest,
+    EmbeddingRebuildProgress,
+    PreferenceConfig,
+    RateLimitConfig,
+    ScoreConfig,
+    ValidationResult,
+    VectorizationStatus,
+    VectorizationStatusResponse,
+)
 from .entry import EntryListResponse, EntryResponse, UpdateEntryStateRequest
 from .feed import (
     BatchDeleteSubscriptionsRequest,
@@ -40,18 +52,6 @@ from .tag import (
     TagWithCountsResponse,
 )
 from .user import UserResponse, UserUpdate
-from .config import (
-    EmbeddingConfig,
-    EmbeddingConfigResponse,
-    EmbeddingConfigUpdateRequest,
-    EmbeddingRebuildProgress,
-    PreferenceConfig,
-    RateLimitConfig,
-    ScoreConfig,
-    ValidationResult,
-    VectorizationStatus,
-    VectorizationStatusResponse,
-)
 
 __all__ = [
     # Auth

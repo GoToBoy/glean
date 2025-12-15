@@ -1,5 +1,6 @@
 """Milvus client for vector operations."""
 
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
@@ -259,10 +260,10 @@ class MilvusClient:
         try:
             # Check if index already exists before creating
             existing_indexes = {idx.field_name: idx for idx in collection.indexes}
-            
+
             if "feed_id" not in existing_indexes:
                 collection.create_index("feed_id", index_name="idx_feed_id")
-            
+
             if "published_at" not in existing_indexes:
                 collection.create_index("published_at", index_name="idx_published_at")
         except MilvusException as e:
@@ -323,12 +324,12 @@ class MilvusClient:
         collection.create_index(
             "embedding", {"index_type": "FLAT", "metric_type": "COSINE"}
         )
-        
+
         # Create index for user_id with error handling
         try:
             # Check if index already exists before creating
             existing_indexes = {idx.field_name: idx for idx in collection.indexes}
-            
+
             if "user_id" not in existing_indexes:
                 collection.create_index("user_id", index_name="idx_user_id")
         except MilvusException as e:
@@ -368,10 +369,9 @@ class MilvusClient:
         )
 
         # Delete existing entry if present (upsert pattern)
-        try:
+        # Entry might not exist, ignore
+        with suppress(MilvusException):
             self._entries_collection.delete(expr=f'id == "{entry_id}"')
-        except MilvusException:
-            pass  # Entry might not exist, ignore
 
         data = [
             [entry_id],

@@ -4,6 +4,7 @@ Entries router.
 Provides endpoints for reading and managing feed entries.
 """
 
+from contextlib import suppress
 from typing import Annotated
 
 from arq.connections import ArqRedis
@@ -186,16 +187,14 @@ async def like_entry(
         )
 
         # Queue preference update task (M3)
-        try:
+        # Don't fail the request if preference update fails
+        with suppress(Exception):
             await redis_pool.enqueue_job(
                 "update_user_preference",
                 user_id=current_user.id,
                 entry_id=entry_id,
                 signal_type="like",
             )
-        except Exception:
-            # Don't fail the request if preference update fails
-            pass
 
         return result
     except ValueError as e:
@@ -233,16 +232,14 @@ async def dislike_entry(
         )
 
         # Queue preference update task (M3)
-        try:
+        # Don't fail the request if preference update fails
+        with suppress(Exception):
             await redis_pool.enqueue_job(
                 "update_user_preference",
                 user_id=current_user.id,
                 entry_id=entry_id,
                 signal_type="dislike",
             )
-        except Exception:
-            # Don't fail the request if preference update fails
-            pass
 
         return result
     except ValueError as e:

@@ -77,7 +77,7 @@ class OpenAIProvider(EmbeddingProvider):
 
             return embedding, metadata
 
-        except OpenAIError as e:
+        except OpenAIError:
             # Retry with exponential backoff
             if retry_count < self.max_retries:
                 wait_time = 2**retry_count  # 1s, 2s, 4s
@@ -120,7 +120,7 @@ class OpenAIProvider(EmbeddingProvider):
 
             return embeddings, metadata
 
-        except OpenAIError as e:
+        except OpenAIError:
             # Retry with exponential backoff
             if retry_count < self.max_retries:
                 wait_time = 2**retry_count

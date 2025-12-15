@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from glean_vector.clients.providers import VolcEngineProvider
-import numpy as np
 
 
 @pytest.fixture
@@ -99,10 +98,10 @@ async def test_generate_embedding_success(volc_config, mock_ark_response_single)
     provider = VolcEngineProvider(**volc_config)
 
     # Mock the Ark client
-    with patch("volcenginesdkarkruntime.Ark") as MockArk:
+    with patch("volcenginesdkarkruntime.Ark") as mock_ark:
         mock_client = MagicMock()
         mock_client.embeddings.create.return_value = mock_ark_response_single
-        MockArk.return_value = mock_client
+        mock_ark.return_value = mock_client
 
         embedding, metadata = await provider.generate_embedding("test text")
 
@@ -126,10 +125,10 @@ async def test_generate_embeddings_batch_success(volc_config, mock_ark_response_
     provider = VolcEngineProvider(**volc_config)
 
     # Mock the Ark client
-    with patch("volcenginesdkarkruntime.Ark") as MockArk:
+    with patch("volcenginesdkarkruntime.Ark") as mock_ark:
         mock_client = MagicMock()
         mock_client.embeddings.create.return_value = mock_ark_response_batch
-        MockArk.return_value = mock_client
+        mock_ark.return_value = mock_client
 
         texts = ["text 1", "text 2", "text 3"]
         embeddings, metadata = await provider.generate_embeddings_batch(texts)
@@ -180,10 +179,10 @@ async def test_dimension_validation_failure(volc_config):
     mock_usage.total_tokens = 10
     mock_response.usage = mock_usage
 
-    with patch("volcenginesdkarkruntime.Ark") as MockArk:
+    with patch("volcenginesdkarkruntime.Ark") as mock_ark:
         mock_client = MagicMock()
         mock_client.embeddings.create.return_value = mock_response
-        MockArk.return_value = mock_client
+        mock_ark.return_value = mock_client
 
         with pytest.raises(ValueError, match="Dimension mismatch"):
             await provider.generate_embedding("test text")
@@ -208,9 +207,11 @@ async def test_import_error_handling(volc_config):
     """Test handling of missing volcenginesdkarkruntime package."""
     provider = VolcEngineProvider(**volc_config)
 
-    with patch("volcenginesdkarkruntime.Ark", side_effect=ImportError("No module")):
-        with pytest.raises(ImportError, match="volcenginesdkarkruntime is not installed"):
-            await provider.generate_embedding("test text")
+    with (
+        patch("volcenginesdkarkruntime.Ark", side_effect=ImportError("No module")),
+        pytest.raises(ImportError, match="volcenginesdkarkruntime is not installed"),
+    ):
+        await provider.generate_embedding("test text")
 
     await provider.close()
 
@@ -278,10 +279,10 @@ async def test_real_api_call():
 async def test_volcengine_manual_integration():
     """
     Manual integration test for Volcengine embedding provider.
-    
+
     This test is explicitly skipped in CI environments and when ARK_API_KEY is not set.
     It's designed for manual testing to verify the integration works with real API.
-    
+
     To run this test manually:
     1. Set ARK_API_KEY environment variable with your Volcengine API key
     2. Optionally set VOLCENGINE_MODEL and VOLCENGINE_DIMENSION

@@ -222,7 +222,7 @@ class PreferenceService:
             .join(Entry, UserEntry.entry_id == Entry.id)
             .where(UserEntry.user_id == user_id)
             .where(
-                (UserEntry.is_liked.is_not(None))  # Has like/dislike
+                UserEntry.is_liked.is_not(None)  # Has like/dislike
             )
         )
         user_entries = result.all()

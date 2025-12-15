@@ -6,7 +6,6 @@ from typing import Any
 
 from .base import EmbeddingProvider
 
-
 # Global lock and cache for model loading to prevent concurrent loading issues
 _model_lock = threading.Lock()
 _model_cache: dict[str, Any] = {}
@@ -35,7 +34,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
         """
         super().__init__(model, dimension, **kwargs)
 
-        self.device = kwargs.get("device", None)  # None means auto-detect
+        self.device = kwargs.get("device")  # None means auto-detect
         self.normalize = kwargs.get("normalize_embeddings", True)
         self.batch_size = kwargs.get("batch_size", 32)
 
@@ -152,7 +151,6 @@ class SentenceTransformerProvider(EmbeddingProvider):
                     model = SentenceTransformer(self.model, device=device)
 
                 # Verify no meta tensors
-                import torch
 
                 if any(p.is_meta for p in model.parameters()):
                     raise RuntimeError("Model has meta tensors after loading")
