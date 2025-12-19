@@ -10,11 +10,11 @@ while [ $attempt -lt $max_attempts ]; do
     if uv run --no-sync python -c "
 import asyncio
 from sqlalchemy import text
-from glean_database.session import init_database, get_session
+from glean_database.session import init_database, get_session_context
 
 async def check():
     init_database('$DATABASE_URL')
-    async with get_session() as session:
+    async with get_session_context() as session:
         await session.execute(text('SELECT 1'))
         return True
 

@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import TypedConfigService
-from glean_database.session import get_session
+from glean_database.session import get_session_context
 from glean_vector.clients.embedding_client import EmbeddingClient
 from glean_vector.clients.milvus_client import MilvusClient
 from glean_vector.config import EmbeddingConfig as EmbeddingSettings
@@ -106,7 +106,7 @@ async def generate_entry_embedding(ctx: dict[str, Any], entry_id: str) -> dict[s
     if not milvus_client:
         return {"success": False, "entry_id": entry_id, "error": "Milvus unavailable"}
 
-    async with get_session() as session:
+    async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
         if not is_enabled:
@@ -164,7 +164,7 @@ async def batch_generate_embeddings(ctx: dict[str, Any], limit: int = 100) -> di
     if not milvus_client:
         return {"processed": 0, "failed": 0, "error": "Milvus unavailable"}
 
-    async with get_session() as session:
+    async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
         if not is_enabled:
@@ -218,7 +218,7 @@ async def retry_failed_embeddings(ctx: dict[str, Any], limit: int = 50) -> dict[
     if not milvus_client:
         return {"processed": 0, "failed": 0, "error": "Milvus unavailable"}
 
-    async with get_session() as session:
+    async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
         if not is_enabled:
@@ -265,7 +265,7 @@ async def validate_and_rebuild_embeddings(ctx: dict[str, Any]) -> dict[str, Any]
     milvus_client: MilvusClient | None = ctx.get("milvus_client")
     redis = ctx.get("redis")
 
-    async with get_session() as session:
+    async with get_session_context() as session:
         config_service = TypedConfigService(session)
         config = await config_service.get(EmbeddingConfig)
 
