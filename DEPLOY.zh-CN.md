@@ -51,6 +51,58 @@ docker compose up -d
 1. 创建管理员账号（参见[管理员账号管理](#管理员账号管理)）
 2. 配置生产环境变量（参见[环境配置](#环境配置)）
 
+### 测试预发布版本
+
+预发布版本（alpha/beta/rc）可用于测试即将发布的功能：
+
+**方法 1：使用 .env 文件（推荐）**
+
+```bash
+# 添加到 .env 文件
+echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+
+# 使用预发布镜像启动
+docker compose up -d
+```
+
+**方法 2：内联环境变量**
+
+```bash
+# 一条命令设置版本并启动
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+```
+
+**方法 3：导出环境变量**
+
+```bash
+# 为当前 shell 会话导出
+export IMAGE_TAG=v0.3.0-alpha.1
+
+# 启动服务
+docker compose up -d
+```
+
+**重要提示：**
+- 预发布版本仅用于测试
+- 不推荐在生产环境使用
+- 不会触发 Electron 应用的自动更新
+- 可能包含 bug 或未完成的功能
+
+在此处浏览可用的预发布版本：https://github.com/LeslieLeung/glean/releases
+
+切换回稳定版本：
+```bash
+# 从 .env 中删除 IMAGE_TAG 或取消设置
+unset IMAGE_TAG
+
+# 或者设置回 latest
+export IMAGE_TAG=latest
+
+# 拉取并重启为最新稳定版
+docker compose pull
+docker compose up -d
+```
+
 ## 生产环境部署
 
 ### 前置要求

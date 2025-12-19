@@ -51,6 +51,58 @@ docker compose up -d
 1. Create an admin account (see [Admin Account Management](#admin-account-management))
 2. Configure environment variables for production (see [Environment Configuration](#environment-configuration))
 
+### Testing Pre-release Versions
+
+Pre-release versions (alpha/beta/rc) are available for testing upcoming features:
+
+**Method 1: Using .env file (recommended)**
+
+```bash
+# Add to your .env file
+echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+
+# Start with pre-release images
+docker compose up -d
+```
+
+**Method 2: Inline environment variable**
+
+```bash
+# Set version and start in one command
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+```
+
+**Method 3: Export environment variable**
+
+```bash
+# Export for current shell session
+export IMAGE_TAG=v0.3.0-alpha.1
+
+# Start services
+docker compose up -d
+```
+
+**Important notes:**
+- Pre-release versions are for testing only
+- Not recommended for production use
+- Won't trigger auto-updates for Electron apps
+- May contain bugs or incomplete features
+
+Browse available pre-releases at: https://github.com/LeslieLeung/glean/releases
+
+To switch back to stable:
+```bash
+# Remove IMAGE_TAG from .env or unset it
+unset IMAGE_TAG
+
+# Or set it back to latest
+export IMAGE_TAG=latest
+
+# Pull and restart with latest stable
+docker compose pull
+docker compose up -d
+```
+
 ## Production Deployment
 
 ### Prerequisites

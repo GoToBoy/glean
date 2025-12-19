@@ -1,13 +1,11 @@
-name: Release
+name: Pre-Release (Alpha/Beta)
 
 on:
   push:
     tags:
-      - 'v*'
-      # Exclude pre-release tags (alpha, beta, rc)
-      - '!v*-alpha.*'
-      - '!v*-beta.*'
-      - '!v*-rc.*'
+      - 'v*-alpha.*'
+      - 'v*-beta.*'
+      - 'v*-rc.*'
 
 env:
   REGISTRY: ghcr.io
@@ -15,7 +13,7 @@ env:
 
 jobs:
   build-backend:
-    name: Build Backend Image
+    name: Build Backend Image (Pre-release)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -45,9 +43,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{major}}.{{minor}}-{{prerelease}}
 
       - name: Extract version from tag
         id: version
@@ -68,7 +64,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-web:
-    name: Build Web Frontend Image
+    name: Build Web Frontend Image (Pre-release)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -98,9 +94,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-web
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{major}}.{{minor}}-{{prerelease}}
 
       - name: Build and push Web image
         uses: docker/build-push-action@v6
@@ -115,7 +109,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-admin:
-    name: Build Admin Dashboard Image
+    name: Build Admin Dashboard Image (Pre-release)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -145,9 +139,7 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-admin
           tags: |
             type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{major}}.{{minor}}-{{prerelease}}
 
       - name: Build and push Admin image
         uses: docker/build-push-action@v6
@@ -162,7 +154,7 @@ jobs:
           cache-to: type=gha,mode=max
 
   build-electron:
-    name: Build Electron App (${{ matrix.os }})
+    name: Build Electron App (${{ matrix.os }}) - Pre-release
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -228,6 +220,7 @@ jobs:
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
           files: |
             frontend/apps/web/release/*.dmg
             frontend/apps/web/release/*.zip
@@ -241,7 +234,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   create-release:
-    name: Create GitHub Release
+    name: Create GitHub Pre-Release
     needs: [build-backend, build-web, build-admin, build-electron]
     runs-on: ubuntu-latest
     permissions:
@@ -251,36 +244,86 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Create Release
+      - name: Detect release type
+        id: release_type
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == *"-alpha."* ]]; then
+            echo "type=Alpha" >> $GITHUB_OUTPUT
+            echo "emoji=⚠️" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == *"-beta."* ]]; then
+            echo "type=Beta" >> $GITHUB_OUTPUT
+            echo "emoji=🧪" >> $GITHUB_OUTPUT
+          elif [[ "$TAG" == *"-rc."* ]]; then
+            echo "type=Release Candidate" >> $GITHUB_OUTPUT
+            echo "emoji=🚀" >> $GITHUB_OUTPUT
+          else
+            echo "type=Pre-release" >> $GITHUB_OUTPUT
+            echo "emoji=🔬" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Pre-Release
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: true
           generate_release_notes: true
+          name: "${{ steps.release_type.outputs.emoji }} ${{ github.ref_name }} (${{ steps.release_type.outputs.type }})"
           body: |
+            ## ${{ steps.release_type.outputs.emoji }} This is a ${{ steps.release_type.outputs.type }}
+            
+            > **Warning**: This is a pre-release version intended for testing purposes only. 
+            > Do not use in production environments.
+            
             ## Docker Images
             
-            This release includes the following Docker images:
+            This pre-release includes the following Docker images:
             
-            - `ghcr.io/${{ env.IMAGE_PREFIX }}-backend:${{ github.ref_name }}`
-            - `ghcr.io/${{ env.IMAGE_PREFIX }}-web:${{ github.ref_name }}`
-            - `ghcr.io/${{ env.IMAGE_PREFIX }}-admin:${{ github.ref_name }}`
+            ```bash
+            # Pull images
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}-backend:${{ github.ref_name }}
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}-web:${{ github.ref_name }}
+            docker pull ghcr.io/${{ env.IMAGE_PREFIX }}-admin:${{ github.ref_name }}
+            ```
+            
+            ## Testing with Docker Compose
+            
+            Create a `docker-compose.override.yml` file:
+            
+            ```yaml
+            version: '3.8'
+            
+            services:
+              backend:
+                image: ghcr.io/${{ env.IMAGE_PREFIX }}-backend:${{ github.ref_name }}
+              
+              web:
+                image: ghcr.io/${{ env.IMAGE_PREFIX }}-web:${{ github.ref_name }}
+              
+              admin:
+                image: ghcr.io/${{ env.IMAGE_PREFIX }}-admin:${{ github.ref_name }}
+            ```
+            
+            Then run:
+            
+            ```bash
+            docker compose up -d
+            ```
             
             ## Desktop Apps
             
             Download the desktop application for your platform from the assets below.
             
-            ## Quick Start
+            **Note**: Desktop apps for pre-release versions will NOT auto-update.
             
-            ```bash
-            # Download docker-compose.yml
-            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.yml -o docker-compose.yml
+            ## Feedback
             
-            # Start Glean
-            docker compose up -d
+            Found an issue? Please report it at:
+            https://github.com/${{ github.repository }}/issues
             
-            # Access at http://localhost
-            ```
+            ---
             
-            See [README](https://github.com/${{ github.repository }}#quick-start) for full documentation.
+            ## Changelog
+            
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

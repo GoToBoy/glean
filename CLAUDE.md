@@ -42,6 +42,10 @@ docker compose --profile admin up -d
 
 # Stop services
 docker compose down
+
+# Test pre-release versions (alpha/beta/rc)
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+# Or set in .env: IMAGE_TAG=v0.3.0-alpha.1
 ```
 
 ### Development Environment

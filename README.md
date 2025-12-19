@@ -117,6 +117,33 @@ Pre-built images are available on GitHub Container Registry:
 
 Supported architectures: `linux/amd64`, `linux/arm64`
 
+### Testing Pre-release Versions
+
+Want to test upcoming features? Use pre-release versions (alpha/beta/rc):
+
+**Method 1: Using environment variable (recommended)**
+
+```bash
+# Set the IMAGE_TAG in .env file
+echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+
+# Or export it directly
+export IMAGE_TAG=v0.3.0-alpha.1
+
+# Start with pre-release images
+docker compose up -d
+```
+
+**Method 2: Inline environment variable**
+
+```bash
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+```
+
+**Note**: Pre-release versions are for testing only. They won't trigger auto-updates for Electron apps and are not recommended for production use.
+
+See available pre-release versions on the [Releases page](https://github.com/LeslieLeung/glean/releases).
+
 ## Deployment
 
 The default deployment includes all services (full version):

@@ -117,6 +117,33 @@ curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/.env.example
 
 支持架构：`linux/amd64`、`linux/arm64`
 
+### 测试预发布版本
+
+想测试即将发布的新功能？可以使用预发布版本（alpha/beta/rc）：
+
+**方法 1：使用环境变量（推荐）**
+
+```bash
+# 在 .env 文件中设置 IMAGE_TAG
+echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+
+# 或者直接导出环境变量
+export IMAGE_TAG=v0.3.0-alpha.1
+
+# 使用预发布镜像启动
+docker compose up -d
+```
+
+**方法 2：内联环境变量**
+
+```bash
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+```
+
+**注意**：预发布版本仅用于测试，不会触发 Electron 应用的自动更新，不推荐在生产环境使用。
+
+在 [Releases 页面](https://github.com/LeslieLeung/glean/releases) 查看可用的预发布版本。
+
 ## 部署
 
 默认部署包含所有服务（完整版）：
