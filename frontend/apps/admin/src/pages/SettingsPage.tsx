@@ -255,10 +255,15 @@ export default function SettingsPage() {
     // First, save configuration (without enabled field)
     // This ensures provider/model are updated before enabling
     if (Object.keys(configUpdates).length > 0) {
-      await updateMutation.mutateAsync(configUpdates)
+      try {
+        await updateMutation.mutateAsync(configUpdates)
+      } catch {
+        // Don't proceed with enable/disable if config update failed
+        return
+      }
     }
     
-    // Then, handle enable/disable if changed
+    // Then, handle enable/disable if changed (only after config update succeeds)
     if (enabledChanged && form.enabled) {
       // Enable vectorization (this will validate and trigger rebuild)
       await enableMutation.mutateAsync()

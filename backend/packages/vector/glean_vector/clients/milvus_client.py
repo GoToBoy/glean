@@ -15,7 +15,10 @@ from pymilvus import (
     utility,
 )
 
+from glean_core import get_logger
 from glean_vector.config import milvus_config
+
+logger = get_logger(__name__)
 
 
 class MilvusClient:
@@ -104,31 +107,48 @@ class MilvusClient:
             - (True, None) if collections match or don't exist
             - (False, reason) if collections exist but don't match
         """
-        self.connect()
+        # Try to connect to Milvus
+        try:
+            self.connect()
+        except (MilvusException, ConnectionError) as e:
+            logger.warning(f"Failed to connect to Milvus for compatibility check: {e}")
+            # Assume compatible if we can't check (fail-safe approach)
+            return (True, None)
 
         expected_signature = self._build_model_signature(provider, model, dimension)
 
         # Check entries collection
-        if utility.has_collection(self.config.entries_collection):  # type: ignore[truthy-function]
-            collection = Collection(self.config.entries_collection)
-            existing_signature = self._extract_model_signature(collection)
-            if existing_signature and existing_signature != expected_signature:
-                return (
-                    False,
-                    f"Entries collection signature mismatch: "
-                    f"existing={existing_signature}, expected={expected_signature}",
-                )
+        try:
+            if utility.has_collection(self.config.entries_collection):  # type: ignore[truthy-function]
+                collection = Collection(self.config.entries_collection)
+                existing_signature = self._extract_model_signature(collection)
+                if existing_signature and existing_signature != expected_signature:
+                    return (
+                        False,
+                        f"Entries collection signature mismatch: "
+                        f"existing={existing_signature}, expected={expected_signature}",
+                    )
+        except MilvusException as e:
+            logger.warning(
+                f"Failed to check entries collection compatibility: {e}. Assuming compatible."
+            )
+            # Continue to check preferences collection
 
         # Check preferences collection
-        if utility.has_collection(self.config.prefs_collection):  # type: ignore[truthy-function]
-            collection = Collection(self.config.prefs_collection)
-            existing_signature = self._extract_model_signature(collection)
-            if existing_signature and existing_signature != expected_signature:
-                return (
-                    False,
-                    f"Preferences collection signature mismatch: "
-                    f"existing={existing_signature}, expected={expected_signature}",
-                )
+        try:
+            if utility.has_collection(self.config.prefs_collection):  # type: ignore[truthy-function]
+                collection = Collection(self.config.prefs_collection)
+                existing_signature = self._extract_model_signature(collection)
+                if existing_signature and existing_signature != expected_signature:
+                    return (
+                        False,
+                        f"Preferences collection signature mismatch: "
+                        f"existing={existing_signature}, expected={expected_signature}",
+                    )
+        except MilvusException as e:
+            logger.warning(
+                f"Failed to check preferences collection compatibility: {e}. Assuming compatible."
+            )
 
         return (True, None)
 
@@ -139,10 +159,14 @@ class MilvusClient:
         Returns:
             True if both entries and preferences collections exist
         """
-        self.connect()
-        entries_exist = utility.has_collection(self.config.entries_collection)  # type: ignore[truthy-function]
-        prefs_exist = utility.has_collection(self.config.prefs_collection)  # type: ignore[truthy-function]
-        return bool(entries_exist and prefs_exist)  # type: ignore[reportUnknownArgumentType]
+        try:
+            self.connect()
+            entries_exist = utility.has_collection(self.config.entries_collection)  # type: ignore[truthy-function]
+            prefs_exist = utility.has_collection(self.config.prefs_collection)  # type: ignore[truthy-function]
+            return bool(entries_exist and prefs_exist)  # type: ignore[reportUnknownArgumentType]
+        except (MilvusException, ConnectionError) as e:
+            logger.warning(f"Failed to check if collections exist: {e}")
+            return False
 
     def connect(self) -> None:
         """Establish connection to Milvus."""
