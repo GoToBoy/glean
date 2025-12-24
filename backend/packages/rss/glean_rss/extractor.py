@@ -12,6 +12,11 @@ import httpx
 from bs4 import BeautifulSoup
 from readability import Document
 
+# Minimum content length threshold for successful extraction.
+# 100 characters is chosen as a reasonable minimum to avoid storing
+# snippets from failed extractions while still capturing short-form content.
+MIN_CONTENT_LENGTH = 100
+
 
 def _is_relative_url(url: str) -> bool:
     """Check if a URL is relative."""
@@ -170,7 +175,7 @@ def extract_fulltext(html: str, url: str | None = None) -> str | None:
         doc = Document(html, url=url)
         content = cast(str, doc.summary())
         # Return None if content is too short (likely extraction failure)
-        if content and len(content) > 100:
+        if content and len(content) > MIN_CONTENT_LENGTH:
             # Post-process to fix URLs and formatting
             return postprocess_html(content, base_url=url)
         return None
