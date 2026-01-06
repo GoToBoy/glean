@@ -4,12 +4,12 @@ Create initial admin user.
 
 Usage:
     # From project root (development)
-    python scripts/create-admin.py
-    python scripts/create-admin.py --username admin --password AdminPass123! --role super_admin
-    python scripts/create-admin.py --username admin --password NewPass123! --force  # Recreate without prompt
+    python backend/scripts/create-admin.py
+    python backend/scripts/create-admin.py --username admin --password AdminPass123! --role super_admin
+    python backend/scripts/create-admin.py --username admin --password NewPass123! --force  # Recreate without prompt
 
     # From backend directory (development)
-    cd backend && uv run python ../scripts/create-admin.py
+    cd backend && python scripts/create-admin.py
 
     # In Docker container
     docker exec -it glean-backend /app/scripts/create-admin-docker.sh
@@ -24,20 +24,15 @@ import sys
 from pathlib import Path
 
 # Handle both local development and Docker container paths
-# In Docker: /app is the working directory, scripts/ is at /app/scripts/
-# In development: running from project root, backend is in backend/
+# In Docker: /app is the working directory (backend), scripts/ is at /app/scripts/
+# In development: running from backend/scripts/, backend is parent directory
 current_file = Path(__file__).resolve()
 script_dir = current_file.parent
 
 if script_dir.name == "scripts":
-    # Check if we're in Docker (/app/scripts/) or project root (./scripts/)
-    parent_dir = script_dir.parent
-    if parent_dir.name == "app":
-        # Docker container: /app/scripts/create-admin.py
-        backend_path = parent_dir
-    else:
-        # Project root: ./scripts/create-admin.py
-        backend_path = parent_dir / "backend"
+    # Check if we're in Docker (/app/scripts/) or local development (backend/scripts/)
+    # In both cases, parent directory is the backend root
+    backend_path = script_dir.parent
     sys.path.insert(0, str(backend_path))
 
 # Imports below need to come after sys.path modification
@@ -45,7 +40,7 @@ from sqlalchemy import delete, select  # noqa: E402
 
 from glean_core.services import AdminService  # noqa: E402
 from glean_database.models.admin import AdminRole, AdminUser  # noqa: E402
-from glean_database.session import get_session, init_database  # noqa: E402
+from glean_database.session import get_session_context, init_database  # noqa: E402
 
 
 def hash_password_sha256(password: str) -> str:
@@ -58,9 +53,7 @@ def hash_password_sha256(password: str) -> str:
     return hashlib.sha256(password.encode()).hexdigest()
 
 
-async def create_admin(
-    username: str, password: str, role: str, force: bool = False
-) -> bool:
+async def create_admin(username: str, password: str, role: str, force: bool = False) -> bool:
     """Create an admin user. Returns True if successful."""
     # Hash the password with SHA256 to match frontend behavior
     # Frontend sends SHA256(password), so we need to store bcrypt(SHA256(password))
@@ -83,13 +76,11 @@ async def create_admin(
         return False
 
     # Create admin
-    async for session in get_session():
+    async with get_session_context() as session:
         service = AdminService(session)
 
         # Check if admin user already exists
-        result = await session.execute(
-            select(AdminUser).where(AdminUser.username == username)
-        )
+        result = await session.execute(select(AdminUser).where(AdminUser.username == username))
         existing_admin = result.scalar_one_or_none()
 
         if existing_admin:
@@ -101,13 +92,9 @@ async def create_admin(
                 if sys.stdin.isatty():
                     print(f"⚠️  Admin user '{username}' already exists.")
                     print(f"   ID: {existing_admin.id}")
-                    print(
-                        f"   Role: {existing_admin.role if isinstance(existing_admin.role, str) else existing_admin.role.value}"
-                    )
+                    print(f"   Role: {existing_admin.role.value}")
                     response = (
-                        input("\n   Do you want to delete and recreate? [y/N]: ")
-                        .strip()
-                        .lower()
+                        input("\n   Do you want to delete and recreate? [y/N]: ").strip().lower()
                     )
                     should_delete = response in ("y", "yes")
                 else:
@@ -117,9 +104,7 @@ async def create_admin(
                     return False
 
             if should_delete:
-                await session.execute(
-                    delete(AdminUser).where(AdminUser.id == existing_admin.id)
-                )
+                await session.execute(delete(AdminUser).where(AdminUser.id == existing_admin.id))
                 await session.commit()
                 print(f"   🗑️  Deleted existing admin user '{username}'.")
             else:
@@ -133,9 +118,7 @@ async def create_admin(
             )
             print("✅ Admin user created successfully!")
             print(f"   Username: {admin.username}")
-            print(
-                f"   Role: {admin.role if isinstance(admin.role, str) else admin.role.value}"
-            )
+            print(f"   Role: {admin.role.value}")
             print(f"   ID: {admin.id}")
             return True
         except Exception as e:
@@ -144,18 +127,15 @@ async def create_admin(
             if "duplicate key" in error_msg or "already exists" in error_msg:
                 print(f"⚠️  Admin user '{username}' already exists.")
                 print("   Use --force flag to recreate, or choose a different username.")
-                return False
             else:
                 print(f"❌ Error creating admin user: {e}")
-                raise
+            return False
 
 
 def main():
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Create initial admin user")
-    parser.add_argument(
-        "--username", default="admin", help="Admin username (default: admin)"
-    )
+    parser.add_argument("--username", default="admin", help="Admin username (default: admin)")
     parser.add_argument(
         "--password", default="Admin123!", help="Admin password (default: Admin123!)"
     )
