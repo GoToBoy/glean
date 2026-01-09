@@ -126,6 +126,8 @@ export default function ReaderPage() {
       case 'unread':
         return { is_read: false }
       case 'smart':
+        // Smart filter shows unread items with smart sorting (via line 148: view='smart')
+        // Difference from 'unread': smart uses preference score sorting, unread uses timeline
         return { is_read: false }
       case 'read-later':
         return { read_later: true }
@@ -440,7 +442,7 @@ export default function ReaderPage() {
             </div>
 
             {/* Smart view banner when vectorization is disabled */}
-            {(isSmartView || filterType === 'smart') && !isVectorizationEnabled && (
+            {isSmartView && !isVectorizationEnabled && (
               <div className="border-border bg-muted/30 border-b px-3 py-2">
                 <div className="flex items-start gap-2 text-sm">
                   <Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
