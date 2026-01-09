@@ -2,7 +2,7 @@
   "filters": {
     "all": "All",
     "unread": "Unread",
-    "liked": "Liked",
+    "smart": "Smart",
     "readLater": "Later"
   },
   "actions": {

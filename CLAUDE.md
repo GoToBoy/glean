@@ -23,6 +23,7 @@ make api             # FastAPI server (http://localhost:8000)
 make worker          # arq background worker
 make web             # React web app (http://localhost:3000)
 make admin           # Admin dashboard (http://localhost:3001)
+make electron        # Electron desktop app
 ```
 
 For detailed deployment instructions, see [DEPLOY.md](DEPLOY.md).
@@ -170,11 +171,12 @@ See [backend/CLAUDE.md](backend/CLAUDE.md) for detailed backend development guid
 ```
 frontend/
 ├── apps/
-│   ├── web/           # Main React app (port 3000)
+│   ├── web/           # Main React app (port 3000) + Electron desktop app
 │   │   ├── components/
 │   │   ├── pages/
 │   │   ├── hooks/
-│   │   └── stores/    # Zustand state stores
+│   │   ├── stores/    # Zustand state stores
+│   │   └── electron/  # Electron main & preload scripts
 │   └── admin/         # Admin dashboard (port 3001)
 ├── packages/
 │   ├── ui/            # Shared components (COSS UI based)
@@ -281,6 +283,55 @@ Before committing changes:
 4. **Type check** (for complex changes):
    - Backend: `cd backend && uv run pyright`
    - Frontend: `cd frontend && pnpm typecheck`
+
+## Electron Desktop App
+
+Glean provides a cross-platform desktop application built with Electron.
+
+### Development
+
+```bash
+# Start Electron in development mode (requires backend running)
+make electron
+
+# Or from frontend/apps/web directory
+pnpm dev:electron
+```
+
+**Prerequisites**: Backend API must be running (`make api`) before starting Electron app.
+
+### Building Desktop Apps
+
+```bash
+# Build for current platform
+cd frontend/apps/web && pnpm build:electron
+
+# Build for specific platforms
+pnpm build:win      # Windows (NSIS installer)
+pnpm build:mac      # macOS (DMG + zip)
+pnpm build:linux    # Linux (AppImage + deb)
+```
+
+Built applications will be in `frontend/apps/web/release/`.
+
+### Key Features
+
+- **Secure token storage**: Uses `electron-store` for encrypted credential storage
+- **Auto-updates**: Built-in update checker with `electron-updater`
+- **API URL configuration**: Customizable backend server URL for self-hosted deployments
+- **Native platform integration**: System tray, notifications, and platform-specific behaviors
+
+### Architecture
+
+- **Main process** (`electron/main.ts`): App lifecycle, IPC handlers, auto-update logic
+- **Preload script** (`electron/preload.ts`): Secure bridge exposing APIs to renderer via `contextBridge`
+- **Renderer process**: Same React app as web version, with conditional Electron-specific features
+
+### Important Notes
+
+- Electron app shares the same codebase as the web app (conditional rendering based on `window.electronAPI`)
+- Pre-release versions (alpha/beta/rc) do NOT trigger auto-updates in Electron
+- Desktop app requires a backend API to connect to (self-hosted or remote)
 
 ## Miscellaneous
 

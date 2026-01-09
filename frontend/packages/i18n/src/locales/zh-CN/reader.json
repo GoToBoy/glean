@@ -2,7 +2,7 @@
   "filters": {
     "all": "全部",
     "unread": "未读",
-    "liked": "喜欢",
+    "smart": "智能",
     "readLater": "稍后阅读"
   },
   "actions": {

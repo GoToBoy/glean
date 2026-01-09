@@ -41,9 +41,9 @@ import {
   AlertDialogClose,
 } from '@glean/ui'
 
-type FilterType = 'all' | 'unread' | 'liked' | 'read-later'
+type FilterType = 'all' | 'unread' | 'smart' | 'read-later'
 
-const FILTER_ORDER: FilterType[] = ['all', 'unread', 'liked', 'read-later']
+const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 
 /**
  * Hook to detect mobile viewport
@@ -89,7 +89,7 @@ export default function ReaderPage() {
 
   // Initialize filterType from URL parameter or default to 'unread'
   const [filterType, setFilterType] = useState<FilterType>(() => {
-    if (tabParam && ['all', 'unread', 'liked', 'read-later'].includes(tabParam)) {
+    if (tabParam && ['all', 'unread', 'smart', 'read-later'].includes(tabParam)) {
       return tabParam
     }
     return 'unread'
@@ -121,12 +121,18 @@ export default function ReaderPage() {
   const loadMoreRef = useRef<HTMLDivElement>(null)
 
   const updateMutation = useUpdateEntryState()
+
+  // Computed value: whether we're using smart sorting (by preference score vs timeline)
+  const usesSmartSorting = isSmartView || filterType === 'smart'
+
   const getFilterParams = () => {
     switch (filterType) {
       case 'unread':
         return { is_read: false }
-      case 'liked':
-        return { is_liked: true }
+      case 'smart':
+        // Smart filter shows unread items with smart sorting (via line 148: view='smart')
+        // Difference from 'unread': smart uses preference score sorting, unread uses timeline
+        return { is_read: false }
       case 'read-later':
         return { read_later: true }
       default:
@@ -145,7 +151,11 @@ export default function ReaderPage() {
     feed_id: selectedFeedId,
     folder_id: selectedFolderId,
     ...getFilterParams(),
-    view: isSmartView ? 'smart' : 'timeline',
+    // The 'view' parameter differentiates 'smart' from 'unread' filters:
+    // - 'smart': sorted by preference_score (descending)
+    // - 'timeline': sorted by published_at (descending)
+    // Both 'smart' and 'unread' filters use is_read: false, but differ in sort order
+    view: usesSmartSorting ? 'smart' : 'timeline',
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
@@ -156,15 +166,16 @@ export default function ReaderPage() {
   // Merge selected entry into the list if it's not already there
   // This ensures the currently viewed article doesn't disappear from the list
   // when marked as read while viewing in the "unread" tab or Smart view
-  // However, for explicit filters like "liked" and "read-later", we should show the real filtered results
+  // However, for explicit filters like "read-later", we should show the real filtered results
   const entries = (() => {
     if (!selectedEntry || !selectedEntryId) return rawEntries
     const isSelectedInList = rawEntries.some((e) => e.id === selectedEntryId)
     if (isSelectedInList) return rawEntries
 
-    // Only keep the selected entry visible for "all" and "unread" filters
-    // For "liked" and "read-later", show only entries that match the filter
-    if (filterType === 'liked' || filterType === 'read-later') {
+    // Keep selected entry visible for flexible filters (all, unread, smart),
+    // not for strict filters (read-later) that must show exact matches
+    const isStrictFilter = filterType === 'read-later'
+    if (isStrictFilter) {
       return rawEntries
     }
 
@@ -199,8 +210,8 @@ export default function ReaderPage() {
           }
         : selectedEntry
 
-    if (isSmartView) {
-      // For Smart view, insert based on ORIGINAL preference_score to maintain correct order
+    if (usesSmartSorting) {
+      // For Smart view or Smart filter, insert based on ORIGINAL preference_score to maintain correct order
       // Use the saved original score, not the current score (which may have changed after like/dislike)
       const selectedScore =
         originalData?.id === selectedEntryId
@@ -377,7 +388,16 @@ export default function ReaderPage() {
           >
             {/* Filters */}
             <div className="border-border bg-card border-b p-3">
-              {isSmartView ? (
+              {/*
+                UI Behavior:
+                - Global Smart View (no feed/folder selected): Shows dedicated smart view header + limited filters (unread, all)
+                - Feed/Folder View: Shows all 4 filter tabs including "smart" filter
+
+                The "smart" filter tab in Feed/Folder views allows users to see their specific feed/folder
+                sorted by preference score, while the global Smart View is a dedicated aggregated view.
+                Both use the same sorting logic (usesSmartSorting) but different UI presentations.
+              */}
+              {isSmartView && !selectedFeedId && !selectedFolderId ? (
                 /* Smart view header + filters */
                 <div className="space-y-2">
                   {/* Smart Header */}
@@ -420,10 +440,10 @@ export default function ReaderPage() {
                       label={t('filters.unread')}
                     />
                     <FilterTab
-                      active={filterType === 'liked'}
-                      onClick={() => handleFilterChange('liked')}
-                      icon={<Heart className="h-3.5 w-3.5" />}
-                      label={t('filters.liked')}
+                      active={filterType === 'smart'}
+                      onClick={() => handleFilterChange('smart')}
+                      icon={<Sparkles className="h-3.5 w-3.5" />}
+                      label={t('filters.smart')}
                     />
                     <FilterTab
                       active={filterType === 'read-later'}
@@ -507,7 +527,7 @@ export default function ReaderPage() {
                         filterType === 'read-later' &&
                         (user?.settings?.show_read_later_remaining ?? true)
                       }
-                      showPreferenceScore={isSmartView && showPreferenceScore}
+                      showPreferenceScore={usesSmartSorting && showPreferenceScore}
                     />
                   ))}
                 </div>
