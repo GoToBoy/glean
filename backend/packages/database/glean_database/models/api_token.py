@@ -25,7 +25,7 @@ class APIToken(Base, TimestampMixin):
         user_id: Owner of the token (foreign key to users).
         name: User-defined name for the token.
         token_hash: Bcrypt hash of the token.
-        token_prefix: First 12 characters for display (e.g., "glean_xxxxx").
+        token_prefix: First 16 characters for display (e.g., "glean_xxxxxxxxxx").
         last_used_at: Timestamp of most recent token usage.
         expires_at: Token expiration timestamp (null = never expires).
         is_revoked: Whether the token has been revoked.

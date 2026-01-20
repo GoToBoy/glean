@@ -51,7 +51,7 @@ class APITokenService:
         # Generate token: glean_<32 random characters>
         plain_token = f"glean_{secrets.token_urlsafe(32)}"
         token_hash = hash_password(plain_token)
-        token_prefix = plain_token[:12]  # "glean_xxxxxx"
+        token_prefix = plain_token[:16]  # "glean_xxxxxxxxxx" (16 chars for ~60 bits entropy)
 
         # Calculate expiration
         expires_at = None
@@ -98,12 +98,12 @@ class APITokenService:
         if not plain_token.startswith("glean_"):
             return None
 
-        prefix = plain_token[:12]
+        prefix = plain_token[:16]
 
         # Find tokens with matching prefix
         stmt = select(APIToken).where(
             APIToken.token_prefix == prefix,
-            APIToken.is_revoked == False,  # noqa: E712
+            APIToken.is_revoked.is_(False),
         )
         result = await self.session.execute(stmt)
         tokens = result.scalars().all()
@@ -112,14 +112,12 @@ class APITokenService:
         # Use constant-time comparison to prevent timing attacks
         matched_token = None
         for token in tokens:
-            if verify_password(plain_token, token.token_hash):
-                # Check expiration
-                if token.expires_at and token.expires_at < datetime.now(UTC):
-                    # Store None if expired, but continue checking all tokens
-                    pass
-                elif matched_token is None:
-                    # Only store the first valid match
-                    matched_token = token
+            # Check password and expiration - only set if valid and not expired
+            # Continue checking all tokens to maintain constant time
+            if verify_password(plain_token, token.token_hash) and not (
+                token.expires_at and token.expires_at < datetime.now(UTC)
+            ):
+                matched_token = token
 
         return matched_token
 
@@ -152,7 +150,7 @@ class APITokenService:
         """
         stmt = (
             select(APIToken)
-            .where(APIToken.user_id == user_id, APIToken.is_revoked == False)  # noqa: E712
+            .where(APIToken.user_id == user_id, APIToken.is_revoked.is_(False))
             .order_by(APIToken.created_at.desc())
         )
         result = await self.session.execute(stmt)

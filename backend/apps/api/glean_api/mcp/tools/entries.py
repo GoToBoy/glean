@@ -92,9 +92,9 @@ async def search_entries(
             )
             .where(Entry.feed_id.in_(feed_ids))
             .where(
-                (func.lower(Entry.title).like(search_term))
-                | (func.lower(Entry.content).like(search_term))
-                | (func.lower(Entry.summary).like(search_term))
+                (func.lower(Entry.title).like(search_term, escape="\\"))
+                | (func.lower(Entry.content).like(search_term, escape="\\"))
+                | (func.lower(Entry.summary).like(search_term, escape="\\"))
             )
         )
 

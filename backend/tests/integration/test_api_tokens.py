@@ -4,6 +4,7 @@ import contextlib
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.services.api_token_service import APITokenService
@@ -164,7 +165,7 @@ class TestAPITokenRevoke:
         assert response.status_code == 204
 
         # Verify token is revoked
-        stmt = await db_session.execute(db_session.query(APIToken).filter(APIToken.id == token_id))
+        stmt = await db_session.execute(select(APIToken).where(APIToken.id == token_id))
         token = stmt.scalar_one_or_none()
         assert token.is_revoked is True
 
