@@ -296,7 +296,10 @@ export default function ReaderPage() {
     return () => {
       observer.disconnect()
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage, filterType, selectedFeedId, selectedFolderId, viewParam, isLoading])
+    // Refs (loadMoreRef, entryListRef) are stable and don't need to be in dependencies
+    // Filter params (filterType, feedId, folderId, viewParam) are handled by React Query
+    // fetchNextPage is stable and always uses current query parameters
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
