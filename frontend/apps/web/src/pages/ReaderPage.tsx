@@ -274,7 +274,7 @@ export default function ReaderPage() {
     const loadMoreElement = loadMoreRef.current
     const container = entryListRef.current
 
-    if (!loadMoreElement || !container) return
+    if (!loadMoreElement || !container || isLoading) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -296,7 +296,7 @@ export default function ReaderPage() {
     return () => {
       observer.disconnect()
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, filterType, selectedFeedId, selectedFolderId, viewParam, isLoading])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
