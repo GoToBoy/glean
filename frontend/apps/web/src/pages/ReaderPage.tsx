@@ -274,7 +274,7 @@ export default function ReaderPage() {
     const loadMoreElement = loadMoreRef.current
     const container = entryListRef.current
 
-    if (!loadMoreElement || !container) return
+    if (!loadMoreElement || !container || isLoading) return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -296,7 +296,10 @@ export default function ReaderPage() {
     return () => {
       observer.disconnect()
     }
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
+    // Refs (loadMoreRef, entryListRef) are stable and don't need to be in dependencies
+    // Filter params (filterType, feedId, folderId, viewParam) are handled by React Query
+    // fetchNextPage is stable and always uses current query parameters
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
