@@ -64,6 +64,8 @@
     "showTranslation": "Show Bilingual",
     "bilingualMode": "Bilingual: {{language}}",
     "failed": "Translation failed",
-    "retry": "Retry"
+    "retry": "Retry",
+    "sentenceMode": "Sentence translation active",
+    "hideTranslation": "Hide Translation"
   }
 }
