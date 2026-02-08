@@ -20,7 +20,9 @@
     "like": "喜欢",
     "liked": "已喜欢",
     "dislike": "不喜欢",
-    "disliked": "已标记不喜欢"
+    "disliked": "已标记不喜欢",
+    "showOriginal": "原文",
+    "hideOriginal": "原文"
   },
   "entries": {
     "loadError": "加载条目失败",
@@ -65,7 +67,6 @@
     "bilingualMode": "双语对照：{{language}}",
     "failed": "翻译失败",
     "retry": "重试",
-    "sentenceMode": "逐句翻译已启用",
     "hideTranslation": "隐藏翻译"
   }
 }

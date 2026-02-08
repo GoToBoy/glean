@@ -10,6 +10,7 @@ import {
   Clock,
   Archive,
   ExternalLink,
+  Globe,
   Languages,
   Loader2,
   Maximize2,
@@ -26,134 +27,46 @@ import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
 
-const ORIGINAL_PREF_KEY = 'glean:feed-original-pref-v1'
-
-function getFeedOriginalPreference(feedId?: string): boolean | null {
-  if (!feedId || typeof window === 'undefined') return null
-  try {
-    const raw = localStorage.getItem(ORIGINAL_PREF_KEY)
-    if (!raw) return null
-    const parsed = JSON.parse(raw) as Record<string, boolean>
-    return typeof parsed[feedId] === 'boolean' ? parsed[feedId] : null
-  } catch (error) {
-    console.warn('Failed to read original content preference', error)
-    return null
-  }
+interface OriginalIframeProps {
+  src: string
+  visible: boolean
+  className?: string
 }
 
-function setFeedOriginalPreference(feedId: string, value: boolean) {
-  if (typeof window === 'undefined') return
-  try {
-    const raw = localStorage.getItem(ORIGINAL_PREF_KEY)
-    const parsed: Record<string, boolean> = raw ? JSON.parse(raw) : {}
-    parsed[feedId] = value
-    localStorage.setItem(ORIGINAL_PREF_KEY, JSON.stringify(parsed))
-  } catch (error) {
-    console.warn('Failed to save original content preference', error)
-  }
-}
-
-type OriginalContentReason = 'short' | 'empty' | null
-
-interface OriginalContentViewerProps {
-  url: string
-  feedId?: string
-  feedTitle?: string | null
-  reason?: OriginalContentReason
-}
-
-function OriginalContentViewer({
-  url,
-  feedId,
-  feedTitle,
-  reason = null,
-}: OriginalContentViewerProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [hasEverOpened, setHasEverOpened] = useState(false)
-  const [iframeLoaded, setIframeLoaded] = useState(false)
-  const [rememberFeed, setRememberFeed] = useState(false)
+/**
+ * Persistent iframe for viewing original articles.
+ * Stays in DOM once mounted (CSS hidden when inactive) to reuse
+ * browser connections and HTTP cache across same-origin pages.
+ */
+function OriginalIframe({ src, visible, className }: OriginalIframeProps) {
+  const [currentSrc, setCurrentSrc] = useState<string | null>(null)
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
-    const pref = getFeedOriginalPreference(feedId)
-    const openByDefault = pref === true
-    setIsOpen(openByDefault)
-    setRememberFeed(openByDefault)
-    setHasEverOpened(openByDefault)
-    setIframeLoaded(false)
-  }, [feedId, url])
-
-  useEffect(() => {
-    if (isOpen) {
-      setHasEverOpened(true)
+    if (visible && currentSrc !== src) {
+      setCurrentSrc(src)
+      setLoaded(false)
     }
-  }, [isOpen])
+  }, [visible, src, currentSrc])
 
-  const handleToggleRemember = (checked: boolean) => {
-    if (!feedId) return
-    setRememberFeed(checked)
-    setFeedOriginalPreference(feedId, checked)
-    if (checked) {
-      setIsOpen(true)
-      setHasEverOpened(true)
-    }
-  }
-
-  const mountIframe = hasEverOpened || isOpen
+  if (!currentSrc) return null
 
   return (
-    <div className="border-border/70 bg-card/60 mt-6 rounded-lg border p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="text-foreground text-sm font-semibold">Original article</div>
-          <p className="text-muted-foreground text-xs">
-            {rememberFeed
-              ? 'Opens by default for this feed.'
-              : reason === 'empty'
-                ? 'This entry did not include body content. Load the source page inline.'
-                : 'Open the source page inline without leaving the reader.'}
-          </p>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => setIsOpen((prev) => !prev)}>
-          {isOpen ? 'Hide original' : 'Show original'}
-        </Button>
-      </div>
-
-      {feedId && (
-        <label className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
-          <input
-            type="checkbox"
-            className="border-border bg-background accent-primary h-3.5 w-3.5 rounded"
-            checked={rememberFeed}
-            onChange={(event) => handleToggleRemember(event.target.checked)}
-          />
-          <span>Always open for this feed{feedTitle ? ` (${feedTitle})` : ''}</span>
-        </label>
-      )}
-
-      {mountIframe && (
-        <div className="border-border bg-background/60 mt-4 overflow-hidden rounded-md border">
-          <div
-            className={`relative transition-[height] duration-300 ${isOpen ? 'h-[70vh]' : 'h-0'}`}
-          >
-            {!iframeLoaded && isOpen && (
-              <div className="bg-muted/70 text-muted-foreground absolute inset-0 z-10 flex items-center justify-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span className="text-xs font-medium">Loading original…</span>
-              </div>
-            )}
-            <iframe
-              src={url}
-              title="Original content"
-              className="h-[70vh] w-full border-0"
-              loading="lazy"
-              sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-              referrerPolicy="no-referrer"
-              style={{ display: isOpen ? 'block' : 'none' }}
-              onLoad={() => setIframeLoaded(true)}
-            />
-          </div>
+    <div className={`relative flex-1 ${visible ? '' : 'hidden'} ${className ?? ''}`}>
+      {!loaded && visible && (
+        <div className="bg-muted/70 text-muted-foreground absolute inset-0 z-10 flex items-center justify-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span className="text-xs font-medium">Loading…</span>
         </div>
       )}
+      <iframe
+        src={currentSrc}
+        title="Original content"
+        className="h-full w-full border-0"
+        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
+        referrerPolicy="no-referrer"
+        onLoad={() => setLoaded(true)}
+      />
     </div>
   )
 }
@@ -301,6 +214,7 @@ export function ArticleReader({
   const contentRef = useContentRenderer(displayContent)
   const [isBookmarking, setIsBookmarking] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
+  const [showOriginal, setShowOriginal] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Viewport-based sentence-level translation
@@ -315,6 +229,7 @@ export function ArticleReader({
     toggle: toggleTranslation,
     activate: activateTranslation,
     deactivate: _deactivateTranslation,
+    retry: retryTranslation,
   } = useViewportTranslation({
     contentRef,
     scrollContainerRef,
@@ -323,8 +238,6 @@ export function ArticleReader({
   })
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
-  const originalContentReason: OriginalContentReason =
-    !entry.content && !entry.summary ? 'empty' : null
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -332,15 +245,20 @@ export function ArticleReader({
   const shouldShowCloseButton = showCloseButton ?? isMobile
   const shouldShowFullscreenButton = showFullscreenButton ?? !isMobile
 
-  // Reset outline state when entry changes
+  // Reset state when entry changes
   useEffect(() => {
     setHasOutline(false)
+    setShowOriginal(false)
   }, [entry.id])
 
   // Animation triggers for action buttons
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')
   const bookmarkAnimation = useAnimationTrigger(entry.is_bookmarked, 'action-btn-archive-active')
   const readAnimation = useAnimationTrigger(entry.is_read, 'action-btn-check')
+
+  const handleToggleOriginal = useCallback(() => {
+    setShowOriginal((prev) => !prev)
+  }, [])
 
   const handleToggleRead = async () => {
     await updateMutation.mutateAsync({
@@ -476,7 +394,11 @@ export function ArticleReader({
                 onClick={toggleTranslation}
                 className="action-btn text-primary"
               >
-                <Languages className="h-4 w-4" />
+                {isTranslating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Languages className="h-4 w-4" />
+                )}
                 <span>{t('translation.hideTranslation')}</span>
               </Button>
             ) : (
@@ -536,107 +458,108 @@ export function ArticleReader({
               )}
               <span>{entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}</span>
             </Button>
+
+            {entry.url && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleOriginal}
+                className={`action-btn ${showOriginal ? 'text-primary' : 'text-muted-foreground'}`}
+              >
+                <Globe className="h-4 w-4" />
+                <span>
+                  {showOriginal ? t('actions.hideOriginal') : t('actions.showOriginal')}
+                </span>
+              </Button>
+            )}
           </div>
         </div>
       )}
 
       {/* Content with Outline */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Scrollable content area - hide scrollbar for cleaner reading */}
-        <div
-          ref={scrollContainerRef}
-          className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
-        >
-          <div
-            className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
-          >
-            {/* Mobile: Author and date at top of content */}
-            {isMobile && (entry.author || entry.published_at) && (
-              <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
-                {entry.author && <span className="font-medium">{entry.author}</span>}
-                {entry.author && entry.published_at && <span>·</span>}
-                {entry.published_at && (
-                  <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
+        <OriginalIframe
+          src={entry.url}
+          visible={showOriginal}
+          className={isMobile ? 'pt-14 pb-16' : ''}
+        />
+
+        {/* Article view */}
+        {!showOriginal && (
+          <>
+            {/* Scrollable content area - hide scrollbar for cleaner reading */}
+            <div
+              ref={scrollContainerRef}
+              className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
+            >
+              <div
+                className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
+              >
+                {/* Mobile: Author and date at top of content */}
+                {isMobile && (entry.author || entry.published_at) && (
+                  <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
+                    {entry.author && <span className="font-medium">{entry.author}</span>}
+                    {entry.author && entry.published_at && <span>·</span>}
+                    {entry.published_at && (
+                      <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
+                    )}
+                  </div>
+                )}
+
+                {translationError && (
+                  <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                    <span className="text-destructive text-xs">{t('translation.failed')}</span>
+                    <button
+                      onClick={retryTranslation}
+                      className="text-primary text-xs font-medium hover:underline"
+                    >
+                      {t('translation.retry')}
+                    </button>
+                  </div>
+                )}
+
+                {displayContent ? (
+                  <article
+                    ref={contentRef}
+                    className="prose prose-lg font-reading max-w-none"
+                    dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <p className="text-muted-foreground italic">{t('article.noContent')}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      render={(props) => (
+                        <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
+                      )}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {t('article.viewOriginal')}
+                    </Button>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* Sentence translation banner */}
-            {showTranslation && (
-              <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                <span className="text-muted-foreground text-xs">
-                  {t('translation.sentenceMode')}
-                  {isTranslating && (
-                    <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
-                  )}
-                </span>
-                <button
-                  onClick={toggleTranslation}
-                  className="text-primary text-xs font-medium hover:underline"
-                >
-                  {t('translation.hideTranslation')}
-                </button>
+            {/* Desktop Outline - Sidebar that only takes space when there are headings */}
+            {!isMobile && (entry.content || entry.summary) && (
+              <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
+                <ArticleOutline
+                  contentRef={contentRef}
+                  scrollContainerRef={scrollContainerRef}
+                  isMobile={false}
+                  onHasHeadings={setHasOutline}
+                />
               </div>
             )}
-
-            {translationError && (
-              <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                <span className="text-destructive text-xs">{t('translation.failed')}</span>
-                <button
-                  onClick={activateTranslation}
-                  className="text-primary text-xs font-medium hover:underline"
-                >
-                  {t('translation.retry')}
-                </button>
-              </div>
-            )}
-
-            {displayContent ? (
-              <article
-                ref={contentRef}
-                className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-muted-foreground italic">{t('article.noContent')}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  render={(props) => (
-                    <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
-                  )}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  {t('article.viewOriginal')}
-                </Button>
-              </div>
-            )}
-            <OriginalContentViewer
-              url={entry.url}
-              feedId={entry.feed_id}
-              feedTitle={entry.feed_title}
-              reason={originalContentReason}
-            />
-          </div>
-        </div>
-
-        {/* Desktop Outline - Sidebar that only takes space when there are headings */}
-        {!isMobile && (entry.content || entry.summary) && (
-          <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
-            <ArticleOutline
-              contentRef={contentRef}
-              scrollContainerRef={scrollContainerRef}
-              isMobile={false}
-              onHasHeadings={setHasOutline}
-            />
-          </div>
+          </>
         )}
       </div>
 
       {/* Mobile Outline */}
-      {isMobile && (entry.content || entry.summary) && (
+      {isMobile && !showOriginal && (entry.content || entry.summary) && (
         <ArticleOutline
           contentRef={contentRef}
           scrollContainerRef={scrollContainerRef}
@@ -662,7 +585,7 @@ export function ArticleReader({
 
             <button
               onClick={toggleTranslation}
-              disabled={isTranslating}
+              disabled={isTranslating && !showTranslation}
               className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
                 showTranslation ? 'text-primary' : 'text-muted-foreground'
               } disabled:opacity-50`}
@@ -721,6 +644,20 @@ export function ArticleReader({
                 {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
               </span>
             </button>
+
+            {entry.url && (
+              <button
+                onClick={handleToggleOriginal}
+                className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                  showOriginal ? 'text-primary' : 'text-muted-foreground'
+                }`}
+              >
+                <Globe className="h-5 w-5" />
+                <span className="text-[10px]">
+                  {showOriginal ? t('actions.hideOriginal') : t('actions.showOriginal')}
+                </span>
+              </button>
+            )}
           </div>
         </div>
       )}
