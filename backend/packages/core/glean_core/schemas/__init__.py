@@ -32,6 +32,7 @@ from .config import (
 from .entry import (
     EntryListResponse,
     EntryResponse,
+    ParagraphTranslationsResponse,
     TranslateEntryRequest,
     TranslateTextsRequest,
     TranslateTextsResponse,
@@ -98,6 +99,7 @@ __all__ = [
     "TranslateTextsRequest",
     "TranslateTextsResponse",
     "TranslationResponse",
+    "ParagraphTranslationsResponse",
     # M2: Bookmark
     "BookmarkCreate",
     "BookmarkUpdate",

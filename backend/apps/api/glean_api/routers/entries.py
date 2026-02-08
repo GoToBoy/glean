@@ -17,6 +17,7 @@ from glean_core import get_logger
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
+    ParagraphTranslationsResponse,
     TranslateEntryRequest,
     TranslateTextsRequest,
     TranslateTextsResponse,
@@ -223,16 +224,19 @@ def _batch_translate(texts: list[str], source: str, target: str) -> list[str]:
 async def translate_texts(
     data: TranslateTextsRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
+    translation_service: Annotated[TranslationService, Depends(get_translation_service)],
 ) -> TranslateTextsResponse:
     """
     Synchronously translate an array of text strings.
 
     Used for viewport-based sentence-level translation.
-    No worker queue, no DB storage — returns translations immediately.
+    Returns translations immediately and optionally persists them
+    when entry_id is provided.
 
     Args:
-        data: List of texts and target language.
+        data: List of texts, target language, and optional entry_id.
         current_user: Current authenticated user.
+        translation_service: Translation service for persistence.
 
     Returns:
         List of translated strings in the same order.
@@ -250,28 +254,109 @@ async def translate_texts(
             target_language=data.target_language,
         )
 
+    # Check DB cache for already-translated sentences when entry_id is provided
+    cached_map: dict[str, str] = {}
+    if data.entry_id:
+        try:
+            cached_map = (
+                await translation_service.get_paragraph_translations(
+                    data.entry_id, data.target_language
+                )
+                or {}
+            )
+        except Exception:
+            logger.exception(
+                "Failed to load cached paragraph translations",
+                extra={"entry_id": data.entry_id},
+            )
+
+    # Split into cached hits and texts that need translation
+    to_translate: list[str] = []
+    to_translate_indices: list[int] = []
+    cached_results: dict[int, str] = {}
+
+    for i, text in enumerate(non_empty_texts):
+        if text in cached_map:
+            cached_results[i] = cached_map[text]
+        else:
+            to_translate.append(text)
+            to_translate_indices.append(i)
+
     logger.info(
         "Translating texts batch",
         extra={
-            "count": len(non_empty_texts),
+            "total": len(non_empty_texts),
+            "cached": len(cached_results),
+            "to_translate": len(to_translate),
             "target": data.target_language,
             "user_id": current_user.id,
         },
     )
 
-    translated = await asyncio.to_thread(
-        _batch_translate, non_empty_texts, data.source_language, data.target_language
-    )
+    # Only call Google Translate for uncached sentences
+    translated_new: list[str] = []
+    if to_translate:
+        translated_new = await asyncio.to_thread(
+            _batch_translate, to_translate, data.source_language, data.target_language
+        )
+
+    # Merge cached + newly translated results
+    merged: list[str] = [""] * len(non_empty_texts)
+    for i, result in cached_results.items():
+        merged[i] = result
+    for j, idx in enumerate(to_translate_indices):
+        merged[idx] = translated_new[j]
 
     # Reconstruct full list with empty strings for originally-empty inputs
     all_results = [""] * len(data.texts)
     for i, idx in enumerate(non_empty_indices):
-        all_results[idx] = translated[i]
+        all_results[idx] = merged[i]
+
+    # Persist new translations when entry_id is provided
+    if data.entry_id and translated_new:
+        pairs = {
+            text: trans
+            for text, trans in zip(to_translate, translated_new)
+            if trans.strip()
+        }
+        if pairs:
+            try:
+                await translation_service.save_paragraph_translations(
+                    data.entry_id, data.target_language, pairs
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to persist paragraph translations",
+                    extra={"entry_id": data.entry_id},
+                )
 
     return TranslateTextsResponse(
         translations=all_results,
         target_language=data.target_language,
     )
+
+
+@router.get("/{entry_id}/paragraph-translations")
+async def get_paragraph_translations(
+    entry_id: str,
+    target_language: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    translation_service: Annotated[TranslationService, Depends(get_translation_service)],
+) -> ParagraphTranslationsResponse:
+    """
+    Get cached paragraph-level translations for an entry.
+
+    Args:
+        entry_id: Entry identifier.
+        target_language: Target language code (e.g. "zh-CN", "en").
+        current_user: Current authenticated user.
+        translation_service: Translation service.
+
+    Returns:
+        Cached sentence translations or empty dict.
+    """
+    result = await translation_service.get_paragraph_translations(entry_id, target_language)
+    return ParagraphTranslationsResponse(translations=result or {})
 
 
 # M3: Preference signal endpoints

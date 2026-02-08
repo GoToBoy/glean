@@ -21,11 +21,14 @@ const TRANSLATABLE_BLOCKS = new Set([
 // Elements whose descendants should never be translated
 const SKIP_TAGS = new Set(['CODE', 'PRE', 'SCRIPT', 'STYLE', 'KBD', 'SAMP'])
 
-// CSS class for inserted translation lines
-const TRANSLATION_LINE_CLASS = 'glean-translation-line'
-
 // Data attribute to mark a block as already processed
 const PROCESSED_ATTR = 'data-translation-processed'
+
+// Data attribute to store original HTML for restoration
+const ORIGINAL_HTML_ATTR = 'data-original-html'
+
+// Class added to blocks that have been replaced with bilingual content
+const BILINGUAL_ACTIVE_CLASS = 'glean-bilingual-active'
 
 interface UseViewportTranslationOptions {
   contentRef: React.RefObject<HTMLElement | null>
@@ -41,6 +44,7 @@ interface UseViewportTranslationReturn {
   activate: () => void
   deactivate: () => void
   toggle: () => void
+  retry: () => void
 }
 
 /**
@@ -56,10 +60,22 @@ function hasSkipAncestor(el: Element): boolean {
 }
 
 /**
+ * Escape HTML special characters for safe innerHTML insertion.
+ */
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/**
  * Hook for viewport-based sentence-level translation.
  *
- * Translates only the content visible in the scroll container (plus a 500px buffer below).
- * Each block element's text is split into sentences, translated, and shown line-by-line.
+ * Translates only the content visible in the scroll container (plus a small buffer).
+ * Each block element's text is split into sentences. The block's content is replaced
+ * in-place with bilingual pairs (original sentence + translation) — Immersive Translate style.
  */
 export function useViewportTranslation({
   contentRef,
@@ -123,7 +139,12 @@ export function useViewportTranslation({
       // Call API for uncached sentences
       if (uncached.length > 0) {
         try {
-          const response = await entryService.translateTexts(uncached, targetLanguage)
+          const response = await entryService.translateTexts(
+            uncached,
+            targetLanguage,
+            'auto',
+            entryId,
+          )
           uncached.forEach((text, i) => {
             cacheRef.current.set(text, response.translations[i])
           })
@@ -136,32 +157,35 @@ export function useViewportTranslation({
         }
       }
 
-      // Insert translation lines into DOM
+      // Replace each block's content in-place with bilingual sentence pairs.
+      // The block element itself stays in the DOM — no layout shift for the observer.
+      // Adding translations makes blocks taller, pushing content DOWN (away from viewport),
+      // so no cascade of new blocks entering the viewport.
       for (const { block, sentences } of blockSentences) {
-        // Create a container for all sentence translations
-        const translationDiv = document.createElement('div')
-        translationDiv.className = TRANSLATION_LINE_CLASS
+        // Save original HTML so we can restore on deactivate
+        if (!block.hasAttribute(ORIGINAL_HTML_ATTR)) {
+          block.setAttribute(ORIGINAL_HTML_ATTR, block.innerHTML)
+        }
 
+        // Build bilingual HTML: each original sentence followed by its translation
+        let html = ''
         for (const sentence of sentences) {
+          html += `<span class="glean-original-sentence">${escapeHtml(sentence)}</span>`
           const translated = cacheRef.current.get(sentence)
           if (translated && translated.trim()) {
-            const line = document.createElement('div')
-            line.textContent = translated.trim()
-            translationDiv.appendChild(line)
+            html += `<span class="glean-translated-sentence">${escapeHtml(translated.trim())}</span>`
           }
         }
 
-        if (translationDiv.childElementCount > 0) {
-          block.after(translationDiv)
-        }
-
+        block.innerHTML = html
+        block.classList.add(BILINGUAL_ACTIVE_CLASS)
         block.setAttribute(PROCESSED_ATTR, 'true')
         pendingBlocksRef.current.delete(block)
       }
 
       setIsTranslating(false)
     },
-    [targetLanguage],
+    [targetLanguage, entryId],
   )
 
   /**
@@ -207,8 +231,8 @@ export function useViewportTranslation({
       },
       {
         root: scrollContainerRef.current,
-        // Pre-translate 500px below viewport
-        rootMargin: '0px 0px 500px 0px',
+        // Pre-translate a few lines below viewport
+        rootMargin: '0px 0px 200px 0px',
         threshold: 0,
       },
     )
@@ -218,15 +242,23 @@ export function useViewportTranslation({
   }, [contentRef, scrollContainerRef, translateBlocks])
 
   /**
-   * Remove all translation elements from the DOM.
+   * Restore all translated blocks to their original HTML.
    */
   const removeTranslationElements = useCallback(() => {
     if (!contentRef.current) return
 
-    // Remove translation lines (they're siblings of blocks, inside the article's parent)
     const parent = contentRef.current
-    const translationLines = parent.querySelectorAll(`.${TRANSLATION_LINE_CLASS}`)
-    translationLines.forEach((el) => el.remove())
+
+    // Restore original HTML for all bilingual blocks
+    const modified = parent.querySelectorAll(`[${ORIGINAL_HTML_ATTR}]`)
+    modified.forEach((el) => {
+      const originalHtml = el.getAttribute(ORIGINAL_HTML_ATTR)
+      if (originalHtml !== null) {
+        el.innerHTML = originalHtml
+      }
+      el.removeAttribute(ORIGINAL_HTML_ATTR)
+      el.classList.remove(BILINGUAL_ACTIVE_CLASS)
+    })
 
     // Remove processed markers
     const processed = parent.querySelectorAll(`[${PROCESSED_ATTR}]`)
@@ -249,7 +281,7 @@ export function useViewportTranslation({
       observerRef.current = null
     }
 
-    // Remove translation elements from DOM
+    // Restore original content
     removeTranslationElements()
 
     // Clear state
@@ -258,6 +290,28 @@ export function useViewportTranslation({
     setIsTranslating(false)
     setError(null)
   }, [removeTranslationElements])
+
+  const retry = useCallback(() => {
+    // Clear error and pending state
+    setError(null)
+    pendingBlocksRef.current.clear()
+    setIsTranslating(false)
+
+    // Disconnect old observer
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
+    }
+
+    // Remove processed markers so failed blocks can be retried
+    if (contentRef.current) {
+      const processed = contentRef.current.querySelectorAll(`[${PROCESSED_ATTR}]`)
+      processed.forEach((el) => el.removeAttribute(PROCESSED_ATTR))
+    }
+
+    // Re-setup observer to re-detect visible blocks
+    setupObserver()
+  }, [contentRef, setupObserver])
 
   const toggle = useCallback(() => {
     if (isActiveRef.current) {
@@ -303,5 +357,6 @@ export function useViewportTranslation({
     activate,
     deactivate,
     toggle,
+    retry,
   }
 }

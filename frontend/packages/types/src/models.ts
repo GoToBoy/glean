@@ -302,9 +302,14 @@ export interface TranslateTextsRequest {
   texts: string[]
   target_language: string
   source_language?: string
+  entry_id?: string
 }
 
 export interface TranslateTextsResponse {
   translations: string[]
   target_language: string
+}
+
+export interface ParagraphTranslationsResponse {
+  translations: Record<string, string>
 }

@@ -110,11 +110,13 @@ export class EntryService {
     texts: string[],
     targetLanguage: string,
     sourceLanguage: string = 'auto',
+    entryId?: string,
   ): Promise<TranslateTextsResponse> {
     return this.client.post<TranslateTextsResponse>('/entries/translate-texts', {
       texts,
       target_language: targetLanguage,
       source_language: sourceLanguage,
+      entry_id: entryId,
     })
   }
 }
