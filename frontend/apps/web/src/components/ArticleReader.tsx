@@ -10,6 +10,7 @@ import {
   Clock,
   Archive,
   ExternalLink,
+  Languages,
   Loader2,
   Maximize2,
   Minimize2,
@@ -22,6 +23,7 @@ import { processHtmlContent } from '../lib/html'
 import { Button, Skeleton } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
+import { useEntryTranslation } from '../hooks/useEntryTranslation'
 
 /**
  * Hook to track animation state for action buttons
@@ -159,7 +161,24 @@ export function ArticleReader({
     window.dispatchEvent(new CustomEvent('openMobileSidebar'))
   }
   const updateMutation = useUpdateEntryState()
-  const contentRef = useContentRenderer(entry.content || entry.summary || undefined)
+  const {
+    translation,
+    isTranslating,
+    showTranslation,
+    error: translationError,
+    translate: handleTranslate,
+    toggleTranslation,
+    clearTranslation: _clearTranslation,
+  } = useEntryTranslation(entry.id)
+
+  // Determine which content to render based on translation state
+  // Bilingual mode: translated_content contains interleaved original + translation
+  const displayContent =
+    showTranslation && translation?.translated_content
+      ? translation.translated_content
+      : entry.content || entry.summary || undefined
+
+  const contentRef = useContentRenderer(displayContent)
   const [isBookmarking, setIsBookmarking] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -257,6 +276,11 @@ export function ArticleReader({
             <h1 className="font-display text-foreground text-2xl leading-tight font-bold">
               {entry.title}
             </h1>
+            {showTranslation && translation?.translated_title && (
+              <p className="text-primary/70 mt-1 text-base font-medium">
+                {translation.translated_title}
+              </p>
+            )}
             <div className="flex shrink-0 items-center gap-1">
               {shouldShowFullscreenButton && onToggleFullscreen && (
                 <Button
@@ -308,6 +332,41 @@ export function ArticleReader({
               <ExternalLink className="h-4 w-4" />
               <span>{t('actions.openOriginal')}</span>
             </Button>
+
+            {showTranslation ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleTranslation}
+                className="action-btn text-primary"
+              >
+                <Languages className="h-4 w-4" />
+                <span>{t('translation.showOriginal')}</span>
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  translation?.status === 'done' ? toggleTranslation() : handleTranslate()
+                }
+                disabled={isTranslating}
+                className="action-btn text-muted-foreground"
+              >
+                {isTranslating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Languages className="h-4 w-4" />
+                )}
+                <span>
+                  {isTranslating
+                    ? t('translation.translating')
+                    : translation?.status === 'done'
+                      ? t('translation.showTranslation')
+                      : t('translation.translate')}
+                </span>
+              </Button>
+            )}
 
             {!hideReadStatus && (
               <Button
@@ -372,17 +431,40 @@ export function ArticleReader({
               </div>
             )}
 
-            {entry.content ? (
+            {/* Bilingual translation banner */}
+            {showTranslation && translation?.status === 'done' && (
+              <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-muted-foreground text-xs">
+                  {t('translation.bilingualMode', {
+                    language: translation.target_language === 'zh-CN' ? '中文' : 'English',
+                  })}
+                </span>
+                <button
+                  onClick={toggleTranslation}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.showOriginal')}
+                </button>
+              </div>
+            )}
+
+            {translationError && (
+              <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-destructive text-xs">{t('translation.failed')}</span>
+                <button
+                  onClick={() => handleTranslate()}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.retry')}
+                </button>
+              </div>
+            )}
+
+            {displayContent ? (
               <article
                 ref={contentRef}
                 className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.content) }}
-              />
-            ) : entry.summary ? (
-              <article
-                ref={contentRef}
-                className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.summary) }}
+                dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -439,6 +521,29 @@ export function ArticleReader({
             >
               <ExternalLink className="h-5 w-5" />
               <span className="text-[10px]">{t('actions.open')}</span>
+            </button>
+
+            <button
+              onClick={() =>
+                showTranslation
+                  ? toggleTranslation()
+                  : translation?.status === 'done'
+                    ? toggleTranslation()
+                    : handleTranslate()
+              }
+              disabled={isTranslating}
+              className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                showTranslation ? 'text-primary' : 'text-muted-foreground'
+              } disabled:opacity-50`}
+            >
+              {isTranslating ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Languages className="h-5 w-5" />
+              )}
+              <span className="text-[10px]">
+                {showTranslation ? t('translation.showOriginal') : t('translation.translate')}
+              </span>
             </button>
 
             {!hideReadStatus && (

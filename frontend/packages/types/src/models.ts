@@ -282,3 +282,17 @@ export interface CreateAPITokenRequest {
   name: string
   expires_in_days?: number | null
 }
+
+// Translation types
+export interface TranslateEntryRequest {
+  target_language?: string | null // null = auto-detect
+}
+
+export interface TranslationResponse {
+  entry_id: string
+  target_language: string
+  translated_title: string | null
+  translated_content: string | null
+  status: 'pending' | 'processing' | 'done' | 'failed'
+  error: string | null
+}

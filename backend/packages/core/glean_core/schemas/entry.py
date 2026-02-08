@@ -63,3 +63,23 @@ class UpdateEntryStateRequest(BaseModel):
     read_later: bool | None = None
     # Days until read-later expires (0 = never expire)
     read_later_days: int | None = None
+
+
+class TranslateEntryRequest(BaseModel):
+    """Request to translate an entry."""
+
+    # Target language code (e.g. "zh-CN", "en"). None = auto-detect.
+    target_language: str | None = None
+
+
+class TranslationResponse(BaseModel):
+    """Translation result response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    entry_id: str
+    target_language: str
+    translated_title: str | None = None
+    translated_content: str | None = None
+    status: str  # pending / processing / done / failed
+    error: str | None = None
