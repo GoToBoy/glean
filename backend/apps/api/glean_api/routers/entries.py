@@ -9,7 +9,6 @@ from contextlib import suppress
 from typing import Annotated
 
 from arq.connections import ArqRedis
-from deep_translator import GoogleTranslator
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -26,6 +25,7 @@ from glean_core.schemas import (
     UserResponse,
 )
 from glean_core.services import EntryService, TranslationService
+from glean_core.services.translation_providers import create_translation_provider
 
 from ..dependencies import (
     get_current_user,
@@ -36,10 +36,6 @@ from ..dependencies import (
 )
 
 logger = get_logger(__name__)
-
-# Google Translate has a ~5000 character limit per request
-_CHUNK_SIZE = 4500
-_SEPARATOR = " ||| "
 
 router = APIRouter()
 
@@ -176,50 +172,6 @@ async def mark_all_read(
 # Viewport-based sync translation
 
 
-def _batch_translate(texts: list[str], source: str, target: str) -> list[str]:
-    """Translate texts using ||| separator batching for Google Translate."""
-    if not texts:
-        return []
-
-    translator = GoogleTranslator(source=source, target=target)
-    results: list[str] = [""] * len(texts)
-
-    batch_start = 0
-    while batch_start < len(texts):
-        batch_texts: list[str] = []
-        batch_indices: list[int] = []
-        current_length = 0
-
-        for i in range(batch_start, len(texts)):
-            text = texts[i]
-            needed = len(text) + len(_SEPARATOR)
-            if current_length + needed > _CHUNK_SIZE and batch_texts:
-                break
-            batch_texts.append(text)
-            batch_indices.append(i)
-            current_length += needed
-
-        if not batch_texts:
-            break
-
-        combined = _SEPARATOR.join(batch_texts)
-
-        if len(combined) <= _CHUNK_SIZE:
-            translated_combined: str = translator.translate(combined)
-            translated_parts = translated_combined.split("|||")
-            for j, idx in enumerate(batch_indices):
-                results[idx] = translated_parts[j].strip() if j < len(translated_parts) else ""
-        else:
-            # Individual translation fallback for oversized texts
-            for j, idx in enumerate(batch_indices):
-                result: str = translator.translate(batch_texts[j][:_CHUNK_SIZE])
-                results[idx] = result
-
-        batch_start += len(batch_texts)
-
-    return results
-
-
 @router.post("/translate-texts")
 async def translate_texts(
     data: TranslateTextsRequest,
@@ -293,11 +245,12 @@ async def translate_texts(
         },
     )
 
-    # Only call Google Translate for uncached sentences
+    # Translate uncached sentences using user's configured provider
     translated_new: list[str] = []
     if to_translate:
+        provider = create_translation_provider(current_user.settings)
         translated_new = await asyncio.to_thread(
-            _batch_translate, to_translate, data.source_language, data.target_language
+            provider.translate_batch, to_translate, data.source_language, data.target_language
         )
 
     # Merge cached + newly translated results
