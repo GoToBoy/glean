@@ -1,8 +1,7 @@
 import { create } from 'zustand'
 import { bookmarkService, type BookmarkListParams } from '@glean/api-client'
+import { logger } from '@glean/logger'
 import type { Bookmark, CreateBookmarkRequest, UpdateBookmarkRequest } from '@glean/types'
-
-interface BookmarkFilters extends BookmarkListParams {}
 
 interface BookmarkState {
   bookmarks: Bookmark[]
@@ -11,7 +10,7 @@ interface BookmarkState {
   pages: number
   loading: boolean
   error: string | null
-  filters: BookmarkFilters
+  filters: BookmarkListParams
 
   fetchBookmarks: (params?: BookmarkListParams) => Promise<void>
   createBookmark: (data: CreateBookmarkRequest) => Promise<Bookmark | null>
@@ -21,7 +20,8 @@ interface BookmarkState {
   removeFolder: (bookmarkId: string, folderId: string) => Promise<Bookmark | null>
   addTag: (bookmarkId: string, tagId: string) => Promise<Bookmark | null>
   removeTag: (bookmarkId: string, tagId: string) => Promise<Bookmark | null>
-  setFilters: (filters: BookmarkFilters) => void
+  setFilters: (filters: BookmarkListParams) => void
+  reset: () => void
 }
 
 export const useBookmarkStore = create<BookmarkState>((set, get) => ({
@@ -47,7 +47,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       })
     } catch (err) {
       set({ error: 'Failed to load bookmarks' })
-      console.error('Failed to fetch bookmarks:', err)
+      logger.error('Failed to fetch bookmarks:', err)
     } finally {
       set({ loading: false })
     }
@@ -60,7 +60,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to create bookmark' })
-      console.error('Failed to create bookmark:', err)
+      logger.error('Failed to create bookmark:', err)
       return null
     }
   },
@@ -74,7 +74,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to update bookmark' })
-      console.error('Failed to update bookmark:', err)
+      logger.error('Failed to update bookmark:', err)
       return null
     }
   },
@@ -89,7 +89,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return true
     } catch (err) {
       set({ error: 'Failed to delete bookmark' })
-      console.error('Failed to delete bookmark:', err)
+      logger.error('Failed to delete bookmark:', err)
       return false
     }
   },
@@ -103,7 +103,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to add folder' })
-      console.error('Failed to add folder:', err)
+      logger.error('Failed to add folder:', err)
       return null
     }
   },
@@ -117,7 +117,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to remove folder' })
-      console.error('Failed to remove folder:', err)
+      logger.error('Failed to remove folder:', err)
       return null
     }
   },
@@ -131,7 +131,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to add tag' })
-      console.error('Failed to add tag:', err)
+      logger.error('Failed to add tag:', err)
       return null
     }
   },
@@ -145,7 +145,7 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
       return bookmark
     } catch (err) {
       set({ error: 'Failed to remove tag' })
-      console.error('Failed to remove tag:', err)
+      logger.error('Failed to remove tag:', err)
       return null
     }
   },
@@ -153,5 +153,16 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
   setFilters: (filters) => {
     set({ filters })
   },
-}))
 
+  reset: () => {
+    set({
+      bookmarks: [],
+      total: 0,
+      page: 1,
+      pages: 0,
+      loading: false,
+      error: null,
+      filters: {},
+    })
+  },
+}))

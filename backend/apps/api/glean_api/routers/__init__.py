@@ -4,7 +4,18 @@ API router modules.
 This package contains all API route handlers organized by domain.
 """
 
-from . import admin, auth, bookmarks, entries, feeds, folders, tags
+from . import (
+    admin,
+    api_tokens,
+    auth,
+    bookmarks,
+    entries,
+    feeds,
+    folders,
+    preference,
+    system,
+    tags,
+)
 
 __all__ = [
     "auth",
@@ -15,4 +26,9 @@ __all__ = [
     "folders",
     "tags",
     "bookmarks",
+    # M3 routers
+    "preference",
+    "system",
+    # MCP routers
+    "api_tokens",
 ]

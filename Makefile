@@ -1,5 +1,6 @@
-.PHONY: help setup up down api worker web admin db-migrate db-upgrade db-downgrade \
-        test lint format clean logs install-backend install-frontend install-root verify dev-all
+.PHONY: help setup up down api worker web admin electron db-migrate db-upgrade db-downgrade \
+        test test-db-up test-db-down test-cov lint format clean logs install-backend install-frontend install-root verify dev-all \
+        pre-commit-install pre-commit-uninstall pre-commit-run
 
 # Default target
 help:
@@ -21,6 +22,7 @@ help:
 	@echo "  make worker         - Start background worker"
 	@echo "  make web            - Start web app (port 3000)"
 	@echo "  make admin          - Start admin dashboard"
+	@echo "  make electron       - Start Electron desktop app"
 	@echo "  make dev-all        - Start all services concurrently (api + worker + web)"
 	@echo ""
 	@echo "Database:"
@@ -28,10 +30,17 @@ help:
 	@echo "  make db-upgrade     - Apply migrations"
 	@echo "  make db-downgrade   - Revert last migration"
 	@echo ""
+	@echo "Testing:"
+	@echo "  make test           - Run all tests (auto-starts test database)"
+	@echo "  make test-cov       - Run tests with coverage report"
+	@echo "  make test-db-up     - Start test database (port 5433)"
+	@echo "  make test-db-down   - Stop test database"
+	@echo ""
 	@echo "Quality:"
-	@echo "  make test           - Run all tests"
 	@echo "  make lint           - Run linters"
 	@echo "  make format         - Format code"
+	@echo "  make pre-commit-install   - Install pre-commit hooks"
+	@echo "  make pre-commit-run       - Run pre-commit on all files"
 	@echo ""
 	@echo "Other:"
 	@echo "  make verify         - Verify M0 setup"
@@ -64,17 +73,17 @@ install-frontend:
 
 up:
 	@echo "🐳 Starting Docker services..."
-	@docker compose -f deploy/docker-compose.dev.yml up -d
+	@docker compose -f docker-compose.dev.yml up -d
 	@echo "✅ Services started"
 	@echo "   PostgreSQL: localhost:5432"
 	@echo "   Redis:      localhost:6379"
 
 down:
 	@echo "🛑 Stopping Docker services..."
-	@docker compose -f deploy/docker-compose.dev.yml down
+	@docker compose -f docker-compose.dev.yml down
 
 logs:
-	@docker compose -f deploy/docker-compose.dev.yml logs -f
+	@docker compose -f docker-compose.dev.yml logs -f
 
 # =============================================================================
 # Development Servers
@@ -97,6 +106,10 @@ admin:
 	@echo "🔧 Starting admin dashboard..."
 	@cd frontend && pnpm dev:admin
 
+electron:
+	@echo "⚡ Starting Electron desktop app..."
+	@cd frontend/apps/web && pnpm dev:electron
+
 # =============================================================================
 # Database
 # =============================================================================
@@ -118,23 +131,35 @@ db-downgrade:
 
 db-reset:
 	@echo "🗑️  Resetting database..."
-	@docker compose -f deploy/docker-compose.dev.yml down -v
-	@docker compose -f deploy/docker-compose.dev.yml up -d
+	@docker compose -f docker-compose.dev.yml down -v
+	@docker compose -f docker-compose.dev.yml up -d
 	@sleep 5
 	@cd backend/packages/database && uv run alembic upgrade head
 	@echo "✅ Database reset complete"
 
 # =============================================================================
-# Quality
+# Testing
 # =============================================================================
 
-test:
-	@echo "🧪 Running tests..."
-	@cd backend && uv run pytest
+test-db-up:
+	@echo "🐳 Starting test database..."
+	@docker compose -f docker-compose.test.yml up -d
+	@echo "⏳ Waiting for test database to be ready..."
+	@sleep 2
+	@echo "✅ Test database ready on localhost:5433"
 
-test-cov:
+test-db-down:
+	@echo "🛑 Stopping test database..."
+	@docker compose -f docker-compose.test.yml down -v
+	@echo "✅ Test database stopped and volumes removed"
+
+test: test-db-up
+	@echo "🧪 Running tests..."
+	@cd backend && TEST_DATABASE_URL="postgresql+asyncpg://glean:devpassword@localhost:5433/glean_test" uv run pytest $(ARGS)
+
+test-cov: test-db-up
 	@echo "🧪 Running tests with coverage..."
-	@cd backend && uv run pytest --cov --cov-report=html
+	@cd backend && TEST_DATABASE_URL="postgresql+asyncpg://glean:devpassword@localhost:5433/glean_test" uv run pytest --cov --cov-report=html
 
 lint:
 	@echo "🔍 Running linters..."
@@ -149,11 +174,26 @@ format:
 	@cd frontend && pnpm format 2>/dev/null || cd frontend && npx prettier --write "**/*.{ts,tsx,js,jsx,json}"
 
 # =============================================================================
-# Other
+# Pre-commit Hooks
 # =============================================================================
 
-verify:
-	@./scripts/verify-m0.sh
+pre-commit-install:
+	@echo "🪝 Installing pre-commit hooks..."
+	@pre-commit install
+	@echo "✅ Pre-commit hooks installed"
+
+pre-commit-uninstall:
+	@echo "🗑️  Uninstalling pre-commit hooks..."
+	@pre-commit uninstall
+	@echo "✅ Pre-commit hooks uninstalled"
+
+pre-commit-run:
+	@echo "🔍 Running pre-commit on all files..."
+	@pre-commit run --all-files
+
+# =============================================================================
+# Other
+# =============================================================================
 
 clean:
 	@echo "🧹 Cleaning generated files..."
@@ -186,4 +226,3 @@ dev:
 	@echo "    Terminal 1: make api"
 	@echo "    Terminal 2: make worker"
 	@echo "    Terminal 3: make web"
-

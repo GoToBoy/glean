@@ -13,6 +13,13 @@
     "!**/*.ts",
     "!**/*.map"
   ],
+  // GitHub Releases auto-update configuration
+  "publish": {
+    "provider": "github",
+    "owner": "LeslieLeung",
+    "repo": "glean",
+    "releaseType": "release"
+  },
   "win": {
     "target": [
       {
@@ -77,6 +84,7 @@
     "target": ["AppImage", "deb", "rpm"],
     "icon": "build/icon.png",
     "category": "Utility",
-    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}"
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
+    "maintainer": "Leslie Leung <leslieleung@proton.me>"
   }
 }

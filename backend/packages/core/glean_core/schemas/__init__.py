@@ -2,6 +2,12 @@
 Pydantic schemas for API requests and responses.
 """
 
+from .api_token import (
+    APITokenCreate,
+    APITokenCreateResponse,
+    APITokenListResponse,
+    APITokenResponse,
+)
 from .auth import LoginRequest, RefreshTokenRequest, RegisterRequest, TokenResponse
 from .bookmark import (
     BookmarkCreate,
@@ -11,13 +17,27 @@ from .bookmark import (
     BookmarkTagRequest,
     BookmarkUpdate,
 )
+from .config import (
+    EmbeddingConfig,
+    EmbeddingConfigResponse,
+    EmbeddingConfigUpdateRequest,
+    EmbeddingRebuildProgress,
+    PreferenceConfig,
+    RateLimitConfig,
+    ScoreConfig,
+    ValidationResult,
+    VectorizationStatus,
+    VectorizationStatusResponse,
+)
 from .entry import EntryListResponse, EntryResponse, UpdateEntryStateRequest
 from .feed import (
     BatchDeleteSubscriptionsRequest,
     BatchDeleteSubscriptionsResponse,
     DiscoverFeedRequest,
     FeedResponse,
+    SubscriptionListResponse,
     SubscriptionResponse,
+    SubscriptionSyncResponse,
     UpdateSubscriptionRequest,
 )
 from .folder import (
@@ -40,6 +60,11 @@ from .tag import (
 from .user import UserResponse, UserUpdate
 
 __all__ = [
+    # API Token
+    "APITokenCreate",
+    "APITokenCreateResponse",
+    "APITokenListResponse",
+    "APITokenResponse",
     # Auth
     "LoginRequest",
     "RefreshTokenRequest",
@@ -51,6 +76,8 @@ __all__ = [
     # Feed
     "FeedResponse",
     "SubscriptionResponse",
+    "SubscriptionListResponse",
+    "SubscriptionSyncResponse",
     "DiscoverFeedRequest",
     "UpdateSubscriptionRequest",
     "BatchDeleteSubscriptionsRequest",
@@ -81,4 +108,15 @@ __all__ = [
     "TagWithCountsResponse",
     "TagListResponse",
     "TagBatchRequest",
+    # Config
+    "EmbeddingConfig",
+    "EmbeddingConfigResponse",
+    "EmbeddingConfigUpdateRequest",
+    "EmbeddingRebuildProgress",
+    "PreferenceConfig",
+    "RateLimitConfig",
+    "ScoreConfig",
+    "ValidationResult",
+    "VectorizationStatus",
+    "VectorizationStatusResponse",
 ]

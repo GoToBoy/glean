@@ -3,9 +3,9 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useContentRenderer } from '../hooks/useContentRenderer'
 import { useUpdateEntryState, entryKeys } from '../hooks/useEntries'
 import { bookmarkService } from '@glean/api-client'
+import { useTranslation } from '@glean/i18n'
 import type { EntryWithState } from '@glean/types'
 import {
-  Heart,
   CheckCheck,
   Clock,
   Archive,
@@ -13,14 +13,15 @@ import {
   Loader2,
   Maximize2,
   Minimize2,
-  ThumbsDown,
   X,
   ChevronLeft,
+  Menu as MenuIcon,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
 import { Button, Skeleton } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
+import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 
 const ORIGINAL_PREF_KEY = 'glean:feed-original-pref-v1'
 
@@ -174,7 +175,15 @@ interface ArticleReaderProps {
   onClose?: () => void
   isFullscreen?: boolean
   onToggleFullscreen?: () => void
+  /**
+   * Show close button. Defaults to `true` on mobile, `false` on desktop.
+   * Override with explicit boolean if needed.
+   */
   showCloseButton?: boolean
+  /**
+   * Show fullscreen toggle button. Defaults to `true` on desktop, `false` on mobile.
+   * Override with explicit boolean if needed.
+   */
   showFullscreenButton?: boolean
   /** Hide read/unread status actions (for bookmarks page) */
   hideReadStatus?: boolean
@@ -184,7 +193,7 @@ interface ArticleReaderProps {
  * Hook to detect mobile viewport
  */
 function useIsMobile(breakpoint = 640) {
-  const [isMobile, setIsMobile] = useState(() => 
+  const [isMobile, setIsMobile] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
   )
 
@@ -192,7 +201,7 @@ function useIsMobile(breakpoint = 640) {
     const handleResize = () => {
       setIsMobile(window.innerWidth < breakpoint)
     }
-    
+
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [breakpoint])
@@ -212,10 +221,15 @@ function useScrollHide(scrollContainerRef: React.RefObject<HTMLDivElement | null
     if (!scrollContainerRef.current) return
 
     const currentScrollY = scrollContainerRef.current.scrollTop
+    const scrollHeight = scrollContainerRef.current.scrollHeight
+    const clientHeight = scrollContainerRef.current.clientHeight
     const scrollDelta = currentScrollY - lastScrollY.current
 
-    // Show bars when at top or scrolling up
-    if (currentScrollY < 50) {
+    // Check if scrolled to bottom (with 10px tolerance)
+    const isAtBottom = scrollHeight - currentScrollY - clientHeight < 10
+
+    // Show bars when at top, at bottom, or scrolling up
+    if (currentScrollY < 50 || isAtBottom) {
       setIsVisible(true)
     } else if (scrollDelta > 5) {
       // Scrolling down - hide
@@ -258,11 +272,17 @@ export function ArticleReader({
   onClose,
   isFullscreen = false,
   onToggleFullscreen,
-  showCloseButton = false,
-  showFullscreenButton = true,
+  showCloseButton,
+  showFullscreenButton,
   hideReadStatus = false,
 }: ArticleReaderProps) {
+  const { t } = useTranslation('reader')
   const queryClient = useQueryClient()
+
+  const handleOpenMenu = () => {
+    // Dispatch custom event to open mobile sidebar in Layout
+    window.dispatchEvent(new CustomEvent('openMobileSidebar'))
+  }
   const updateMutation = useUpdateEntryState()
   const contentRef = useContentRenderer(entry.content || entry.summary || undefined)
   const [isBookmarking, setIsBookmarking] = useState(false)
@@ -272,14 +292,18 @@ export function ArticleReader({
   const barsVisible = useScrollHide(scrollContainerRef)
   const originalContentReason: OriginalContentReason = !entry.content && !entry.summary ? 'empty' : null
 
+  // Apply smart defaults based on mobile detection
+  // On mobile: show close button, hide fullscreen button
+  // On desktop: hide close button, show fullscreen button
+  const shouldShowCloseButton = showCloseButton ?? isMobile
+  const shouldShowFullscreenButton = showFullscreenButton ?? !isMobile
+
   // Reset outline state when entry changes
   useEffect(() => {
     setHasOutline(false)
   }, [entry.id])
-  
+
   // Animation triggers for action buttons
-  const likeAnimation = useAnimationTrigger(entry.is_liked === true, 'action-btn-heart-active')
-  const dislikeAnimation = useAnimationTrigger(entry.is_liked === false, 'action-btn-dislike-active')
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')
   const bookmarkAnimation = useAnimationTrigger(entry.is_bookmarked, 'action-btn-archive-active')
   const readAnimation = useAnimationTrigger(entry.is_read, 'action-btn-check')
@@ -288,24 +312,6 @@ export function ArticleReader({
     await updateMutation.mutateAsync({
       entryId: entry.id,
       data: { is_read: !entry.is_read },
-    })
-  }
-
-  const handleLike = async () => {
-    // If already liked, remove like (set to null). Otherwise, set to liked (true)
-    const newValue = entry.is_liked === true ? null : true
-    await updateMutation.mutateAsync({
-      entryId: entry.id,
-      data: { is_liked: newValue },
-    })
-  }
-
-  const handleDislike = async () => {
-    // If already disliked, remove dislike (set to null). Otherwise, set to disliked (false)
-    const newValue = entry.is_liked === false ? null : false
-    await updateMutation.mutateAsync({
-      entryId: entry.id,
-      data: { is_liked: newValue },
     })
   }
 
@@ -339,24 +345,31 @@ export function ArticleReader({
   }
 
   return (
-    <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* Mobile Header - auto-hide on scroll */}
       {isMobile && (
         <div
-          className={`absolute inset-x-0 top-0 z-10 border-b border-border bg-card/95 backdrop-blur-sm transition-transform duration-300 ${
+          className={`border-border bg-card/95 absolute inset-x-0 top-0 z-10 border-b backdrop-blur-sm transition-transform duration-300 ${
             barsVisible ? 'translate-y-0' : '-translate-y-full'
           }`}
         >
-          <div className="flex h-12 items-center gap-2 px-3">
-            {showCloseButton && onClose && (
+          <div className="flex h-14 items-center gap-2 px-4">
+            {shouldShowCloseButton && onClose ? (
               <button
                 onClick={onClose}
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
+            ) : (
+              <button
+                onClick={handleOpenMenu}
+                className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors"
+              >
+                <MenuIcon className="h-5 w-5" />
+              </button>
             )}
-            <h1 className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
+            <h1 className="text-foreground min-w-0 flex-1 truncate text-base font-semibold">
               {entry.title}
             </h1>
           </div>
@@ -365,29 +378,33 @@ export function ArticleReader({
 
       {/* Desktop Header */}
       {!isMobile && (
-        <div className="border-b border-border bg-card px-6 py-4">
+        <div className="border-border bg-card border-b px-6 py-4">
           <div className="mb-3 flex items-start justify-between gap-4">
-            <h1 className="font-display text-2xl font-bold leading-tight text-foreground">
+            <h1 className="font-display text-foreground text-2xl leading-tight font-bold">
               {entry.title}
             </h1>
             <div className="flex shrink-0 items-center gap-1">
-              {showFullscreenButton && onToggleFullscreen && (
+              {shouldShowFullscreenButton && onToggleFullscreen && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onToggleFullscreen}
-                  title={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+                  title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
                   className="text-muted-foreground hover:text-foreground"
                 >
-                  {isFullscreen ? <Minimize2 className="h-5 w-5" /> : <Maximize2 className="h-5 w-5" />}
+                  {isFullscreen ? (
+                    <Minimize2 className="h-5 w-5" />
+                  ) : (
+                    <Maximize2 className="h-5 w-5" />
+                  )}
                 </Button>
               )}
-              {showCloseButton && onClose && (
+              {shouldShowCloseButton && onClose && (
                 <Button
                   variant="ghost"
                   size="icon"
                   onClick={onClose}
-                  title="Close"
+                  title={t('actions.close')}
                   className="text-muted-foreground hover:text-foreground"
                 >
                   <X className="h-5 w-5" />
@@ -396,7 +413,7 @@ export function ArticleReader({
             </div>
           </div>
 
-          <div className="mb-4 flex items-center gap-3 text-sm text-muted-foreground">
+          <div className="text-muted-foreground mb-4 flex items-center gap-3 text-sm">
             {entry.author && <span className="font-medium">{entry.author}</span>}
             {entry.author && entry.published_at && <span>·</span>}
             {entry.published_at && (
@@ -415,7 +432,7 @@ export function ArticleReader({
               className="action-btn action-btn-external text-muted-foreground"
             >
               <ExternalLink className="h-4 w-4" />
-              <span>Open Original</span>
+              <span>{t('actions.openOriginal')}</span>
             </Button>
 
             {!hideReadStatus && (
@@ -426,29 +443,11 @@ export function ArticleReader({
                 className={`action-btn ${readAnimation} ${entry.is_read ? 'text-muted-foreground' : 'text-primary'}`}
               >
                 <CheckCheck className="h-4 w-4" />
-                <span>{entry.is_read ? 'Mark Unread' : 'Mark Read'}</span>
+                <span>{entry.is_read ? t('actions.markUnread') : t('actions.markRead')}</span>
               </Button>
             )}
 
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLike}
-              className={`action-btn ${likeAnimation} ${entry.is_liked === true ? 'text-red-500' : 'text-muted-foreground'}`}
-            >
-              <Heart className={`h-4 w-4 ${entry.is_liked === true ? 'fill-current' : ''}`} />
-              <span>{entry.is_liked === true ? 'Liked' : 'Like'}</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDislike}
-              className={`action-btn ${dislikeAnimation} ${entry.is_liked === false ? 'text-foreground' : 'text-muted-foreground'}`}
-            >
-              <ThumbsDown className={`h-4 w-4 ${entry.is_liked === false ? 'fill-current' : ''}`} />
-              <span>{entry.is_liked === false ? 'Disliked' : 'Dislike'}</span>
-            </Button>
+            <PreferenceButtons entry={entry} />
 
             <Button
               variant="ghost"
@@ -457,7 +456,7 @@ export function ArticleReader({
               className={`action-btn ${readLaterAnimation} ${entry.read_later ? 'text-primary' : 'text-muted-foreground'}`}
             >
               <Clock className="h-4 w-4" />
-              <span>{entry.read_later ? 'Saved for Later' : 'Read Later'}</span>
+              <span>{entry.read_later ? t('actions.savedForLater') : t('actions.readLater')}</span>
             </Button>
 
             <Button
@@ -472,7 +471,7 @@ export function ArticleReader({
               ) : (
                 <Archive className="h-4 w-4" />
               )}
-              <span>{entry.is_bookmarked ? 'Archived' : 'Archive'}</span>
+              <span>{entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}</span>
             </Button>
           </div>
         </div>
@@ -483,12 +482,14 @@ export function ArticleReader({
         {/* Scrollable content area - hide scrollbar for cleaner reading */}
         <div
           ref={scrollContainerRef}
-          className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-12 pb-16' : ''}`}
+          className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
         >
-          <div className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}>
+          <div
+            className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
+          >
             {/* Mobile: Author and date at top of content */}
             {isMobile && (entry.author || entry.published_at) && (
-              <div className="mb-4 flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
                 {entry.author && <span className="font-medium">{entry.author}</span>}
                 {entry.author && entry.published_at && <span>·</span>}
                 {entry.published_at && (
@@ -496,22 +497,22 @@ export function ArticleReader({
                 )}
               </div>
             )}
-            
+
             {entry.content ? (
               <article
                 ref={contentRef}
-                className="prose prose-invert prose-lg font-reading prose-headings:font-display prose-headings:text-foreground prose-p:text-foreground/90 prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-strong:text-foreground prose-blockquote:border-primary prose-blockquote:text-foreground/80 prose-code:text-foreground prose-pre:bg-muted max-w-none"
+                className="prose prose-lg font-reading max-w-none"
                 dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.content) }}
               />
             ) : entry.summary ? (
               <article
                 ref={contentRef}
-                className="prose prose-invert prose-lg font-reading prose-headings:font-display prose-headings:text-foreground prose-p:text-foreground/90 max-w-none"
+                className="prose prose-lg font-reading max-w-none"
                 dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.summary) }}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="italic text-muted-foreground">No content available</p>
+                <p className="text-muted-foreground italic">{t('article.noContent')}</p>
                 <Button
                   variant="outline"
                   size="sm"
@@ -521,7 +522,7 @@ export function ArticleReader({
                   )}
                 >
                   <ExternalLink className="h-4 w-4" />
-                  View Original Article
+                  {t('article.viewOriginal')}
                 </Button>
               </div>
             )}
@@ -536,7 +537,7 @@ export function ArticleReader({
 
         {/* Desktop Outline - Sidebar that only takes space when there are headings */}
         {!isMobile && (entry.content || entry.summary) && (
-          <div className={`hidden 2xl:block ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
+          <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
             <ArticleOutline
               contentRef={contentRef}
               scrollContainerRef={scrollContainerRef}
@@ -559,17 +560,17 @@ export function ArticleReader({
       {/* Mobile Bottom Action Bar - auto-hide on scroll */}
       {isMobile && (
         <div
-          className={`absolute inset-x-0 bottom-0 z-10 border-t border-border bg-card/95 backdrop-blur-sm transition-transform duration-300 safe-bottom ${
+          className={`border-border bg-card/95 safe-bottom absolute inset-x-0 bottom-0 z-10 border-t backdrop-blur-sm transition-transform duration-300 ${
             barsVisible ? 'translate-y-0' : 'translate-y-full'
           }`}
         >
           <div className="flex h-14 items-center justify-around px-2">
             <button
               onClick={() => window.open(entry.url, '_blank', 'noopener,noreferrer')}
-              className="action-btn action-btn-mobile action-btn-external flex flex-col items-center gap-0.5 px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
+              className="action-btn action-btn-mobile action-btn-external text-muted-foreground hover:text-foreground flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors"
             >
               <ExternalLink className="h-5 w-5" />
-              <span className="text-[10px]">Open</span>
+              <span className="text-[10px]">{t('actions.open')}</span>
             </button>
 
             {!hideReadStatus && (
@@ -580,29 +581,13 @@ export function ArticleReader({
                 }`}
               >
                 <CheckCheck className="h-5 w-5" />
-                <span className="text-[10px]">{entry.is_read ? 'Unread' : 'Read'}</span>
+                <span className="text-[10px]">
+                  {entry.is_read ? t('filters.unread') : t('actions.markRead')}
+                </span>
               </button>
             )}
 
-            <button
-              onClick={handleLike}
-              className={`action-btn action-btn-mobile ${likeAnimation} flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                entry.is_liked === true ? 'text-red-500' : 'text-muted-foreground'
-              }`}
-            >
-              <Heart className={`h-5 w-5 ${entry.is_liked === true ? 'fill-current' : ''}`} />
-              <span className="text-[10px]">Like</span>
-            </button>
-
-            <button
-              onClick={handleDislike}
-              className={`action-btn action-btn-mobile ${dislikeAnimation} flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                entry.is_liked === false ? 'text-foreground' : 'text-muted-foreground'
-              }`}
-            >
-              <ThumbsDown className={`h-5 w-5 ${entry.is_liked === false ? 'fill-current' : ''}`} />
-              <span className="text-[10px]">Dislike</span>
-            </button>
+            <PreferenceButtons entry={entry} mobileStyle />
 
             <button
               onClick={handleToggleReadLater}
@@ -611,7 +596,7 @@ export function ArticleReader({
               }`}
             >
               <Clock className="h-5 w-5" />
-              <span className="text-[10px]">Later</span>
+              <span className="text-[10px]">{t('filters.readLater')}</span>
             </button>
 
             <button
@@ -626,7 +611,9 @@ export function ArticleReader({
               ) : (
                 <Archive className="h-5 w-5" />
               )}
-              <span className="text-[10px]">{entry.is_bookmarked ? 'Archived' : 'Archive'}</span>
+              <span className="text-[10px]">
+                {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
+              </span>
             </button>
           </div>
         </div>
@@ -640,9 +627,9 @@ export function ArticleReader({
  */
 export function ArticleReaderSkeleton() {
   return (
-    <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-background">
+    <div className="bg-background flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
-      <div className="border-b border-border bg-card px-6 py-4">
+      <div className="border-border bg-card border-b px-6 py-4">
         <div className="mb-3 flex items-start justify-between gap-4">
           {/* Title skeleton */}
           <div className="flex-1 space-y-2">
@@ -698,4 +685,3 @@ export function ArticleReaderSkeleton() {
     </div>
   )
 }
-

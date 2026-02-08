@@ -10,21 +10,20 @@ while [ $attempt -lt $max_attempts ]; do
     if uv run --no-sync python -c "
 import asyncio
 from sqlalchemy import text
-from glean_database.session import init_database, get_session
+from glean_database.session import init_database, get_session_context
 
 async def check():
     init_database('$DATABASE_URL')
-    async for session in get_session():
+    async with get_session_context() as session:
         await session.execute(text('SELECT 1'))
         return True
-    return False
 
 asyncio.run(check())
 " 2>&1; then
         echo "PostgreSQL is ready!"
         break
     fi
-    
+
     attempt=$((attempt + 1))
     echo "Waiting for PostgreSQL... ($attempt/$max_attempts)"
     sleep 2
@@ -48,9 +47,9 @@ fi
 # Create admin user if requested
 if [ "$CREATE_ADMIN" = "true" ] || [ "$CREATE_ADMIN" = "1" ]; then
     ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-    ADMIN_PASSWORD=${ADMIN_PASSWORD:-$(openssl rand -base64 12)}
+    ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123!}
     ADMIN_ROLE=${ADMIN_ROLE:-super_admin}
-    
+
     echo "Creating admin user..."
     if uv run --no-sync python scripts/create-admin.py --username "$ADMIN_USERNAME" --password "$ADMIN_PASSWORD" --role "$ADMIN_ROLE" 2>&1; then
         echo ""
@@ -63,7 +62,7 @@ if [ "$CREATE_ADMIN" = "true" ] || [ "$CREATE_ADMIN" = "1" ]; then
         echo "=============================================="
         echo ""
         echo "  Please save these credentials securely!"
-        echo "  This password will NOT be shown again."
+        echo "  Change the default password in production!"
         echo "=============================================="
     fi
 fi
@@ -71,4 +70,3 @@ fi
 # Execute the main command
 echo "Starting $@..."
 exec "$@"
-

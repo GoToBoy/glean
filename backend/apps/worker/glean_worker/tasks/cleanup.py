@@ -4,20 +4,20 @@ Cleanup tasks.
 Background tasks for cleaning up expired data.
 """
 
-import logging
 from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import and_, update
 from sqlalchemy.engine import CursorResult
 
+from glean_core import get_logger
 from glean_database.models import UserEntry
-from glean_database.session import get_session
+from glean_database.session import get_session_context
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-async def cleanup_read_later(ctx: dict[str, Any]) -> dict[str, int]:
+async def cleanup_read_later(_ctx: dict[str, Any]) -> dict[str, int]:
     """
     Clean up expired read-later entries.
 
@@ -28,42 +28,34 @@ async def cleanup_read_later(ctx: dict[str, Any]) -> dict[str, int]:
     Sets read_later to False and clears read_later_until for these entries.
 
     Args:
-        ctx: Task context dictionary.
+        _ctx: Task context dictionary (unused).
 
     Returns:
         Dictionary with cleanup statistics.
     """
-    print("[cleanup_read_later] Starting read-later cleanup")
+    logger.info("[cleanup_read_later] Starting read-later cleanup")
 
-    cleaned_count = 0
-    async for session in get_session():
-        try:
-            now = datetime.now(UTC)
+    async with get_session_context() as session:
+        now = datetime.now(UTC)
 
-            # Find and update expired entries
-            stmt = (
-                update(UserEntry)
-                .where(
-                    and_(
-                        UserEntry.read_later.is_(True),
-                        UserEntry.read_later_until.isnot(None),
-                        UserEntry.read_later_until < now,
-                    )
+        # Find and update expired entries
+        stmt = (
+            update(UserEntry)
+            .where(
+                and_(
+                    UserEntry.read_later.is_(True),
+                    UserEntry.read_later_until.isnot(None),
+                    UserEntry.read_later_until < now,
                 )
-                .values(read_later=False, read_later_until=None)
             )
-            result: CursorResult[Any] = await session.execute(stmt)  # type: ignore[assignment]
-            await session.commit()
+            .values(read_later=False, read_later_until=None)
+        )
+        result: CursorResult[Any] = await session.execute(stmt)  # type: ignore[assignment]
 
-            cleaned_count = result.rowcount or 0
-            print(f"[cleanup_read_later] Cleaned up {cleaned_count} expired read-later entries")
+        cleaned_count = result.rowcount or 0
+        logger.info(f"[cleanup_read_later] Cleaned up {cleaned_count} expired read-later entries")
 
-        except Exception as e:
-            logger.error(f"[cleanup_read_later] Error during cleanup: {e}")
-            await session.rollback()
-            raise
-
-    return {"cleaned_count": cleaned_count}
+        return {"cleaned_count": cleaned_count}
 
 
 async def scheduled_cleanup(ctx: dict[str, Any]) -> dict[str, int]:
@@ -78,5 +70,5 @@ async def scheduled_cleanup(ctx: dict[str, Any]) -> dict[str, int]:
     Returns:
         Dictionary with cleanup statistics.
     """
-    print("[scheduled_cleanup] Running scheduled cleanup (hourly)")
+    logger.info("[scheduled_cleanup] Running scheduled cleanup (hourly)")
     return await cleanup_read_later(ctx)

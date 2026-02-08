@@ -4,7 +4,7 @@
 
 > [!IMPORTANT]
 > 加入我们的 [Discord](https://discord.gg/KMKC4sRVSJ) 以获取最新动态和获得支持。
-> 
+>
 > 该项目仍在开发中，尚未准备好生产使用。
 
 一个自托管的 RSS 阅读器和个人知识管理工具。
@@ -39,60 +39,83 @@
 ### 一键部署
 
 ```bash
-# 下载并启动 Glean
+# 下载 docker-compose.yml
 curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.yml -o docker-compose.yml
+
+# 启动 Glean（完整部署，包含 Milvus）
 docker compose up -d
-
-# 访问 http://localhost
-```
-
-就这么简单！打开 http://localhost 即可开始使用 Glean。
-
-### 带管理后台部署
-
-如需额外的管理功能（用户管理、统计数据）：
-
-```bash
-# 下载完整部署配置
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.full.yml -o docker-compose.yml
-
-# 首次启动时创建管理员账号
-CREATE_ADMIN=true docker compose up -d
-
-# 查看日志获取管理员凭据（请妥善保存！）
-docker compose logs backend | grep -A5 "Admin Account Created"
 
 # 访问：
 # - Web 应用: http://localhost
-# - 管理后台: http://localhost:3001
+# - 管理后台: http://localhost:3001（默认：admin/Admin123!）
 ```
 
-### 手动创建管理员账号
+**默认管理员账号**：系统会自动创建管理员账号：
+- 用户名：`admin`
+- 密码：`Admin123!`
+- ⚠️ **生产环境请立即修改此密码！**
+
+**精简部署**（不包含 Milvus，如果不需要 Phase 3 功能）：
 
 ```bash
-# 生成随机密码
-docker exec -it glean-backend /app/scripts/create-admin-docker.sh
+# 下载精简版
+curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.lite.yml -o docker-compose.yml
 
-# 或指定凭据
-docker exec -it glean-backend /app/scripts/create-admin-docker.sh myusername MySecurePass123!
+# 启动 Glean
+docker compose up -d
+
+# 管理后台: http://localhost:3001（默认：admin/Admin123!）
+```
+
+### 自定义管理员账号（可选）
+
+如需使用自定义管理员凭据而非默认值，在启动**之前**创建 `.env` 文件：
+
+```bash
+# 在 .env 中设置自定义管理员凭据
+cat > .env << EOF
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=YourSecurePassword123!
+SECRET_KEY=$(openssl rand -base64 32)
+EOF
+
+# 启动服务
+docker compose up -d
+```
+
+如需禁用自动创建并手动创建管理员：
+
+```bash
+# 在 .env 中禁用自动创建
+echo "CREATE_ADMIN=false" >> .env
+
+# 启动服务
+docker compose up -d
+
+# 手动创建管理员
+docker exec -it glean-backend /app/scripts/create-admin-docker.sh
 ```
 
 ## 配置说明
 
-复制 `.env.example` 为 `.env` 并自定义：
+对于生产环境，使用环境变量自定义部署。下载示例文件：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/.env.example -o .env
 ```
 
-主要配置项：
+**重要配置项（需修改）：**
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `SECRET_KEY` | JWT 签名密钥 | **生产环境必须修改！** |
-| `POSTGRES_PASSWORD` | 数据库密码 | `glean` |
-| `WEB_PORT` | Web 界面端口 | `80` |
-| `ADMIN_PORT` | 管理后台端口 | `3001` |
+| 变量                | 说明           | 默认值                            |
+| ------------------- | -------------- | --------------------------------- |
+| `SECRET_KEY`        | JWT 签名密钥   | **生产环境必须修改！**            |
+| `POSTGRES_PASSWORD` | 数据库密码     | `glean`（**生产环境必须修改！**） |
+| `ADMIN_PASSWORD`    | 管理员密码     | `Admin123!`（**必须修改！**）     |
+| `WEB_PORT`          | Web 界面端口   | `80`                              |
+| `ADMIN_PORT`        | 管理后台端口   | `3001`                            |
+| `CREATE_ADMIN`      | 自动创建管理员 | `true`（设为 `false` 可禁用）     |
+
+所有配置选项请参见 [.env.example](.env.example)。
 
 ## Docker 镜像
 
@@ -104,12 +127,47 @@ curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/.env.example
 
 支持架构：`linux/amd64`、`linux/arm64`
 
-## 部署选项
+### 测试预发布版本
 
-| 部署方式 | 说明 | 命令 |
-|----------|------|------|
-| **精简版** | 仅 Web 应用（无管理后台） | `docker compose up -d` |
-| **完整版** | Web + 管理后台 | `docker compose -f docker-compose.full.yml up -d` |
+想测试即将发布的新功能？可以使用预发布版本（alpha/beta/rc）：
+
+**方法 1：使用环境变量（推荐）**
+
+```bash
+# 在 .env 文件中设置 IMAGE_TAG
+echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+
+# 或者直接导出环境变量
+export IMAGE_TAG=v0.3.0-alpha.1
+
+# 使用预发布镜像启动
+docker compose up -d
+```
+
+**方法 2：内联环境变量**
+
+```bash
+IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
+```
+
+**注意**：预发布版本仅用于测试，不会触发 Electron 应用的自动更新，不推荐在生产环境使用。
+
+在 [Releases 页面](https://github.com/LeslieLeung/glean/releases) 查看可用的预发布版本。
+
+## 部署
+
+默认部署包含所有服务（完整版）：
+- **Web 应用**（端口 80）- 主用户界面
+- **管理后台**（端口 3001）- 用户管理和系统监控
+- **后端 API** - FastAPI 服务器
+- **Worker** - 后台任务处理器（订阅源抓取、清理）
+- **PostgreSQL** - 数据库
+- **Redis** - 任务队列
+- **Milvus** - 向量数据库，用于智能推荐和偏好学习（Phase 3）
+
+**精简部署**（不包含 Milvus）也可使用 `docker-compose.lite.yml`。
+
+详细的部署说明和配置请参见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)。
 
 ## 技术栈
 
@@ -164,7 +222,7 @@ make dev-all
 ## 文档
 
 - **[开发指南](./DEVELOPMENT.md)** - 搭建开发环境
-- **[部署指南](./deploy/README.md)** - 生产环境部署详情
+- **[部署指南](./DEPLOY.zh-CN.md)** - 生产环境部署详情
 
 ## 参与贡献
 
@@ -179,4 +237,3 @@ make dev-all
 ## 许可证
 
 本项目采用 **AGPL-3.0 许可证** - 详见 [LICENSE](LICENSE) 文件。
-

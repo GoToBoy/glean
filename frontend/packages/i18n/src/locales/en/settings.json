@@ -1,0 +1,173 @@
+{
+  "title": "Settings",
+  "subtitle": "Manage your account and preferences",
+  "tabs": {
+    "profile": "Profile",
+    "readLater": "Read Later",
+    "appearance": "Appearance",
+    "manageFeeds": "Manage Feeds",
+    "preferences": "Preferences",
+    "apiTokens": "API Tokens"
+  },
+  "profile": {
+    "title": "Profile",
+    "desc": "Manage your account information",
+    "name": "Name",
+    "notSet": "Not set",
+    "email": "Email",
+    "accountStatus": "Account Status",
+    "active": "Active",
+    "inactive": "Inactive",
+    "verified": "Verified",
+    "notVerified": "Not Verified",
+    "language": "Language",
+    "changePassword": "Change Password",
+    "deleteAccount": "Delete Account"
+  },
+  "readLater": {
+    "title": "Read Later",
+    "desc": "Configure your read later list behavior",
+    "autoCleanup": "Auto-cleanup Period",
+    "autoCleanupDesc": "Items marked as \"Read Later\" will be automatically removed after this period. Set to \"Never expire\" to keep them indefinitely.",
+    "showRemainingTime": "Show Remaining Time",
+    "showRemainingTimeDesc": "Display how much time is left before items expire in the Read Later list",
+    "settingsSaved": "Settings saved successfully",
+    "cleanupPeriod": {
+      "1day": "1 day",
+      "7days": "7 days",
+      "30days": "30 days",
+      "never": "Never expire"
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "desc": "Customize the look and feel",
+    "theme": "Theme",
+    "chooseTheme": "Choose your theme",
+    "themes": {
+      "night": "Night",
+      "nightDesc": "Dark theme for comfortable reading",
+      "day": "Day",
+      "dayDesc": "Light theme for daytime use",
+      "auto": "Auto",
+      "autoDesc": "Follow your system preference"
+    }
+  },
+  "manageFeeds": {
+    "title": "Manage Feeds",
+    "desc": "Manage your RSS feed subscriptions",
+    "searchPlaceholder": "Search subscriptions...",
+    "importOPML": "Import OPML",
+    "exportOPML": "Export OPML",
+    "loading": "Loading...",
+    "subscriptionCount": "{{count}} subscription",
+    "subscriptionCount_plural": "{{count}} subscriptions",
+    "failedToLoad": "Failed to load subscriptions",
+    "untitledFeed": "Untitled Feed",
+    "openFeed": "Open feed",
+    "refreshFeed": "Refresh feed",
+    "edit": "Edit",
+    "unsubscribe": "Unsubscribe",
+    "noSubscriptionsFound": "No subscriptions found",
+    "tryDifferentSearch": "Try adjusting your search terms",
+    "addFirstFeed": "Subscribe to your first RSS feed to get started",
+    "addFeed": "Add Feed",
+    "pageInfo": "Page {{page}} of {{totalPages}} • {{totalItems}} total subscription{{plural}}",
+    "previous": "Previous",
+    "next": "Next",
+    "unsubscribeConfirm": "Unsubscribe from feed?",
+    "unsubscribeDescription": "Are you sure you want to unsubscribe from this feed? This action cannot be undone.",
+    "cancel": "Cancel"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "desc": "Manage your content preferences and smart filters",
+    "rebuildModel": "Rebuild Model",
+    "rebuilding": "Rebuilding...",
+    "showPreferenceScores": "Show Preference Scores",
+    "showPreferenceScoresDesc": "Display relevance scores in the Smart feed",
+    "failedToLoad": "Failed to load preferences",
+    "totalInteractions": "Total Interactions",
+    "acrossAllFeeds": "Across all your feeds",
+    "likedItems": "Liked Items",
+    "dislikedItems": "Disliked Items",
+    "modelStrength": "Model Strength",
+    "basedOnInteractionCount": "Based on interaction count",
+    "recentActivity": "Recent Activity",
+    "lastModelTraining": "Last Model Training",
+    "totalBookmarks": "Total Bookmarks",
+    "topSources": "Top Sources",
+    "topSourcesDesc": "Feeds with highest affinity",
+    "topAuthors": "Top Authors",
+    "topAuthorsDesc": "Authors with highest affinity",
+    "rebuildConfirmTitle": "Rebuild Preference Model?",
+    "rebuildConfirmDesc": "This will retrain your personal recommendation model using all your historical interactions. This process may take a few minutes to complete.",
+    "cancel": "Cancel",
+    "strength": {
+      "strong": "Strong",
+      "moderate": "Moderate",
+      "weak": "Weak",
+      "none": "None"
+    },
+    "ofInteractions": "% of interactions",
+    "stats": {
+      "liked": "Liked articles",
+      "disliked": "Disliked articles",
+      "bookmarked": "Bookmarked articles",
+      "modelStrength": "Model Strength",
+      "modelStrengthDesc": "Based on your feedback history",
+      "lastUpdated": "Last updated: {{date}}"
+    },
+    "displaySettings": {
+      "title": "Display Settings",
+      "desc": "Customize how preferences are shown",
+      "showScore": "Show Preference Score",
+      "showScoreDesc": "Display recommendation scores on Smart list entries"
+    },
+    "rebuildHint": "Rebuild your preference model from all historical feedback",
+    "empty": {
+      "title": "No preference data yet",
+      "description": "Start liking or disliking articles to build your preference model"
+    }
+  },
+  "apiTokens": {
+    "title": "API Tokens",
+    "desc": "Create long-lived API tokens for MCP server access",
+    "description": "Generate tokens to authenticate with the MCP server for AI assistants and other integrations.",
+    "createToken": "Create Token",
+    "createDescription": "Create a new API token for MCP authentication.",
+    "tokenName": "Token Name",
+    "tokenNamePlaceholder": "My Claude Desktop Token",
+    "expiresIn": "Expires In",
+    "expiration": {
+      "never": "Never expires",
+      "30days": "30 days",
+      "90days": "90 days",
+      "1year": "1 year"
+    },
+    "create": "Create",
+    "tokenCreated": "Token Created",
+    "copyWarning": "Make sure to copy your token now. You won't be able to see it again!",
+    "copied": "Copied to clipboard!",
+    "noTokens": "No API tokens yet",
+    "lastUsed": "Last used {{time}}",
+    "expiresAt": "Expires {{date}}",
+    "neverExpires": "Never expires",
+    "loadError": "Failed to load API tokens",
+    "revokeTitle": "Revoke Token",
+    "revokeDescription": "Are you sure you want to revoke the token \"{{name}}\"? This action cannot be undone.",
+    "revoke": "Revoke",
+    "mcpGuide": {
+      "title": "How to use with MCP",
+      "description": "Add your API token to your MCP client configuration to enable AI assistants to search and retrieve articles from your subscriptions.",
+      "configTitle": "Claude Desktop Configuration",
+      "urlNote": "Tip: When using Docker deployment, the URL in the configuration above can be used directly (it's automatically filled with your current domain). Self-hosted users should ensure nginx is configured to proxy the /mcp path.",
+      "tools": "Available tools:",
+      "toolSearch": "Search articles by keyword",
+      "toolGet": "Get full article details",
+      "toolList": "List articles by date range",
+      "toolSubs": "List your subscriptions"
+    }
+  },
+  "version": "Glean v{{version}}"
+}

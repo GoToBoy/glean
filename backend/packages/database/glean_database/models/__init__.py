@@ -5,6 +5,7 @@ This module exports all SQLAlchemy models for the Glean application.
 """
 
 from .admin import AdminRole, AdminUser, SystemConfig
+from .api_token import APIToken
 from .base import Base, TimestampMixin
 from .bookmark import Bookmark
 from .entry import Entry
@@ -15,6 +16,7 @@ from .subscription import Subscription
 from .tag import Tag
 from .user import User
 from .user_entry import UserEntry
+from .user_preference_stats import UserPreferenceStats
 
 __all__ = [
     "Base",
@@ -36,4 +38,8 @@ __all__ = [
     "BookmarkFolder",
     "BookmarkTag",
     "UserEntryTag",
+    # M3 models
+    "UserPreferenceStats",
+    # MCP models
+    "APIToken",
 ]

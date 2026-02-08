@@ -16,12 +16,16 @@ from glean_core.schemas import UserResponse
 from glean_core.schemas.admin import AdminUserResponse
 from glean_core.services import (
     AdminService,
+    APITokenService,
     AuthService,
     BookmarkService,
     EntryService,
     FeedService,
     FolderService,
+    PreferenceService,
+    SystemConfigService,
     TagService,
+    TypedConfigService,
     UserService,
 )
 from glean_database.session import get_session
@@ -119,9 +123,12 @@ def get_feed_service(session: Annotated[AsyncSession, Depends(get_session)]) -> 
     return FeedService(session)
 
 
-def get_entry_service(session: Annotated[AsyncSession, Depends(get_session)]) -> EntryService:
+async def get_entry_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> EntryService:
     """Get entry service instance."""
-    return EntryService(session)
+    return EntryService(session, redis_pool)
 
 
 def get_admin_service(
@@ -129,6 +136,13 @@ def get_admin_service(
 ) -> AdminService:
     """Get admin service instance."""
     return AdminService(session)
+
+
+def get_system_config_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> SystemConfigService:
+    """Get system config service instance."""
+    return SystemConfigService(session)
 
 
 # M2 service dependencies
@@ -146,11 +160,76 @@ def get_tag_service(
     return TagService(session)
 
 
-def get_bookmark_service(
+async def get_bookmark_service(
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> BookmarkService:
     """Get bookmark service instance."""
-    return BookmarkService(session)
+    return BookmarkService(session, redis_pool)
+
+
+# M3 service dependencies
+async def get_preference_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> PreferenceService:
+    """Get preference service instance."""
+    return PreferenceService(session, redis_pool)
+
+
+async def get_score_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> object | None:
+    """
+    Get score service instance for real-time preference scoring.
+
+    Returns:
+    - ScoreService if vectorization is enabled and Milvus is available
+    - SimpleScoreService if vectorization is disabled
+    - None if there's an error
+    """
+    from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
+    from glean_core.services import SimpleScoreService, TypedConfigService
+
+    # Check if vectorization is enabled
+    config_service = TypedConfigService(session)
+    config = await config_service.get(EmbeddingConfig)
+
+    if not config.enabled or config.status not in (
+        VectorizationStatus.IDLE,
+        VectorizationStatus.REBUILDING,
+    ):
+        # Vectorization disabled - use simple scoring
+        return SimpleScoreService(session)
+
+    # Vectorization enabled - try to use vector scoring
+    try:
+        from glean_vector.clients.milvus_client import MilvusClient
+        from glean_vector.services.score_service import ScoreService
+
+        milvus_client = MilvusClient()
+        milvus_client.connect()
+        await milvus_client.ensure_collections(config.dimension, config.provider, config.model)
+
+        return ScoreService(db_session=session, milvus_client=milvus_client)
+    except Exception:
+        # Milvus not available, fall back to simple scoring
+        return SimpleScoreService(session)
+
+
+def get_typed_config_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> TypedConfigService:
+    """Get typed config service instance."""
+    return TypedConfigService(session)
+
+
+# MCP service dependencies
+def get_api_token_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> APITokenService:
+    """Get API token service instance."""
+    return APITokenService(session)
 
 
 async def get_current_admin(

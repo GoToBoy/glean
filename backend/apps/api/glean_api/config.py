@@ -7,6 +7,7 @@ for automatic environment variable loading and validation.
 
 from functools import lru_cache
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
         jwt_access_token_expire_minutes: Access token expiration time.
         jwt_refresh_token_expire_days: Refresh token expiration time.
         cors_origins: List of allowed CORS origins.
+        mcp_issuer_url: MCP server issuer URL for authentication.
+        mcp_resource_server_url: MCP server resource server URL.
     """
 
     model_config = SettingsConfigDict(
@@ -35,7 +38,9 @@ class Settings(BaseSettings):
     )
 
     # Application settings
-    version: str = "0.1.0"
+    # Version is injected via APP_VERSION env variable during Docker build
+    # or defaults to "dev" for local development
+    version: str = Field(default="dev", validation_alias="APP_VERSION")
     debug: bool = False
     secret_key: str = "change-me-in-production"
 
@@ -52,6 +57,10 @@ class Settings(BaseSettings):
 
     # CORS settings
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:3001"]
+
+    # MCP Server settings
+    mcp_issuer_url: str = "http://localhost:8000"
+    mcp_resource_server_url: str = "http://localhost:8000/mcp"
 
 
 @lru_cache

@@ -1,12 +1,12 @@
 # Frontend Dockerfile for Glean Admin Dashboard
 
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g pnpm@8.15.0
+RUN npm install -g pnpm@10.26.0
 
 # Copy workspace configuration
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -32,4 +32,3 @@ COPY apps/admin/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
-

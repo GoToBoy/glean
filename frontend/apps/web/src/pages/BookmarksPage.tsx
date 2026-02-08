@@ -1,12 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useBookmarkStore } from '../stores/bookmarkStore'
 import { useFolderStore } from '../stores/folderStore'
 import { useTagStore } from '../stores/tagStore'
 import { useEntry } from '../hooks/useEntries'
+import { useTranslation } from '@glean/i18n'
 import { ArticleReader, ArticleReaderSkeleton } from '../components/ArticleReader'
 import { stripHtmlTags } from '../lib/html'
-import type { Bookmark, FolderTreeNode, TagWithCounts } from '@glean/types'
+import type { Bookmark, FolderTreeNode, TagWithCounts, EntryWithState } from '@glean/types'
 import {
   Bookmark as BookmarkIcon,
   FolderOpen,
@@ -23,12 +24,13 @@ import {
   FileText,
   Tags,
   BookOpen,
+  LayoutGrid,
+  List,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import {
   Button,
   Input,
-  Badge,
   Skeleton,
   AlertDialog,
   AlertDialogPopup,
@@ -44,6 +46,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
+  buttonVariants,
   Menu,
   MenuTrigger,
   MenuPopup,
@@ -53,23 +56,40 @@ import {
 } from '@glean/ui'
 
 /**
- * Hook to detect mobile viewport
+ * Convert a Bookmark to EntryWithState format for use with ArticleReader component.
+ * This allows bookmarks to be displayed using the same reader as feed entries.
  */
-function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(() => 
-    typeof window !== 'undefined' ? window.innerWidth < breakpoint : false
-  )
+function convertBookmarkToEntry(bookmark: Bookmark): EntryWithState {
+  return {
+    // Required Entry fields
+    id: bookmark.id,
+    feed_id: '', // Bookmarks don't have feed_id
+    guid: bookmark.id,
+    url: bookmark.url || '',
+    title: bookmark.title,
+    author: null,
+    content: bookmark.content,
+    summary: bookmark.excerpt,
+    published_at: bookmark.created_at,
+    created_at: bookmark.created_at,
 
-  useEffect(() => {
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < breakpoint)
-    }
-    
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [breakpoint])
+    // User state fields
+    is_read: true, // Bookmarks are considered read
+    is_liked: null,
+    read_later: false,
+    read_later_until: null,
+    read_at: bookmark.created_at,
+    is_bookmarked: true, // Already a bookmark
+    bookmark_id: bookmark.id,
 
-  return isMobile
+    // Feed info (not applicable for bookmarks)
+    feed_title: null,
+    feed_icon_url: null,
+
+    // Preference score (not applicable for bookmarks)
+    preference_score: null,
+    debug_info: null,
+  }
 }
 
 /**
@@ -78,10 +98,10 @@ function useIsMobile(breakpoint = 768) {
  * Displays bookmarked content with folder and tag filtering.
  */
 export default function BookmarksPage() {
+  const { t } = useTranslation('bookmarks')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
-  const isMobile = useIsMobile()
-  
+
   const {
     bookmarks,
     total,
@@ -106,26 +126,23 @@ export default function BookmarksPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [editingBookmark, setEditingBookmark] = useState<Bookmark | null>(null)
-  
+
   // Reader panel state
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [selectedBookmark, setSelectedBookmark] = useState<Bookmark | null>(null)
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
   const [isFullscreen, setIsFullscreen] = useState(false)
-  
-  // Bookmarks panel width (resizable) - use same default as feeds page
-  const [bookmarksWidth, setBookmarksWidth] = useState(() => {
-    const saved = localStorage.getItem('glean:bookmarksWidth')
-    // Default to same width as entries list in feeds (360px) when reader is open
-    // But since bookmarks is a grid, we use a larger default
-    return saved !== null ? Number(saved) : 600
+
+  // View mode state (grid or list)
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    const saved = localStorage.getItem('glean:bookmarksViewMode')
+    return saved === 'list' ? 'list' : 'grid'
   })
-  
-  // Persist width to localStorage
+
+  // Persist view mode to localStorage
   useEffect(() => {
-    if (selectedEntryId) {
-      localStorage.setItem('glean:bookmarksWidth', String(bookmarksWidth))
-    }
-  }, [bookmarksWidth, selectedEntryId])
+    localStorage.setItem('glean:bookmarksViewMode', viewMode)
+  }, [viewMode])
 
   // Initial data loading
   useEffect(() => {
@@ -174,204 +191,291 @@ export default function BookmarksPage() {
     fetchBookmarks({ ...filters, page: newPage })
   }
 
-  // Handle bookmark click - open reader panel for feed entries, external URL for others
+  // Handle bookmark click - open reader panel for feed entries or URL bookmarks with content
   const handleBookmarkClick = (bookmark: Bookmark) => {
     if (bookmark.entry_id) {
       // Open reader panel for feed-saved bookmarks
       setSelectedEntryId(bookmark.entry_id)
+      setSelectedBookmark(null)
+    } else if (bookmark.content) {
+      // Open reader panel for URL bookmarks with extracted content
+      setSelectedBookmark(bookmark)
+      setSelectedEntryId(null)
     } else if (bookmark.url) {
-      // Open external URL
+      // Open external URL for bookmarks without content
       window.open(bookmark.url, '_blank', 'noopener,noreferrer')
     }
   }
 
-  // On mobile, show list OR reader, not both
-  const showBookmarkList = !isMobile || !selectedEntryId
-  const showReader = !isMobile || !!selectedEntryId
+  // Show list OR reader (not both) - single-panel navigation
+  const hasActiveReader = !!selectedEntryId || !!selectedBookmark
 
   return (
     <div className="flex h-full">
-      {/* Main Content - Hidden when fullscreen or when viewing reader on mobile */}
-      {!isFullscreen && showBookmarkList && (
-        <>
-          <div
-            className={`flex min-w-0 flex-col border-r border-border transition-all duration-300 ${
-              isMobile ? 'w-full' : ''
-            }`}
-            style={!isMobile && selectedEntryId ? { width: `${bookmarksWidth}px`, minWidth: '400px', maxWidth: '800px' } : !isMobile ? { flex: 1 } : undefined}
-          >
-            {/* Header */}
-            <header className="border-b border-border bg-card px-4 py-3 sm:px-6 sm:py-4">
-          <div className={`flex gap-3 ${selectedEntryId ? 'flex-col' : 'flex-col md:flex-row md:items-center md:justify-between md:gap-4'}`}>
-            <h1 className="font-display text-xl font-bold text-foreground shrink-0">Bookmarks</h1>
-            <div className={`flex min-w-0 flex-1 gap-2 ${selectedEntryId ? 'flex-col' : 'flex-col sm:flex-row sm:items-center sm:justify-end sm:gap-3'}`}>
-              <div className={`relative ${selectedEntryId ? 'w-full' : 'w-full sm:w-64'}`}>
-                <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+      {/* Bookmark List - Hidden when reader is active */}
+      {!hasActiveReader && (
+        <div className="flex min-w-0 flex-1 flex-col">
+          {/* Header */}
+          <header className="border-border bg-card border-b px-4 py-3 sm:px-6 sm:py-4">
+            {/* Title row with view toggle */}
+            <div className="mb-3 flex items-center justify-between gap-3 md:mb-0">
+              <h1 className="font-display text-foreground shrink-0 text-xl font-bold">
+                {t('title')}
+              </h1>
+              {/* View Toggle - always visible next to title */}
+              <div className="border-border flex shrink-0 rounded-lg border p-0.5 md:hidden">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center justify-center rounded-md px-3 py-1.5 transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={t('view.grid')}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center justify-center rounded-md px-3 py-1.5 transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={t('view.list')}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Search and actions row */}
+            <div className="flex items-center gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between">
+              {/* Desktop view toggle */}
+              <div className="border-border hidden shrink-0 rounded-lg border p-0.5 md:flex">
+                <button
+                  onClick={() => setViewMode('grid')}
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
+                    viewMode === 'grid'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={t('view.grid')}
+                >
+                  <LayoutGrid className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode('list')}
+                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
+                    viewMode === 'list'
+                      ? 'bg-muted text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                  title={t('view.list')}
+                >
+                  <List className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="relative min-w-0 flex-1 md:max-w-64">
+                <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2" />
                 <Input
                   type="text"
-                  placeholder="Search bookmarks..."
+                  placeholder={t('placeholders.searchBookmarks')}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full [&_input]:pl-9"
+                  className="h-10 w-full [&_input]:pl-9"
                 />
               </div>
-              <Button onClick={() => setShowCreateBookmark(true)} className={`shrink-0 whitespace-nowrap ${selectedEntryId ? 'w-full' : 'w-full sm:w-auto'}`}>
+              <Button
+                onClick={() => setShowCreateBookmark(true)}
+                className="h-10 shrink-0 whitespace-nowrap"
+              >
                 <Plus className="h-4 w-4" />
-                Add Bookmark
+                <span className="hidden sm:inline">{t('actions.addBookmark')}</span>
               </Button>
             </div>
-          </div>
 
-          {/* Active filters */}
-          {(selectedFolder || selectedTag || searchQuery) && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Filters:</span>
-              {selectedFolder && (
-                <Badge variant="secondary" className="gap-1">
-                  <FolderOpen className="h-3 w-3" />
-                  {findFolderName(bookmarkFolders, selectedFolder)}
-                  <button
-                    onClick={() => clearFilter('folder')}
-                    className="ml-1 hover:text-foreground"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
-              )}
-              {selectedTag && (() => {
-                const tag = tags.find((t) => t.id === selectedTag)
-                return tag ? (
-                  <Badge variant="secondary" className="gap-1">
-                    <Tag className="h-3 w-3" />
-                    {tag.name}
+            {/* Active filters */}
+            {(selectedFolder || selectedTag || searchQuery) && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                <span className="text-muted-foreground text-xs">{t('filters.label')}</span>
+                {selectedFolder && (
+                  <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+                    <FolderOpen className="h-3 w-3" />
+                    <span className="max-w-24 truncate">
+                      {findFolderName(bookmarkFolders, selectedFolder)}
+                    </span>
                     <button
-                      onClick={() => clearFilter('tag')}
-                      className="ml-1 hover:text-foreground"
+                      onClick={() => clearFilter('folder')}
+                      className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
                     >
                       <X className="h-3 w-3" />
                     </button>
-                  </Badge>
-                ) : null
-              })()}
-              {searchQuery && (
-                <Badge variant="secondary" className="gap-1">
-                  <Search className="h-3 w-3" />
-                  &quot;{searchQuery}&quot;
-                  <button
-                    onClick={() => clearFilter('search')}
-                    className="ml-1 hover:text-foreground"
+                  </span>
+                )}
+                {selectedTag &&
+                  (() => {
+                    const tag = tags.find((t) => t.id === selectedTag)
+                    return tag ? (
+                      <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+                        <Tag className="h-3 w-3" />
+                        <span className="max-w-24 truncate">{tag.name}</span>
+                        <button
+                          onClick={() => clearFilter('tag')}
+                          className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : null
+                  })()}
+                {searchQuery && (
+                  <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+                    <Search className="h-3 w-3" />
+                    <span className="max-w-24 truncate">&quot;{searchQuery}&quot;</span>
+                    <button
+                      onClick={() => clearFilter('search')}
+                      className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+          </header>
+
+          {/* Bookmarks Grid/List */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+            <div
+              key={`${selectedFolder || 'all'}-${selectedTag || 'none'}-${viewMode}`}
+              className="feed-content-transition"
+            >
+              {loading ? (
+                viewMode === 'grid' ? (
+                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <BookmarkCardSkeleton key={i} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <BookmarkListItemSkeleton key={i} />
+                    ))}
+                  </div>
+                )
+              ) : bookmarks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
+                    <BookmarkIcon className="text-muted-foreground h-8 w-8" />
+                  </div>
+                  <p className="text-muted-foreground">{t('empty.noBookmarks')}</p>
+                  <p className="text-muted-foreground/60 mt-1 text-xs">
+                    {t('empty.noBookmarksDescription')}
+                  </p>
+                  <Button
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => setShowCreateBookmark(true)}
                   >
-                    <X className="h-3 w-3" />
-                  </button>
-                </Badge>
+                    <Plus className="h-4 w-4" />
+                    {t('empty.addFirstBookmark')}
+                  </Button>
+                </div>
+              ) : viewMode === 'grid' ? (
+                <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
+                  {bookmarks.map((bookmark, index) => (
+                    <BookmarkCard
+                      key={bookmark.id}
+                      bookmark={bookmark}
+                      onClick={() => handleBookmarkClick(bookmark)}
+                      onDelete={() => setDeleteConfirmId(bookmark.id)}
+                      onEdit={() => setEditingBookmark(bookmark)}
+                      allTags={tags}
+                      onAddTag={async (bookmarkId, tagId) => {
+                        await bookmarkAddTag(bookmarkId, tagId)
+                      }}
+                      onRemoveTag={async (bookmarkId, tagId) => {
+                        await bookmarkRemoveTag(bookmarkId, tagId)
+                      }}
+                      onCreateTag={async (name) => {
+                        const tag = await createTag({ name })
+                        return tag?.id ?? null
+                      }}
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {bookmarks.map((bookmark, index) => (
+                    <BookmarkListItem
+                      key={bookmark.id}
+                      bookmark={bookmark}
+                      onClick={() => handleBookmarkClick(bookmark)}
+                      onDelete={() => setDeleteConfirmId(bookmark.id)}
+                      onEdit={() => setEditingBookmark(bookmark)}
+                      allTags={tags}
+                      onAddTag={async (bookmarkId, tagId) => {
+                        await bookmarkAddTag(bookmarkId, tagId)
+                      }}
+                      onRemoveTag={async (bookmarkId, tagId) => {
+                        await bookmarkRemoveTag(bookmarkId, tagId)
+                      }}
+                      onCreateTag={async (name) => {
+                        const tag = await createTag({ name })
+                        return tag?.id ?? null
+                      }}
+                      style={{ animationDelay: `${index * 0.03}s` }}
+                    />
+                  ))}
+                </div>
               )}
             </div>
-          )}
-        </header>
-
-        {/* Bookmarks Grid */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-          <div key={`${selectedFolder || 'all'}-${selectedTag || 'none'}`} className="feed-content-transition">
-          {loading ? (
-            <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <BookmarkCardSkeleton key={i} />
-              ))}
-            </div>
-          ) : bookmarks.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-muted">
-                <BookmarkIcon className="h-8 w-8 text-muted-foreground" />
-              </div>
-              <p className="text-muted-foreground">No bookmarks found</p>
-              <p className="mt-1 text-xs text-muted-foreground/60">
-                Save articles or add external URLs to build your collection
-              </p>
-              <Button
-                variant="outline"
-                className="mt-4"
-                onClick={() => setShowCreateBookmark(true)}
-              >
-                <Plus className="h-4 w-4" />
-                Add Your First Bookmark
-              </Button>
-            </div>
-          ) : (
-            <div className={`grid gap-3 sm:gap-4 ${selectedEntryId && !isMobile ? 'grid-cols-1 lg:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3'}`}>
-              {bookmarks.map((bookmark, index) => (
-                <BookmarkCard
-                  key={bookmark.id}
-                  bookmark={bookmark}
-                  isSelected={!!selectedEntryId && bookmark.entry_id === selectedEntryId}
-                  onClick={() => handleBookmarkClick(bookmark)}
-                  onDelete={() => setDeleteConfirmId(bookmark.id)}
-                  onEdit={() => setEditingBookmark(bookmark)}
-                  allTags={tags}
-                  onAddTag={async (bookmarkId, tagId) => {
-                    await bookmarkAddTag(bookmarkId, tagId)
-                  }}
-                  onRemoveTag={async (bookmarkId, tagId) => {
-                    await bookmarkRemoveTag(bookmarkId, tagId)
-                  }}
-                  onCreateTag={async (name) => {
-                    const tag = await createTag({ name })
-                    return tag?.id ?? null
-                  }}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                />
-              ))}
-            </div>
-          )}
           </div>
-        </div>
 
-        {/* Pagination */}
-        {pages > 1 && (
-          <div className="flex items-center justify-between border-t border-border bg-card px-6 py-4">
-            <span className="text-sm text-muted-foreground">
-              Showing {bookmarks.length} of {total} bookmarks
-            </span>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page === 1}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground">
+          {/* Pagination */}
+          {pages > 1 && (
+            <div className="border-border bg-card flex items-center justify-between border-t px-4 py-3 sm:px-6 sm:py-4">
+              <span className="text-muted-foreground hidden text-sm sm:block">
+                {t('pagination.showing', { count: bookmarks.length, total })}
+              </span>
+              <span className="text-muted-foreground text-sm sm:hidden">
                 {page} / {pages}
               </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page === pages}
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePageChange(page - 1)}
+                  disabled={page === 1}
+                  className="gap-1"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  <span className="hidden sm:inline">{t('pagination.previous')}</span>
+                </Button>
+                <span className="text-muted-foreground hidden text-sm sm:block">
+                  {page} / {pages}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handlePageChange(page + 1)}
+                  disabled={page === pages}
+                  className="gap-1"
+                >
+                  <span className="hidden sm:inline">{t('pagination.next')}</span>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-          </div>
-
-          {/* Resize Handle - only shown when reader is open on desktop */}
-          {selectedEntryId && !isMobile && (
-            <ResizeHandle
-              onResize={(delta) => setBookmarksWidth((w) => Math.max(400, Math.min(800, w + delta)))}
-            />
           )}
-        </>
+        </div>
       )}
 
       {/* Create Bookmark Dialog */}
-      <CreateBookmarkDialog
-        open={showCreateBookmark}
-        onOpenChange={setShowCreateBookmark}
-      />
+      <CreateBookmarkDialog open={showCreateBookmark} onOpenChange={setShowCreateBookmark} />
 
       {/* Edit Bookmark Dialog */}
       <EditBookmarkDialog
@@ -385,33 +489,33 @@ export default function BookmarksPage() {
       <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Bookmark?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This action cannot be undone. The bookmark will be permanently deleted.
-            </AlertDialogDescription>
+            <AlertDialogTitle>{t('actions.removeBookmark')}?</AlertDialogTitle>
+            <AlertDialogDescription>{t('delete.confirm')}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogClose render={<Button variant="ghost" />}>Cancel</AlertDialogClose>
+            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
+              {t('common.cancel')}
+            </AlertDialogClose>
             <AlertDialogClose
-              render={<Button variant="destructive" />}
+              className={buttonVariants({ variant: 'destructive' })}
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
             >
               {isDeleting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Deleting...
+                  {t('delete.deleting')}
                 </>
               ) : (
-                'Delete'
+                t('delete.delete')
               )}
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
 
-      {/* Reader Panel */}
-      {selectedEntryId && showReader && (
+      {/* Reader Panel - Entry from feed */}
+      {selectedEntryId && (
         <div key={selectedEntryId} className="reader-transition flex min-w-0 flex-1 flex-col">
           {isLoadingEntry ? (
             <ArticleReaderSkeleton />
@@ -425,29 +529,43 @@ export default function BookmarksPage() {
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
               showCloseButton
-              showFullscreenButton={!isMobile}
               hideReadStatus
             />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center bg-background">
+            <div className="bg-background flex flex-1 flex-col items-center justify-center">
               <div className="text-center">
-                <div className="mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl bg-muted">
-                  <BookOpen className="h-10 w-10 text-muted-foreground" />
+                <div className="bg-muted mb-4 inline-flex h-20 w-20 items-center justify-center rounded-2xl">
+                  <BookOpen className="text-muted-foreground h-10 w-10" />
                 </div>
-                <h3 className="font-display text-lg font-semibold text-foreground">Article not found</h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  The article may have been removed or is no longer available.
+                <h3 className="font-display text-foreground text-lg font-semibold">
+                  {t('emptyState.articleNotFound')}
+                </h3>
+                <p className="text-muted-foreground mt-1 text-sm">
+                  {t('emptyState.articleNotFoundDescription')}
                 </p>
-                <Button
-                  variant="ghost"
-                  className="mt-4"
-                  onClick={() => setSelectedEntryId(null)}
-                >
-                  Close
+                <Button variant="ghost" className="mt-4" onClick={() => setSelectedEntryId(null)}>
+                  {t('emptyState.close')}
                 </Button>
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Reader Panel - URL bookmark with extracted content */}
+      {selectedBookmark && (
+        <div key={selectedBookmark.id} className="reader-transition flex min-w-0 flex-1 flex-col">
+          <ArticleReader
+            entry={convertBookmarkToEntry(selectedBookmark)}
+            onClose={() => {
+              setSelectedBookmark(null)
+              setIsFullscreen(false)
+            }}
+            isFullscreen={isFullscreen}
+            onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+            showCloseButton
+            hideReadStatus
+          />
         </div>
       )}
     </div>
@@ -456,7 +574,6 @@ export default function BookmarksPage() {
 
 interface BookmarkCardProps {
   bookmark: Bookmark
-  isSelected?: boolean
   onClick: () => void
   onDelete: () => void
   onEdit: () => void
@@ -469,7 +586,6 @@ interface BookmarkCardProps {
 
 function BookmarkCard({
   bookmark,
-  isSelected = false,
   onClick,
   onDelete,
   onEdit,
@@ -479,6 +595,7 @@ function BookmarkCard({
   onCreateTag,
   style,
 }: BookmarkCardProps) {
+  const { t } = useTranslation('bookmarks')
   const [tagSearch, setTagSearch] = useState('')
   const [isCreatingTag, setIsCreatingTag] = useState(false)
 
@@ -488,9 +605,7 @@ function BookmarkCard({
   )
 
   // Check if search matches any existing tag
-  const exactMatch = allTags.some(
-    (tag) => tag.name.toLowerCase() === tagSearch.toLowerCase()
-  )
+  const exactMatch = allTags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
 
   // Current bookmark tag IDs
   const bookmarkTagIds = bookmark.tags.map((t) => t.id)
@@ -519,42 +634,32 @@ function BookmarkCard({
 
   return (
     <div
-      className={`card-hover animate-fade-in group relative overflow-hidden rounded-xl border p-4 transition-all ${
-        isSelected 
-          ? 'border-primary/50 bg-primary/5 ring-1 ring-inset ring-primary/20' 
-          : 'border-border bg-card'
-      }`}
+      className="card-hover animate-fade-in border-border bg-card group relative overflow-hidden rounded-xl border p-4 transition-all"
       style={style}
     >
       {/* Clickable Title */}
-      <button
-        onClick={onClick}
-        className="mb-2 block w-full text-left"
-      >
-        <h3 className="line-clamp-2 font-medium text-foreground transition-colors hover:text-primary">
+      <button onClick={onClick} className="mb-2 block w-full text-left">
+        <h3 className="text-foreground hover:text-primary line-clamp-2 font-medium transition-colors">
           {bookmark.title}
         </h3>
       </button>
 
       {/* Excerpt */}
       {bookmark.excerpt && (
-        <p className="mb-3 line-clamp-2 text-sm text-muted-foreground">
+        <p className="text-muted-foreground mb-3 line-clamp-2 text-sm">
           {stripHtmlTags(bookmark.excerpt)}
         </p>
       )}
 
       {/* Tags with Add Button */}
-      <div className="mb-3 flex flex-wrap items-center gap-1">
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
         {bookmark.tags.map((tag) => (
           <span
             key={tag.id}
-            className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+            className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
           >
             {tag.color && (
-              <span
-                className="h-1.5 w-1.5 rounded-full"
-                style={{ backgroundColor: tag.color }}
-              />
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
             )}
             {tag.name}
           </span>
@@ -563,23 +668,23 @@ function BookmarkCard({
         {/* Tag Combobox */}
         <Menu>
           <MenuTrigger
-            className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/30 px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+            render={<span />}
+            className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border border-dashed px-2 py-1 text-xs transition-colors"
             onClick={(e) => e.stopPropagation()}
           >
-            <Tags className="h-3 w-3" />
             <Plus className="h-3 w-3" />
           </MenuTrigger>
           <MenuPopup align="start" sideOffset={4} className="w-56">
             {/* Search Input */}
             <div className="p-2">
               <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Search or create tag..."
+                  placeholder={t('placeholders.searchTag')}
                   value={tagSearch}
                   onChange={(e) => setTagSearch(e.target.value)}
-                  className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-3 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus-visible:!shadow-none"
+                  className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
                   onClick={(e) => e.stopPropagation()}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && tagSearch.trim() && !exactMatch) {
@@ -596,8 +701,8 @@ function BookmarkCard({
             {/* Tag List */}
             <div className="max-h-48 overflow-y-auto py-1">
               {filteredTags.length === 0 && !tagSearch.trim() && (
-                <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  No tags yet. Type to create one.
+                <div className="text-muted-foreground px-2 py-3 text-center text-xs">
+                  {t('tags.noTagsYet')}
                 </div>
               )}
 
@@ -637,17 +742,17 @@ function BookmarkCard({
                       handleCreateNewTag()
                     }}
                     disabled={isCreatingTag}
-                    className="cursor-pointer text-primary"
+                    className="text-primary cursor-pointer"
                   >
                     {isCreatingTag ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        Creating...
+                        {t('tags.creating')}
                       </>
                     ) : (
                       <>
                         <Plus className="h-4 w-4" />
-                        Create &quot;{tagSearch.trim()}&quot;
+                        {t('tags.create', { name: tagSearch.trim() })}
                       </>
                     )}
                   </MenuItem>
@@ -659,23 +764,26 @@ function BookmarkCard({
       </div>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <div className="text-muted-foreground flex items-center justify-between text-xs">
         <div className="flex items-center gap-2">
           <span>{format(new Date(bookmark.created_at), 'MMM d, yyyy')}</span>
           {bookmark.entry_id && (
-            <span className="flex items-center gap-1 text-primary/70" title="Saved from feed">
+            <span
+              className="text-primary/70 flex items-center gap-1"
+              title={t('common.savedFromFeed')}
+            >
               <FileText className="h-3 w-3" />
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
           <button
             onClick={(e) => {
               e.stopPropagation()
               onEdit()
             }}
-            className="rounded p-1 hover:bg-accent hover:text-foreground"
-            title="Edit"
+            className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
+            title={t('common.edit')}
           >
             <Edit3 className="h-4 w-4" />
           </button>
@@ -685,8 +793,8 @@ function BookmarkCard({
               target="_blank"
               rel="noopener noreferrer"
               onClick={(e) => e.stopPropagation()}
-              className="rounded p-1 hover:bg-accent hover:text-foreground"
-              title="Open external link"
+              className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
+              title={t('common.openExternalLink')}
             >
               <ExternalLink className="h-4 w-4" />
             </a>
@@ -696,8 +804,8 @@ function BookmarkCard({
               e.stopPropagation()
               onDelete()
             }}
-            className="rounded p-1 text-destructive hover:bg-destructive/10"
-            title="Delete"
+            className="text-destructive hover:bg-destructive/10 touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
+            title={t('common.delete')}
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -706,7 +814,7 @@ function BookmarkCard({
 
       {/* Folders indicator */}
       {bookmark.folders.length > 0 && (
-        <div className="absolute right-2 top-2 flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+        <div className="bg-muted text-muted-foreground absolute top-2 right-2 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs">
           <FolderOpen className="h-3 w-3" />
           {bookmark.folders.length}
         </div>
@@ -717,7 +825,7 @@ function BookmarkCard({
 
 function BookmarkCardSkeleton() {
   return (
-    <div className="rounded-xl border border-border bg-card p-4">
+    <div className="border-border bg-card rounded-xl border p-4">
       <Skeleton className="mb-2 h-5 w-3/4" />
       <Skeleton className="mb-3 h-4 w-full" />
       <Skeleton className="mb-3 h-4 w-2/3" />
@@ -729,12 +837,271 @@ function BookmarkCardSkeleton() {
   )
 }
 
+/**
+ * Compact list item for list view
+ */
+function BookmarkListItem({
+  bookmark,
+  onClick,
+  onDelete,
+  onEdit,
+  allTags,
+  onAddTag,
+  onRemoveTag,
+  onCreateTag,
+  style,
+}: BookmarkCardProps) {
+  const { t } = useTranslation('bookmarks')
+  const [tagSearch, setTagSearch] = useState('')
+  const [isCreatingTag, setIsCreatingTag] = useState(false)
+
+  // Filter tags based on search
+  const filteredTags = allTags.filter((tag) =>
+    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
+  )
+
+  // Check if search matches any existing tag
+  const exactMatch = allTags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
+
+  // Current bookmark tag IDs
+  const bookmarkTagIds = bookmark.tags.map((t) => t.id)
+
+  const handleTagToggle = async (tagId: string, isSelected: boolean) => {
+    if (isSelected) {
+      await onRemoveTag(bookmark.id, tagId)
+    } else {
+      await onAddTag(bookmark.id, tagId)
+    }
+  }
+
+  const handleCreateNewTag = async () => {
+    if (!tagSearch.trim() || exactMatch) return
+    setIsCreatingTag(true)
+    try {
+      const newTagId = await onCreateTag(tagSearch.trim())
+      if (newTagId) {
+        await onAddTag(bookmark.id, newTagId)
+      }
+      setTagSearch('')
+    } finally {
+      setIsCreatingTag(false)
+    }
+  }
+
+  return (
+    <div
+      className="card-hover animate-fade-in border-border bg-card group flex items-center gap-4 rounded-lg border px-4 py-3 transition-all"
+      style={style}
+    >
+      {/* Main content - clickable */}
+      <button onClick={onClick} className="min-w-0 flex-1 text-left">
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-foreground hover:text-primary line-clamp-1 font-medium transition-colors">
+              {bookmark.title}
+            </h3>
+            {bookmark.excerpt && (
+              <p className="text-muted-foreground mt-0.5 line-clamp-1 text-sm">
+                {stripHtmlTags(bookmark.excerpt)}
+              </p>
+            )}
+          </div>
+        </div>
+      </button>
+
+      {/* Tags */}
+      <div className="hidden shrink-0 items-center gap-1.5 md:flex">
+        {bookmark.tags.slice(0, 2).map((tag) => (
+          <span
+            key={tag.id}
+            className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
+          >
+            {tag.color && (
+              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
+            )}
+            {tag.name}
+          </span>
+        ))}
+        {bookmark.tags.length > 2 && (
+          <span className="text-muted-foreground text-xs">+{bookmark.tags.length - 2}</span>
+        )}
+
+        {/* Tag Combobox */}
+        <Menu>
+          <MenuTrigger
+            render={<span />}
+            className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border border-dashed px-2 py-1 text-xs opacity-0 transition-all group-hover:opacity-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Plus className="h-3 w-3" />
+          </MenuTrigger>
+          <MenuPopup align="end" sideOffset={4} className="w-56">
+            {/* Search Input */}
+            <div className="p-2">
+              <div className="relative">
+                <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder={t('placeholders.searchTag')}
+                  value={tagSearch}
+                  onChange={(e) => setTagSearch(e.target.value)}
+                  className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && tagSearch.trim() && !exactMatch) {
+                      e.preventDefault()
+                      handleCreateNewTag()
+                    }
+                  }}
+                />
+              </div>
+            </div>
+
+            <MenuSeparator />
+
+            {/* Tag List */}
+            <div className="max-h-48 overflow-y-auto py-1">
+              {filteredTags.length === 0 && !tagSearch.trim() && (
+                <div className="text-muted-foreground px-2 py-3 text-center text-xs">
+                  {t('tags.noTagsYet')}
+                </div>
+              )}
+
+              {filteredTags.map((tag) => {
+                const isSelected = bookmarkTagIds.includes(tag.id)
+                return (
+                  <MenuCheckboxItem
+                    key={tag.id}
+                    checked={isSelected}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      handleTagToggle(tag.id, isSelected)
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <span className="flex items-center gap-2">
+                      {tag.color && (
+                        <span
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: tag.color }}
+                        />
+                      )}
+                      {tag.name}
+                    </span>
+                  </MenuCheckboxItem>
+                )
+              })}
+
+              {/* Create New Tag Option */}
+              {tagSearch.trim() && !exactMatch && (
+                <>
+                  {filteredTags.length > 0 && <MenuSeparator />}
+                  <MenuItem
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      handleCreateNewTag()
+                    }}
+                    disabled={isCreatingTag}
+                    className="text-primary cursor-pointer"
+                  >
+                    {isCreatingTag ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        {t('tags.creating')}
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="h-4 w-4" />
+                        {t('tags.create', { name: tagSearch.trim() })}
+                      </>
+                    )}
+                  </MenuItem>
+                </>
+              )}
+            </div>
+          </MenuPopup>
+        </Menu>
+      </div>
+
+      {/* Date and source indicator */}
+      <div className="text-muted-foreground hidden shrink-0 items-center gap-2 text-xs sm:flex">
+        <span>{format(new Date(bookmark.created_at), 'MMM d, yyyy')}</span>
+        {bookmark.entry_id && (
+          <span className="text-primary/70" title={t('common.savedFromFeed')}>
+            <FileText className="h-3 w-3" />
+          </span>
+        )}
+        {bookmark.folders.length > 0 && (
+          <span className="flex items-center gap-0.5" title="In folders">
+            <FolderOpen className="h-3 w-3" />
+            {bookmark.folders.length}
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onEdit()
+          }}
+          className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
+          title={t('common.edit')}
+        >
+          <Edit3 className="h-4 w-4" />
+        </button>
+        {bookmark.url && (
+          <a
+            href={bookmark.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
+            title={t('common.openExternalLink')}
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        )}
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onDelete()
+          }}
+          className="text-destructive hover:bg-destructive/10 touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
+          title={t('common.delete')}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function BookmarkListItemSkeleton() {
+  return (
+    <div className="border-border bg-card flex items-center gap-4 rounded-lg border px-4 py-3">
+      <div className="min-w-0 flex-1">
+        <Skeleton className="mb-1 h-5 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+      <div className="hidden gap-1 sm:flex">
+        <Skeleton className="h-5 w-12 rounded-full" />
+        <Skeleton className="h-5 w-16 rounded-full" />
+      </div>
+      <Skeleton className="hidden h-4 w-20 sm:block" />
+    </div>
+  )
+}
+
 interface CreateBookmarkDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
 }
 
 function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps) {
+  const { t } = useTranslation('bookmarks')
   const { createBookmark } = useBookmarkStore()
   const { bookmarkFolders } = useFolderStore()
   const { tags } = useTagStore()
@@ -750,7 +1117,7 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!url && !title) {
-      setError('Please provide a URL or title')
+      setError(t('dialogs.createBookmark.error.urlOrTitleRequired'))
       return
     }
 
@@ -773,7 +1140,7 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
       setSelectedTags([])
       onOpenChange(false)
     } catch (err) {
-      setError('Failed to create bookmark')
+      setError(t('dialogs.createBookmark.error.failedToCreate'))
       console.error('Failed to create bookmark:', err)
     } finally {
       setIsSubmitting(false)
@@ -797,16 +1164,14 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
       <DialogPopup className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle>Add Bookmark</DialogTitle>
-            <DialogDescription>
-              Save a URL or create a note for later reading.
-            </DialogDescription>
+            <DialogTitle>{t('dialogs.createBookmark.title')}</DialogTitle>
+            <DialogDescription>{t('dialogs.createBookmark.description')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 px-6 py-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                URL
+              <label className="text-foreground mb-1.5 block text-sm font-medium">
+                {t('dialogs.createBookmark.url')}
               </label>
               <Input
                 type="url"
@@ -817,34 +1182,34 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Title
+              <label className="text-foreground mb-1.5 block text-sm font-medium">
+                {t('dialogs.createBookmark.title')}
               </label>
               <Input
                 type="text"
-                placeholder="Article title"
+                placeholder={t('placeholders.articleTitle')}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
               />
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-foreground">
-                Notes
+              <label className="text-foreground mb-1.5 block text-sm font-medium">
+                {t('dialogs.createBookmark.notes')}
               </label>
               <textarea
-                placeholder="Add a note..."
+                placeholder={t('placeholders.addNote')}
                 value={excerpt}
                 onChange={(e) => setExcerpt(e.target.value)}
-                className="h-24 w-full resize-none overflow-y-auto rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/64 focus:border-ring focus:outline-none focus:ring-[3px] focus:ring-ring/24"
+                className="border-input bg-background text-foreground placeholder:text-muted-foreground/64 focus:border-ring focus:ring-ring/24 h-24 w-full resize-none overflow-y-auto rounded-lg border px-3 py-2 text-sm focus:ring-[3px] focus:outline-none"
               />
             </div>
 
             {/* Folder selection */}
             {bookmarkFolders.length > 0 && (
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Folders
+                <label className="text-foreground mb-1.5 block text-sm font-medium">
+                  {t('dialogs.createBookmark.folders')}
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {bookmarkFolders.map((folder) => (
@@ -869,8 +1234,8 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
             {/* Tag selection */}
             {tags.length > 0 && (
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-foreground">
-                  Tags
+                <label className="text-foreground mb-1.5 block text-sm font-medium">
+                  {t('dialogs.createBookmark.tags')}
                 </label>
                 <div className="flex flex-wrap gap-1.5">
                   {tags.map((tag) => (
@@ -897,21 +1262,21 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
               </div>
             )}
 
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
 
           <DialogFooter>
-            <DialogClose render={<Button type="button" variant="ghost" />}>
-              Cancel
+            <DialogClose className={buttonVariants({ variant: 'ghost' })}>
+              {t('dialogs.createBookmark.cancel')}
             </DialogClose>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Saving...
+                  {t('dialogs.createBookmark.saving')}
                 </>
               ) : (
-                'Save Bookmark'
+                t('dialogs.createBookmark.save')
               )}
             </Button>
           </DialogFooter>
@@ -940,6 +1305,7 @@ interface EditBookmarkDialogProps {
 }
 
 function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDialogProps) {
+  const { t } = useTranslation('bookmarks')
   const { updateBookmark, addFolder, removeFolder, addTag, removeTag } = useBookmarkStore()
   const { createFolder } = useFolderStore()
   const { createTag } = useTagStore()
@@ -973,7 +1339,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
   const handleSave = async () => {
     if (!bookmark) return
     if (!title.trim()) {
-      setError('Title is required')
+      setError(t('dialogs.editBookmark.error.titleRequired'))
       return
     }
 
@@ -1013,7 +1379,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
       onClose()
     } catch (err) {
-      setError('Failed to update bookmark')
+      setError(t('dialogs.editBookmark.error.failedToUpdate'))
       console.error('Failed to update bookmark:', err)
     } finally {
       setIsSubmitting(false)
@@ -1033,7 +1399,10 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
   }
 
   // Flatten folders for selection
-  const flattenFolders = (nodes: FolderTreeNode[], level = 0): Array<FolderTreeNode & { level: number }> => {
+  const flattenFolders = (
+    nodes: FolderTreeNode[],
+    level = 0
+  ): Array<FolderTreeNode & { level: number }> => {
     const result: Array<FolderTreeNode & { level: number }> = []
     for (const node of nodes) {
       result.push({ ...node, level })
@@ -1058,9 +1427,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
   const folderExactMatch = flatFolders.some(
     (folder) => folder.name.toLowerCase() === folderSearch.toLowerCase()
   )
-  const tagExactMatch = tags.some(
-    (tag) => tag.name.toLowerCase() === tagSearch.toLowerCase()
-  )
+  const tagExactMatch = tags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
 
   // Handle creating new folder
   const handleCreateNewFolder = async () => {
@@ -1100,21 +1467,19 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
     <Dialog open={!!bookmark} onOpenChange={(open) => !open && onClose()}>
       <DialogPopup className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>Edit Bookmark</DialogTitle>
-          <DialogDescription>
-            Update bookmark details, folders, and tags.
-          </DialogDescription>
+          <DialogTitle>{t('dialogs.editBookmark.title')}</DialogTitle>
+          <DialogDescription>{t('dialogs.editBookmark.description')}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 px-6 py-4">
           {/* Title */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Title
+            <label className="text-foreground mb-1.5 block text-sm font-medium">
+              {t('dialogs.editBookmark.title')}
             </label>
             <Input
               type="text"
-              placeholder="Bookmark title"
+              placeholder={t('placeholders.bookmarkTitle')}
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
@@ -1122,25 +1487,25 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
           {/* Excerpt / Notes */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Notes
+            <label className="text-foreground mb-1.5 block text-sm font-medium">
+              {t('dialogs.editBookmark.notes')}
             </label>
             <textarea
-              placeholder="Add notes..."
+              placeholder={t('placeholders.bookmarkNotes')}
               value={excerpt}
               onChange={(e) => setExcerpt(e.target.value)}
-              className="h-24 w-full resize-none overflow-y-auto rounded-lg border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/64 focus:border-ring focus:outline-none focus:ring-[3px] focus:ring-ring/24"
+              className="border-input bg-background text-foreground placeholder:text-muted-foreground/64 focus:border-ring focus:ring-ring/24 h-24 w-full resize-none overflow-y-auto rounded-lg border px-3 py-2 text-sm focus:ring-[3px] focus:outline-none"
             />
           </div>
 
           {/* Source info */}
           {bookmark && (
-            <div className="rounded-lg bg-muted/50 p-3">
-              <p className="text-xs text-muted-foreground">
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-muted-foreground text-xs">
                 {bookmark.entry_id ? (
                   <span className="flex items-center gap-1.5">
                     <FileText className="h-3.5 w-3.5" />
-                    Saved from feed
+                    {t('dialogs.editBookmark.source.savedFromFeed')}
                   </span>
                 ) : bookmark.url ? (
                   <span className="flex items-center gap-1.5">
@@ -1155,7 +1520,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                     </a>
                   </span>
                 ) : (
-                  'No source'
+                  t('dialogs.editBookmark.source.noSource')
                 )}
               </p>
             </div>
@@ -1163,8 +1528,8 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
           {/* Folders */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Folders
+            <label className="text-foreground mb-1.5 block text-sm font-medium">
+              {t('dialogs.editBookmark.folders')}
             </label>
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Selected folders */}
@@ -1174,14 +1539,14 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                 return (
                   <span
                     key={folder.id}
-                    className="inline-flex items-center gap-1 rounded-lg bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                    className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-lg px-2.5 py-1 text-xs font-medium"
                   >
                     <FolderOpen className="h-3 w-3" />
                     {folder.name}
                     <button
                       type="button"
                       onClick={() => toggleFolder(folder.id)}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-accent"
+                      className="hover:bg-accent ml-0.5 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -1191,9 +1556,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
               {/* Folder Combobox */}
               <Menu>
-                <MenuTrigger
-                  className="inline-flex items-center gap-1 rounded-lg border border-dashed border-muted-foreground/30 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-                >
+                <MenuTrigger className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex items-center gap-1 rounded-lg border border-dashed px-2.5 py-1 text-xs transition-colors">
                   <FolderOpen className="h-3 w-3" />
                   <Plus className="h-3 w-3" />
                 </MenuTrigger>
@@ -1201,13 +1564,13 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                   {/* Search Input */}
                   <div className="p-2">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="Search or create folder..."
+                        placeholder={t('placeholders.searchFolder')}
                         value={folderSearch}
                         onChange={(e) => setFolderSearch(e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-3 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus-visible:!shadow-none"
+                        className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && folderSearch.trim() && !folderExactMatch) {
                             e.preventDefault()
@@ -1223,7 +1586,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                   {/* Folder List */}
                   <div className="max-h-48 overflow-y-auto py-1">
                     {filteredFolders.length === 0 && !folderSearch.trim() && (
-                      <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                      <div className="text-muted-foreground px-2 py-3 text-center text-xs">
                         No folders yet. Type to create one.
                       </div>
                     )}
@@ -1259,7 +1622,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                             handleCreateNewFolder()
                           }}
                           disabled={isCreatingFolder}
-                          className="cursor-pointer text-primary"
+                          className="text-primary cursor-pointer"
                         >
                           {isCreatingFolder ? (
                             <>
@@ -1283,8 +1646,8 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
           {/* Tags */}
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-foreground">
-              Tags
+            <label className="text-foreground mb-1.5 block text-sm font-medium">
+              {t('dialogs.editBookmark.tags')}
             </label>
             <div className="flex flex-wrap items-center gap-1.5">
               {/* Selected tags */}
@@ -1294,7 +1657,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                 return (
                   <span
                     key={tag.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                    className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
                   >
                     {tag.color && (
                       <span
@@ -1306,7 +1669,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                     <button
                       type="button"
                       onClick={() => toggleTag(tag.id)}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-accent"
+                      className="hover:bg-accent ml-0.5 rounded-full p-0.5"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -1316,9 +1679,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
               {/* Tag Combobox */}
               <Menu>
-                <MenuTrigger
-                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-muted-foreground/30 px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary"
-                >
+                <MenuTrigger className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs transition-colors">
                   <Tags className="h-3 w-3" />
                   <Plus className="h-3 w-3" />
                 </MenuTrigger>
@@ -1326,13 +1687,13 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                   {/* Search Input */}
                   <div className="p-2">
                     <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
                       <input
                         type="text"
-                        placeholder="Search or create tag..."
+                        placeholder={t('placeholders.searchTag')}
                         value={tagSearch}
                         onChange={(e) => setTagSearch(e.target.value)}
-                        className="h-8 w-full rounded-md border border-input bg-transparent pl-8 pr-3 text-sm placeholder:text-muted-foreground/60 focus:border-primary focus-visible:!shadow-none"
+                        className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && tagSearch.trim() && !tagExactMatch) {
                             e.preventDefault()
@@ -1348,7 +1709,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                   {/* Tag List */}
                   <div className="max-h-48 overflow-y-auto py-1">
                     {filteredTags.length === 0 && !tagSearch.trim() && (
-                      <div className="px-2 py-3 text-center text-xs text-muted-foreground">
+                      <div className="text-muted-foreground px-2 py-3 text-center text-xs">
                         No tags yet. Type to create one.
                       </div>
                     )}
@@ -1388,7 +1749,7 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                             handleCreateNewTag()
                           }}
                           disabled={isCreatingTag}
-                          className="cursor-pointer text-primary"
+                          className="text-primary cursor-pointer"
                         >
                           {isCreatingTag ? (
                             <>
@@ -1410,21 +1771,21 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
             </div>
           </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <p className="text-destructive text-sm">{error}</p>}
         </div>
 
         <DialogFooter>
-          <DialogClose render={<Button type="button" variant="ghost" />}>
-            Cancel
+          <DialogClose className={buttonVariants({ variant: 'ghost' })}>
+            {t('dialogs.editBookmark.cancel')}
           </DialogClose>
           <Button onClick={handleSave} disabled={isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Saving...
+                {t('dialogs.editBookmark.saving')}
               </>
             ) : (
-              'Save Changes'
+              t('dialogs.editBookmark.save')
             )}
           </Button>
         </DialogFooter>
@@ -1432,51 +1793,3 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
     </Dialog>
   )
 }
-
-/**
- * Resize handle for dragging to resize panels.
- */
-function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
-  const [isDragging, setIsDragging] = useState(false)
-  const startXRef = useRef(0)
-
-  useEffect(() => {
-    if (!isDragging) return
-
-    const handleMouseMove = (e: MouseEvent) => {
-      const delta = e.clientX - startXRef.current
-      startXRef.current = e.clientX
-      onResize(delta)
-    }
-
-    const handleMouseUp = () => {
-      setIsDragging(false)
-    }
-
-    document.addEventListener('mousemove', handleMouseMove)
-    document.addEventListener('mouseup', handleMouseUp)
-
-    return () => {
-      document.removeEventListener('mousemove', handleMouseMove)
-      document.removeEventListener('mouseup', handleMouseUp)
-    }
-  }, [isDragging, onResize])
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    e.preventDefault()
-    startXRef.current = e.clientX
-    setIsDragging(true)
-  }
-
-  return (
-    <div
-      className={`group relative w-1 cursor-col-resize transition-colors ${
-        isDragging ? 'bg-primary' : 'bg-border hover:bg-primary/50'
-      }`}
-      onMouseDown={handleMouseDown}
-    >
-      <div className="absolute inset-y-0 -left-1 -right-1" />
-    </div>
-  )
-}
-

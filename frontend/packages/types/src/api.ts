@@ -35,6 +35,12 @@ export interface ApiError {
   code?: string
 }
 
+/** Health check response */
+export interface HealthCheckResponse {
+  status: string
+  version?: string
+}
+
 /** Login request */
 export interface LoginRequest {
   email: string
@@ -69,15 +75,35 @@ export interface UpdateSubscriptionRequest {
 /** Update entry state request */
 export interface UpdateEntryStateRequest {
   is_read?: boolean
-  is_liked?: boolean | null  // null to clear like/dislike
+  is_liked?: boolean | null // null to clear like/dislike
   read_later?: boolean
 }
 
 /** Entry list response */
 export type EntryListResponse = PaginatedResponse<EntryWithState>
 
-/** Subscription list response */
-export type SubscriptionListResponse = Subscription[]
+/** Subscription list response (paginated) */
+export interface SubscriptionListResponse {
+  items: Subscription[]
+  total: number
+  page: number
+  per_page: number
+  total_pages: number
+}
+
+/** Subscription sync response (all subscriptions with ETag) */
+export interface SubscriptionSyncResponse {
+  items: Subscription[]
+  etag: string
+}
+
+/** Subscription list params */
+export interface SubscriptionListParams {
+  page?: number
+  per_page?: number
+  folder_id?: string | null
+  search?: string
+}
 
 /** OPML import response */
 export interface OPMLImportResponse {

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { bookmarkService, type BookmarkListParams } from '@glean/api-client'
+import { logger } from '@glean/logger'
 import type { Bookmark, CreateBookmarkRequest, UpdateBookmarkRequest } from '@glean/types'
 
 interface BookmarkPagination {
@@ -38,7 +39,7 @@ export function useBookmarks() {
         setFilters(finalParams)
       } catch (err) {
         setError('Failed to load bookmarks')
-        console.error('Failed to fetch bookmarks:', err)
+        logger.error('Failed to fetch bookmarks:', err)
       } finally {
         setLoading(false)
       }
@@ -54,7 +55,7 @@ export function useBookmarks() {
         return bookmark
       } catch (err) {
         setError('Failed to create bookmark')
-        console.error('Failed to create bookmark:', err)
+        logger.error('Failed to create bookmark:', err)
         return null
       }
     },
@@ -65,45 +66,38 @@ export function useBookmarks() {
     async (bookmarkId: string, data: UpdateBookmarkRequest): Promise<Bookmark | null> => {
       try {
         const bookmark = await bookmarkService.updateBookmark(bookmarkId, data)
-        setBookmarks((prev) =>
-          prev.map((b) => (b.id === bookmarkId ? bookmark : b))
-        )
+        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
         return bookmark
       } catch (err) {
         setError('Failed to update bookmark')
-        console.error('Failed to update bookmark:', err)
+        logger.error('Failed to update bookmark:', err)
         return null
       }
     },
     []
   )
 
-  const deleteBookmark = useCallback(
-    async (bookmarkId: string): Promise<boolean> => {
-      try {
-        await bookmarkService.deleteBookmark(bookmarkId)
-        setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId))
-        return true
-      } catch (err) {
-        setError('Failed to delete bookmark')
-        console.error('Failed to delete bookmark:', err)
-        return false
-      }
-    },
-    []
-  )
+  const deleteBookmark = useCallback(async (bookmarkId: string): Promise<boolean> => {
+    try {
+      await bookmarkService.deleteBookmark(bookmarkId)
+      setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId))
+      return true
+    } catch (err) {
+      setError('Failed to delete bookmark')
+      logger.error('Failed to delete bookmark:', err)
+      return false
+    }
+  }, [])
 
   const addFolder = useCallback(
     async (bookmarkId: string, folderId: string): Promise<Bookmark | null> => {
       try {
         const bookmark = await bookmarkService.addFolder(bookmarkId, folderId)
-        setBookmarks((prev) =>
-          prev.map((b) => (b.id === bookmarkId ? bookmark : b))
-        )
+        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
         return bookmark
       } catch (err) {
         setError('Failed to add folder')
-        console.error('Failed to add folder to bookmark:', err)
+        logger.error('Failed to add folder to bookmark:', err)
         return null
       }
     },
@@ -114,13 +108,11 @@ export function useBookmarks() {
     async (bookmarkId: string, folderId: string): Promise<Bookmark | null> => {
       try {
         const bookmark = await bookmarkService.removeFolder(bookmarkId, folderId)
-        setBookmarks((prev) =>
-          prev.map((b) => (b.id === bookmarkId ? bookmark : b))
-        )
+        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
         return bookmark
       } catch (err) {
         setError('Failed to remove folder')
-        console.error('Failed to remove folder from bookmark:', err)
+        logger.error('Failed to remove folder from bookmark:', err)
         return null
       }
     },
@@ -131,13 +123,11 @@ export function useBookmarks() {
     async (bookmarkId: string, tagId: string): Promise<Bookmark | null> => {
       try {
         const bookmark = await bookmarkService.addTag(bookmarkId, tagId)
-        setBookmarks((prev) =>
-          prev.map((b) => (b.id === bookmarkId ? bookmark : b))
-        )
+        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
         return bookmark
       } catch (err) {
         setError('Failed to add tag')
-        console.error('Failed to add tag to bookmark:', err)
+        logger.error('Failed to add tag to bookmark:', err)
         return null
       }
     },
@@ -148,13 +138,11 @@ export function useBookmarks() {
     async (bookmarkId: string, tagId: string): Promise<Bookmark | null> => {
       try {
         const bookmark = await bookmarkService.removeTag(bookmarkId, tagId)
-        setBookmarks((prev) =>
-          prev.map((b) => (b.id === bookmarkId ? bookmark : b))
-        )
+        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
         return bookmark
       } catch (err) {
         setError('Failed to remove tag')
-        console.error('Failed to remove tag from bookmark:', err)
+        logger.error('Failed to remove tag from bookmark:', err)
         return null
       }
     },
@@ -177,4 +165,3 @@ export function useBookmarks() {
     removeTag,
   }
 }
-

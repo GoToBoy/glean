@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { Rss, AlertCircle, Sparkles } from 'lucide-react'
+import { Rss, AlertCircle, Sparkles, Server } from 'lucide-react'
 import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
+import { useTranslation } from '@glean/i18n'
+import { ApiConfigDialog } from '../components/ApiConfigDialog'
 
 /**
  * Login page.
@@ -10,6 +12,7 @@ import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glea
  * Provides user authentication form with email and password.
  */
 export default function LoginPage() {
+  const { t } = useTranslation('auth')
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isLoading, error, clearError } = useAuthStore()
@@ -18,7 +21,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [validationError, setValidationError] = useState('')
 
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname || '/reader'
+  const from =
+    (location.state as { from?: { pathname: string } })?.from?.pathname ||
+    '/reader?view=smart&tab=unread'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -26,14 +31,14 @@ export default function LoginPage() {
     clearError()
 
     if (!email || !password) {
-      setValidationError('Please fill in all fields')
+      setValidationError(t('validation.required'))
       return
     }
 
     try {
       await login(email, password)
       navigate(from, { replace: true })
-    } catch (err) {
+    } catch {
       // Error is handled by store
     }
   }
@@ -41,14 +46,14 @@ export default function LoginPage() {
   const displayError = validationError || error
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4">
+    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden px-4">
       {/* Background decorations */}
-      <div className="absolute inset-0 bg-pattern" />
-      <div className="absolute -left-48 -top-48 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
-      <div className="absolute -bottom-48 -right-48 h-96 w-96 rounded-full bg-secondary/10 blur-3xl" />
-      
+      <div className="bg-pattern absolute inset-0" />
+      <div className="bg-primary/10 absolute -top-48 -left-48 h-96 w-96 rounded-full blur-3xl" />
+      <div className="bg-secondary/10 absolute -right-48 -bottom-48 h-96 w-96 rounded-full blur-3xl" />
+
       {/* Grid pattern overlay */}
-      <div 
+      <div
         className="absolute inset-0 opacity-[0.02]"
         style={{
           backgroundImage: `linear-gradient(hsl(var(--foreground)) 1px, transparent 1px),
@@ -57,23 +62,23 @@ export default function LoginPage() {
         }}
       />
 
-      <div className="relative z-10 w-full max-w-md animate-fade-in">
+      <div className="animate-fade-in relative z-10 w-full max-w-md">
         {/* Logo and title */}
         <div className="mb-8 text-center">
           <div className="mb-6 flex justify-center">
             <div className="relative">
-              <div className="absolute inset-0 animate-pulse-glow rounded-2xl" />
-              <div className="relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-primary-500 to-primary-600 shadow-lg shadow-primary/30">
-                <Rss className="h-10 w-10 text-primary-foreground" />
+              <div className="animate-pulse-glow absolute inset-0 rounded-2xl" />
+              <div className="from-primary-500 to-primary-600 shadow-primary/30 relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg">
+                <Rss className="text-primary-foreground h-10 w-10" />
               </div>
             </div>
           </div>
-          <h1 className="font-display text-4xl font-bold tracking-tight text-foreground">
-            Welcome back
+          <h1 className="font-display text-foreground text-4xl font-bold tracking-tight">
+            {t('login.title')}
           </h1>
-          <p className="mt-3 flex items-center justify-center gap-2 text-muted-foreground">
-            <Sparkles className="h-4 w-4 text-primary" />
-            <span>Sign in to continue to Glean</span>
+          <p className="text-muted-foreground mt-3 flex items-center justify-center gap-2">
+            <Sparkles className="text-primary h-4 w-4" />
+            <span>{t('login.subtitle')}</span>
           </p>
         </div>
 
@@ -84,15 +89,15 @@ export default function LoginPage() {
             {displayError && (
               <Alert variant="error">
                 <AlertCircle />
-                <AlertTitle>Error</AlertTitle>
+                <AlertTitle>{t('errors.loginFailed')}</AlertTitle>
                 <AlertDescription>{displayError}</AlertDescription>
               </Alert>
             )}
 
             {/* Email field */}
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-medium text-foreground">
-                Email
+              <Label htmlFor="email" className="text-foreground text-sm font-medium">
+                {t('login.email')}
               </Label>
               <Input
                 id="email"
@@ -101,33 +106,33 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 disabled={isLoading}
-                className="w-full transition-all duration-200 focus-within:ring-primary"
+                className="focus-within:ring-primary w-full transition-all duration-200"
               />
             </div>
 
             {/* Password field */}
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium text-foreground">
-                Password
+              <Label htmlFor="password" className="text-foreground text-sm font-medium">
+                {t('login.password')}
               </Label>
               <Input
                 id="password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
+                placeholder={t('login.password')}
                 disabled={isLoading}
                 className="w-full transition-all duration-200"
               />
             </div>
 
             {/* Submit button */}
-            <Button 
-              type="submit" 
-              disabled={isLoading} 
+            <Button
+              type="submit"
+              disabled={isLoading}
               className="btn-glow w-full py-3 text-base font-semibold transition-all duration-300"
             >
-              {isLoading ? 'Signing in...' : 'Sign in'}
+              {isLoading ? t('login.signingIn') : t('login.signIn')}
             </Button>
           </form>
 
@@ -135,24 +140,36 @@ export default function LoginPage() {
           <div className="mt-8 text-center">
             <div className="relative">
               <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-border" />
+                <div className="border-border w-full border-t" />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card px-2 text-muted-foreground">New to Glean?</span>
+                <span className="bg-card text-muted-foreground px-2">{t('login.noAccount')}</span>
               </div>
             </div>
-            <Link 
-              to="/register" 
-              className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-primary transition-colors hover:bg-primary/10"
+            <Link
+              to="/register"
+              className="text-primary hover:bg-primary/10 mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
             >
-              Create an account
+              {t('register.createAccount')}
               <span aria-hidden="true">→</span>
             </Link>
           </div>
+
+          {/* Server configuration - Electron only */}
+          {window.electronAPI?.isElectron && (
+            <div className="border-border mt-6 flex justify-center border-t pt-6">
+              <ApiConfigDialog>
+                <button className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 text-xs transition-colors">
+                  <Server className="h-3.5 w-3.5" />
+                  {t('config.configureServer')}
+                </button>
+              </ApiConfigDialog>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <p className="mt-8 text-center text-sm text-muted-foreground">
+        <p className="text-muted-foreground mt-8 text-center text-sm">
           Glean — Your personal knowledge sanctuary
         </p>
       </div>
