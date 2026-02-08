@@ -32,13 +32,16 @@ COPY packages/database/pyproject.toml packages/database/pyproject.toml
 COPY packages/rss/pyproject.toml packages/rss/pyproject.toml
 COPY packages/vector/pyproject.toml packages/vector/pyproject.toml
 
-# Install dependencies (cached unless pyproject.toml or uv.lock changes)
-RUN uv sync --all-packages --no-dev
+# Install third-party dependencies only (cached unless pyproject.toml or uv.lock changes)
+RUN uv sync --all-packages --no-dev --no-install-workspace
 
 # Copy source code and scripts (changes often, but doesn't bust dep cache)
 COPY apps/ apps/
 COPY packages/ packages/
 COPY scripts/ scripts/
+
+# Install workspace packages (fast, no downloads needed)
+RUN uv sync --all-packages --no-dev
 
 # Make scripts executable
 RUN chmod +x scripts/*.sh 2>/dev/null || true
