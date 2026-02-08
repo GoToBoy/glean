@@ -140,7 +140,7 @@ export function TranslationTab() {
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('translation.model')}
           </Label>
-          <Select value={model} onValueChange={setModel}>
+          <Select value={model} onValueChange={(v) => v && setModel(v)}>
             <SelectTrigger className="w-full max-w-xs">
               <SelectValue>
                 {OPENAI_MODELS.find((m) => m.value === model)?.label ?? model}
