@@ -1525,6 +1525,49 @@ body {
 }
 
 /* ==========================================================================
+   Sentence-Level Translation Styles (Viewport-based)
+   ========================================================================== */
+
+/* Translation lines inserted after each block element */
+.prose .glean-translation-line {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: hsl(38 70% 65%);
+  border-left: 2px solid hsl(38 80% 50% / 0.25);
+  padding-left: 0.75em;
+  margin-top: 0.15em;
+  margin-bottom: 0.75em;
+  opacity: 0;
+  animation: glean-translation-fade-in 0.3s ease-out forwards;
+}
+
+.prose .glean-translation-line > div {
+  margin-bottom: 0.25em;
+}
+
+.prose .glean-translation-line > div:last-child {
+  margin-bottom: 0;
+}
+
+@keyframes glean-translation-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 0.85;
+    transform: translateY(0);
+  }
+}
+
+/* Light theme */
+[data-theme="light"] .prose .glean-translation-line {
+  color: hsl(220 40% 45%);
+  border-left-color: hsl(38 80% 45% / 0.3);
+}
+
+/* ==========================================================================
    Reader Action Button Animations
    ========================================================================== */
 

@@ -83,3 +83,18 @@ class TranslationResponse(BaseModel):
     translated_content: str | None = None
     status: str  # pending / processing / done / failed
     error: str | None = None
+
+
+class TranslateTextsRequest(BaseModel):
+    """Request to translate an array of text strings (viewport-based)."""
+
+    texts: list[str]
+    target_language: str  # e.g. "zh-CN", "en"
+    source_language: str = "auto"
+
+
+class TranslateTextsResponse(BaseModel):
+    """Response with translated text strings."""
+
+    translations: list[str]
+    target_language: str

@@ -296,3 +296,15 @@ export interface TranslationResponse {
   status: 'pending' | 'processing' | 'done' | 'failed'
   error: string | null
 }
+
+// Viewport-based translation types
+export interface TranslateTextsRequest {
+  texts: string[]
+  target_language: string
+  source_language?: string
+}
+
+export interface TranslateTextsResponse {
+  translations: string[]
+  target_language: string
+}

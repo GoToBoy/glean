@@ -1,6 +1,7 @@
 import type {
   EntryWithState,
   EntryListResponse,
+  TranslateTextsResponse,
   TranslationResponse,
   UpdateEntryStateRequest,
 } from '@glean/types'
@@ -99,5 +100,21 @@ export class EntryService {
    */
   async getTranslation(entryId: string, targetLanguage: string): Promise<TranslationResponse> {
     return this.client.get<TranslationResponse>(`/entries/${entryId}/translation/${targetLanguage}`)
+  }
+
+  /**
+   * Translate an array of text strings synchronously.
+   * Used for viewport-based sentence-level translation.
+   */
+  async translateTexts(
+    texts: string[],
+    targetLanguage: string,
+    sourceLanguage: string = 'auto',
+  ): Promise<TranslateTextsResponse> {
+    return this.client.post<TranslateTextsResponse>('/entries/translate-texts', {
+      texts,
+      target_language: targetLanguage,
+      source_language: sourceLanguage,
+    })
   }
 }

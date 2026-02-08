@@ -127,7 +127,7 @@ def _translate_html_bilingual(html_content: str, source: str, target: str) -> st
         texts = [t for _, t in batch]
         combined = separator.join(texts)
 
-        if len(combined) <= CHUNK_SIZE:
+        if len(combined) <= CHUNK_SIZE and all(len(t) <= CHUNK_SIZE for _, t in batch):
             translated_combined: str = translator.translate(combined)
             translated_parts = translated_combined.split("|||")
 
@@ -141,7 +141,7 @@ def _translate_html_bilingual(html_content: str, source: str, target: str) -> st
         else:
             # Translate individually if batch is too long
             for el, text in batch:
-                translated: str = translator.translate(text)
+                translated = _translate_text(text, source, target)
                 if translated and translated.strip():
                     new_tag = soup.new_tag(el.name)
                     new_tag.string = translated.strip()

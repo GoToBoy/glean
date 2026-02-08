@@ -4,17 +4,22 @@ Entries router.
 Provides endpoints for reading and managing feed entries.
 """
 
+import asyncio
 from contextlib import suppress
 from typing import Annotated
 
 from arq.connections import ArqRedis
+from deep_translator import GoogleTranslator
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
+from glean_core import get_logger
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
     TranslateEntryRequest,
+    TranslateTextsRequest,
+    TranslateTextsResponse,
     TranslationResponse,
     UpdateEntryStateRequest,
     UserResponse,
@@ -28,6 +33,12 @@ from ..dependencies import (
     get_score_service,
     get_translation_service,
 )
+
+logger = get_logger(__name__)
+
+# Google Translate has a ~5000 character limit per request
+_CHUNK_SIZE = 4500
+_SEPARATOR = " ||| "
 
 router = APIRouter()
 
@@ -159,6 +170,108 @@ async def mark_all_read(
     """
     await entry_service.mark_all_read(current_user.id, data.feed_id, data.folder_id)
     return {"message": "All entries marked as read"}
+
+
+# Viewport-based sync translation
+
+
+def _batch_translate(texts: list[str], source: str, target: str) -> list[str]:
+    """Translate texts using ||| separator batching for Google Translate."""
+    if not texts:
+        return []
+
+    translator = GoogleTranslator(source=source, target=target)
+    results: list[str] = [""] * len(texts)
+
+    batch_start = 0
+    while batch_start < len(texts):
+        batch_texts: list[str] = []
+        batch_indices: list[int] = []
+        current_length = 0
+
+        for i in range(batch_start, len(texts)):
+            text = texts[i]
+            needed = len(text) + len(_SEPARATOR)
+            if current_length + needed > _CHUNK_SIZE and batch_texts:
+                break
+            batch_texts.append(text)
+            batch_indices.append(i)
+            current_length += needed
+
+        if not batch_texts:
+            break
+
+        combined = _SEPARATOR.join(batch_texts)
+
+        if len(combined) <= _CHUNK_SIZE:
+            translated_combined: str = translator.translate(combined)
+            translated_parts = translated_combined.split("|||")
+            for j, idx in enumerate(batch_indices):
+                results[idx] = translated_parts[j].strip() if j < len(translated_parts) else ""
+        else:
+            # Individual translation fallback for oversized texts
+            for j, idx in enumerate(batch_indices):
+                result: str = translator.translate(batch_texts[j][:_CHUNK_SIZE])
+                results[idx] = result
+
+        batch_start += len(batch_texts)
+
+    return results
+
+
+@router.post("/translate-texts")
+async def translate_texts(
+    data: TranslateTextsRequest,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+) -> TranslateTextsResponse:
+    """
+    Synchronously translate an array of text strings.
+
+    Used for viewport-based sentence-level translation.
+    No worker queue, no DB storage — returns translations immediately.
+
+    Args:
+        data: List of texts and target language.
+        current_user: Current authenticated user.
+
+    Returns:
+        List of translated strings in the same order.
+    """
+    if not data.texts:
+        return TranslateTextsResponse(translations=[], target_language=data.target_language)
+
+    # Filter out empty strings, preserving index mapping
+    non_empty_indices = [i for i, t in enumerate(data.texts) if t.strip()]
+    non_empty_texts = [data.texts[i] for i in non_empty_indices]
+
+    if not non_empty_texts:
+        return TranslateTextsResponse(
+            translations=[""] * len(data.texts),
+            target_language=data.target_language,
+        )
+
+    logger.info(
+        "Translating texts batch",
+        extra={
+            "count": len(non_empty_texts),
+            "target": data.target_language,
+            "user_id": current_user.id,
+        },
+    )
+
+    translated = await asyncio.to_thread(
+        _batch_translate, non_empty_texts, data.source_language, data.target_language
+    )
+
+    # Reconstruct full list with empty strings for originally-empty inputs
+    all_results = [""] * len(data.texts)
+    for i, idx in enumerate(non_empty_indices):
+        all_results[idx] = translated[i]
+
+    return TranslateTextsResponse(
+        translations=all_results,
+        target_language=data.target_language,
+    )
 
 
 # M3: Preference signal endpoints

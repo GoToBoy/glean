@@ -33,6 +33,8 @@ from .entry import (
     EntryListResponse,
     EntryResponse,
     TranslateEntryRequest,
+    TranslateTextsRequest,
+    TranslateTextsResponse,
     TranslationResponse,
     UpdateEntryStateRequest,
 )
@@ -93,6 +95,8 @@ __all__ = [
     "EntryListResponse",
     "UpdateEntryStateRequest",
     "TranslateEntryRequest",
+    "TranslateTextsRequest",
+    "TranslateTextsResponse",
     "TranslationResponse",
     # M2: Bookmark
     "BookmarkCreate",
