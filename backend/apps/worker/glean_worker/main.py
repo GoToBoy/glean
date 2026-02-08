@@ -23,6 +23,7 @@ from .tasks import (
     feed_fetcher,
     preference_worker,
     subscription_cleanup,
+    translation,
 )
 
 # Initialize logging system
@@ -138,6 +139,8 @@ class WorkerSettings:
         preference_worker.rebuild_user_preference,
         # Subscription cleanup
         subscription_cleanup.cleanup_orphan_embeddings,
+        # Translation
+        translation.translate_entry_task,
     ]
 
     # Scheduled cron jobs

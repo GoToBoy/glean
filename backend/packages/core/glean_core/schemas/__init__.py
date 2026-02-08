@@ -29,7 +29,13 @@ from .config import (
     VectorizationStatus,
     VectorizationStatusResponse,
 )
-from .entry import EntryListResponse, EntryResponse, UpdateEntryStateRequest
+from .entry import (
+    EntryListResponse,
+    EntryResponse,
+    TranslateEntryRequest,
+    TranslationResponse,
+    UpdateEntryStateRequest,
+)
 from .feed import (
     BatchDeleteSubscriptionsRequest,
     BatchDeleteSubscriptionsResponse,
@@ -86,6 +92,8 @@ __all__ = [
     "EntryResponse",
     "EntryListResponse",
     "UpdateEntryStateRequest",
+    "TranslateEntryRequest",
+    "TranslationResponse",
     # M2: Bookmark
     "BookmarkCreate",
     "BookmarkUpdate",

@@ -14,12 +14,20 @@ from pydantic import BaseModel
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
+    TranslateEntryRequest,
+    TranslationResponse,
     UpdateEntryStateRequest,
     UserResponse,
 )
-from glean_core.services import EntryService
+from glean_core.services import EntryService, TranslationService
 
-from ..dependencies import get_current_user, get_entry_service, get_redis_pool, get_score_service
+from ..dependencies import (
+    get_current_user,
+    get_entry_service,
+    get_redis_pool,
+    get_score_service,
+    get_translation_service,
+)
 
 router = APIRouter()
 
@@ -274,3 +282,71 @@ async def remove_reaction(
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+
+
+# Translation endpoints
+
+
+@router.post("/{entry_id}/translate")
+async def translate_entry(
+    entry_id: str,
+    data: TranslateEntryRequest,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    translation_service: Annotated[TranslationService, Depends(get_translation_service)],
+) -> TranslationResponse:
+    """
+    Request translation of an entry.
+
+    If target_language is not provided, auto-detects:
+    Chinese content → translates to English, otherwise → translates to Chinese.
+
+    Returns cached translation if available, or queues a new translation task.
+
+    Args:
+        entry_id: Entry identifier.
+        data: Translation request with optional target_language.
+        current_user: Current authenticated user.
+        translation_service: Translation service.
+
+    Returns:
+        Translation status and content.
+
+    Raises:
+        HTTPException: If entry not found.
+    """
+    try:
+        return await translation_service.request_translation(
+            entry_id, current_user.id, data.target_language
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
+
+
+@router.get("/{entry_id}/translation/{target_language}")
+async def get_translation(
+    entry_id: str,
+    target_language: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    translation_service: Annotated[TranslationService, Depends(get_translation_service)],
+) -> TranslationResponse:
+    """
+    Get translation of an entry for a specific language.
+
+    Args:
+        entry_id: Entry identifier.
+        target_language: Target language code (e.g. "zh-CN", "en").
+        current_user: Current authenticated user.
+        translation_service: Translation service.
+
+    Returns:
+        Translation content and status.
+
+    Raises:
+        HTTPException: If translation not found.
+    """
+    result = await translation_service.get_translation(entry_id, target_language)
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Translation not found"
+        )
+    return result

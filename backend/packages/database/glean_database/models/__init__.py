@@ -9,6 +9,7 @@ from .api_token import APIToken
 from .base import Base, TimestampMixin
 from .bookmark import Bookmark
 from .entry import Entry
+from .entry_translation import EntryTranslation
 from .feed import Feed, FeedStatus
 from .folder import Folder, FolderType
 from .junction import BookmarkFolder, BookmarkTag, UserEntryTag
@@ -40,6 +41,8 @@ __all__ = [
     "UserEntryTag",
     # M3 models
     "UserPreferenceStats",
+    # Translation models
+    "EntryTranslation",
     # MCP models
     "APIToken",
 ]

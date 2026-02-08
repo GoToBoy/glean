@@ -10,6 +10,7 @@ import {
   Clock,
   Archive,
   ExternalLink,
+  Languages,
   Loader2,
   Maximize2,
   Minimize2,
@@ -22,6 +23,7 @@ import { processHtmlContent } from '../lib/html'
 import { Button, Skeleton } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
+import { useEntryTranslation } from '../hooks/useEntryTranslation'
 
 const ORIGINAL_PREF_KEY = 'glean:feed-original-pref-v1'
 
@@ -59,7 +61,12 @@ interface OriginalContentViewerProps {
   reason?: OriginalContentReason
 }
 
-function OriginalContentViewer({ url, feedId, feedTitle, reason = null }: OriginalContentViewerProps) {
+function OriginalContentViewer({
+  url,
+  feedId,
+  feedTitle,
+  reason = null,
+}: OriginalContentViewerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [hasEverOpened, setHasEverOpened] = useState(false)
   const [iframeLoaded, setIframeLoaded] = useState(false)
@@ -93,11 +100,11 @@ function OriginalContentViewer({ url, feedId, feedTitle, reason = null }: Origin
   const mountIframe = hasEverOpened || isOpen
 
   return (
-    <div className="mt-6 rounded-lg border border-border/70 bg-card/60 p-4">
+    <div className="border-border/70 bg-card/60 mt-6 rounded-lg border p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <div className="text-sm font-semibold text-foreground">Original article</div>
-          <p className="text-xs text-muted-foreground">
+          <div className="text-foreground text-sm font-semibold">Original article</div>
+          <p className="text-muted-foreground text-xs">
             {rememberFeed
               ? 'Opens by default for this feed.'
               : reason === 'empty'
@@ -111,10 +118,10 @@ function OriginalContentViewer({ url, feedId, feedTitle, reason = null }: Origin
       </div>
 
       {feedId && (
-        <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+        <label className="text-muted-foreground mt-3 flex items-center gap-2 text-xs">
           <input
             type="checkbox"
-            className="h-3.5 w-3.5 rounded border-border bg-background accent-primary"
+            className="border-border bg-background accent-primary h-3.5 w-3.5 rounded"
             checked={rememberFeed}
             onChange={(event) => handleToggleRemember(event.target.checked)}
           />
@@ -123,10 +130,12 @@ function OriginalContentViewer({ url, feedId, feedTitle, reason = null }: Origin
       )}
 
       {mountIframe && (
-        <div className="mt-4 overflow-hidden rounded-md border border-border bg-background/60">
-          <div className={`relative transition-[height] duration-300 ${isOpen ? 'h-[70vh]' : 'h-0'}`}>
+        <div className="border-border bg-background/60 mt-4 overflow-hidden rounded-md border">
+          <div
+            className={`relative transition-[height] duration-300 ${isOpen ? 'h-[70vh]' : 'h-0'}`}
+          >
             {!iframeLoaded && isOpen && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center gap-2 bg-muted/70 text-muted-foreground">
+              <div className="bg-muted/70 text-muted-foreground absolute inset-0 z-10 flex items-center justify-center gap-2">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span className="text-xs font-medium">Loading original…</span>
               </div>
@@ -284,13 +293,31 @@ export function ArticleReader({
     window.dispatchEvent(new CustomEvent('openMobileSidebar'))
   }
   const updateMutation = useUpdateEntryState()
-  const contentRef = useContentRenderer(entry.content || entry.summary || undefined)
+  const {
+    translation,
+    isTranslating,
+    showTranslation,
+    error: translationError,
+    translate: handleTranslate,
+    toggleTranslation,
+    clearTranslation: _clearTranslation,
+  } = useEntryTranslation(entry.id)
+
+  // Determine which content to render based on translation state
+  // Bilingual mode: translated_content contains interleaved original + translation
+  const displayContent =
+    showTranslation && translation?.translated_content
+      ? translation.translated_content
+      : entry.content || entry.summary || undefined
+
+  const contentRef = useContentRenderer(displayContent)
   const [isBookmarking, setIsBookmarking] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
-  const originalContentReason: OriginalContentReason = !entry.content && !entry.summary ? 'empty' : null
+  const originalContentReason: OriginalContentReason =
+    !entry.content && !entry.summary ? 'empty' : null
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -383,6 +410,11 @@ export function ArticleReader({
             <h1 className="font-display text-foreground text-2xl leading-tight font-bold">
               {entry.title}
             </h1>
+            {showTranslation && translation?.translated_title && (
+              <p className="text-primary/70 mt-1 text-base font-medium">
+                {translation.translated_title}
+              </p>
+            )}
             <div className="flex shrink-0 items-center gap-1">
               {shouldShowFullscreenButton && onToggleFullscreen && (
                 <Button
@@ -434,6 +466,41 @@ export function ArticleReader({
               <ExternalLink className="h-4 w-4" />
               <span>{t('actions.openOriginal')}</span>
             </Button>
+
+            {showTranslation ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={toggleTranslation}
+                className="action-btn text-primary"
+              >
+                <Languages className="h-4 w-4" />
+                <span>{t('translation.showOriginal')}</span>
+              </Button>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  translation?.status === 'done' ? toggleTranslation() : handleTranslate()
+                }
+                disabled={isTranslating}
+                className="action-btn text-muted-foreground"
+              >
+                {isTranslating ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Languages className="h-4 w-4" />
+                )}
+                <span>
+                  {isTranslating
+                    ? t('translation.translating')
+                    : translation?.status === 'done'
+                      ? t('translation.showTranslation')
+                      : t('translation.translate')}
+                </span>
+              </Button>
+            )}
 
             {!hideReadStatus && (
               <Button
@@ -498,17 +565,40 @@ export function ArticleReader({
               </div>
             )}
 
-            {entry.content ? (
+            {/* Bilingual translation banner */}
+            {showTranslation && translation?.status === 'done' && (
+              <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-muted-foreground text-xs">
+                  {t('translation.bilingualMode', {
+                    language: translation.target_language === 'zh-CN' ? '中文' : 'English',
+                  })}
+                </span>
+                <button
+                  onClick={toggleTranslation}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.showOriginal')}
+                </button>
+              </div>
+            )}
+
+            {translationError && (
+              <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-destructive text-xs">{t('translation.failed')}</span>
+                <button
+                  onClick={() => handleTranslate()}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.retry')}
+                </button>
+              </div>
+            )}
+
+            {displayContent ? (
               <article
                 ref={contentRef}
                 className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.content) }}
-              />
-            ) : entry.summary ? (
-              <article
-                ref={contentRef}
-                className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(entry.summary) }}
+                dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
               />
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center">
@@ -571,6 +661,29 @@ export function ArticleReader({
             >
               <ExternalLink className="h-5 w-5" />
               <span className="text-[10px]">{t('actions.open')}</span>
+            </button>
+
+            <button
+              onClick={() =>
+                showTranslation
+                  ? toggleTranslation()
+                  : translation?.status === 'done'
+                    ? toggleTranslation()
+                    : handleTranslate()
+              }
+              disabled={isTranslating}
+              className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                showTranslation ? 'text-primary' : 'text-muted-foreground'
+              } disabled:opacity-50`}
+            >
+              {isTranslating ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Languages className="h-5 w-5" />
+              )}
+              <span className="text-[10px]">
+                {showTranslation ? t('translation.showOriginal') : t('translation.translate')}
+              </span>
             </button>
 
             {!hideReadStatus && (
