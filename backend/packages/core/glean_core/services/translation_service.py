@@ -165,6 +165,53 @@ class TranslationService:
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_paragraph_translations(
+        self, entry_id: str, target_language: str
+    ) -> dict[str, str] | None:
+        """
+        Get cached paragraph-level translations for an entry.
+
+        Args:
+            entry_id: Entry UUID.
+            target_language: Target language code.
+
+        Returns:
+            Mapping of original sentence to translated sentence, or None.
+        """
+        existing = await self._get_existing(entry_id, target_language)
+        if not existing or not existing.paragraph_translations:
+            return None
+        return existing.paragraph_translations
+
+    async def save_paragraph_translations(
+        self, entry_id: str, target_language: str, translations: dict[str, str]
+    ) -> None:
+        """
+        Persist paragraph-level translations, merging into existing data.
+
+        Creates a new EntryTranslation row if one doesn't exist yet,
+        otherwise merges into the existing paragraph_translations JSONB.
+
+        Args:
+            entry_id: Entry UUID.
+            target_language: Target language code.
+            translations: Mapping of original sentence to translated sentence.
+        """
+        existing = await self._get_existing(entry_id, target_language)
+        if existing:
+            merged = dict(existing.paragraph_translations or {})
+            merged.update(translations)
+            existing.paragraph_translations = merged
+        else:
+            row = EntryTranslation(
+                entry_id=entry_id,
+                target_language=target_language,
+                status="done",
+                paragraph_translations=translations,
+            )
+            self.session.add(row)
+        await self.session.commit()
+
     @staticmethod
     def _to_response(t: EntryTranslation) -> TranslationResponse:
         return TranslationResponse(

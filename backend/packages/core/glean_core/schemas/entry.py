@@ -91,6 +91,7 @@ class TranslateTextsRequest(BaseModel):
     texts: list[str]
     target_language: str  # e.g. "zh-CN", "en"
     source_language: str = "auto"
+    entry_id: str | None = None  # Optional: persist translations when provided
 
 
 class TranslateTextsResponse(BaseModel):
@@ -98,3 +99,9 @@ class TranslateTextsResponse(BaseModel):
 
     translations: list[str]
     target_language: str
+
+
+class ParagraphTranslationsResponse(BaseModel):
+    """Cached paragraph-level translations for an entry."""
+
+    translations: dict[str, str]

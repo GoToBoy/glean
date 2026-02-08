@@ -6,6 +6,7 @@ translated versions of feed entries.
 """
 
 from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_uuid
@@ -42,6 +43,7 @@ class EntryTranslation(Base, TimestampMixin):
     translated_content: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="pending", nullable=False)
     error: Mapped[str | None] = mapped_column(Text)
+    paragraph_translations: Mapped[dict[str, str] | None] = mapped_column(JSONB)
 
     # Relationships
     entry = relationship("Entry", backref="translations")

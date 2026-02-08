@@ -1525,44 +1525,44 @@ body {
 }
 
 /* ==========================================================================
-   Sentence-Level Translation Styles (Viewport-based)
+   Sentence-Level Translation Styles (Viewport-based, Immersive Translate style)
    ========================================================================== */
 
-/* Translation lines inserted after each block element */
-.prose .glean-translation-line {
+/* Original sentence displayed as a block line */
+.prose .glean-original-sentence {
+  display: block;
+}
+
+/* Translated sentence: amber accent with left border, below each original sentence */
+.prose .glean-translated-sentence {
+  display: block;
   font-family: 'DM Sans', system-ui, sans-serif;
-  font-size: 0.85em;
+  font-size: 0.88em;
   line-height: 1.5;
   color: hsl(38 70% 65%);
   border-left: 2px solid hsl(38 80% 50% / 0.25);
-  padding-left: 0.75em;
-  margin-top: 0.15em;
-  margin-bottom: 0.75em;
-  opacity: 0;
+  padding-left: 0.6em;
+  margin-top: 0.1em;
+  margin-bottom: 0.5em;
+  opacity: 0.85;
+}
+
+/* Fade-in for bilingual blocks */
+.prose .glean-bilingual-active {
   animation: glean-translation-fade-in 0.3s ease-out forwards;
-}
-
-.prose .glean-translation-line > div {
-  margin-bottom: 0.25em;
-}
-
-.prose .glean-translation-line > div:last-child {
-  margin-bottom: 0;
 }
 
 @keyframes glean-translation-fade-in {
   from {
-    opacity: 0;
-    transform: translateY(-2px);
+    opacity: 0.5;
   }
   to {
-    opacity: 0.85;
-    transform: translateY(0);
+    opacity: 1;
   }
 }
 
 /* Light theme */
-[data-theme="light"] .prose .glean-translation-line {
+[data-theme="light"] .prose .glean-translated-sentence {
   color: hsl(220 40% 45%);
   border-left-color: hsl(38 80% 45% / 0.3);
 }
