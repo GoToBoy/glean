@@ -121,6 +121,7 @@ class TranslationService:
                     "translate_entry_task",
                     entry_id=entry_id,
                     target_language=target_language,
+                    user_id=user_id,
                 )
                 logger.info(
                     "Queued translation task",

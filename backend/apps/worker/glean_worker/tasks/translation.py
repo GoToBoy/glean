@@ -1,19 +1,24 @@
 """Translation worker task.
 
-Translates entry content using Google Translate via deep-translator.
-Produces bilingual HTML where each block element is followed by its
-translated counterpart, enabling side-by-side reading.
+Translates entry content using a user-configured translation provider
+(Google Translate, DeepL, or OpenAI). Produces bilingual HTML where
+each block element is followed by its translated counterpart, enabling
+side-by-side reading.
 """
 
 from typing import Any
 
 from bs4 import BeautifulSoup, Tag
-from deep_translator import GoogleTranslator
 from sqlalchemy import select
 
 from glean_core import get_logger
+from glean_core.services.translation_providers import (
+    TranslationProvider,
+    create_translation_provider,
+)
 from glean_database.models import Entry
 from glean_database.models.entry_translation import EntryTranslation
+from glean_database.models.user import User
 from glean_database.session import get_session_context
 
 logger = get_logger(__name__)
@@ -31,16 +36,16 @@ _BLOCK_TAGS = frozenset({
 _SKIP_ANCESTORS = frozenset({"code", "pre", "script", "style"})
 
 
-def _translate_text(text: str, source: str, target: str) -> str:
+def _translate_text(
+    text: str, source: str, target: str, provider: TranslationProvider
+) -> str:
     """Translate a single text string, handling chunking for long text."""
     if not text or not text.strip():
         return text
 
     # For short text, translate directly
     if len(text) <= CHUNK_SIZE:
-        translator = GoogleTranslator(source=source, target=target)
-        result: str = translator.translate(text)
-        return result
+        return provider.translate(text, source, target)
 
     # For long text, split into chunks at sentence boundaries
     chunks: list[str] = []
@@ -56,9 +61,8 @@ def _translate_text(text: str, source: str, target: str) -> str:
         chunks.append(current)
 
     translated_chunks: list[str] = []
-    translator = GoogleTranslator(source=source, target=target)
     for chunk in chunks:
-        result = translator.translate(chunk)
+        result = provider.translate(chunk, source, target)
         translated_chunks.append(result)
 
     return " ".join(translated_chunks)
@@ -72,7 +76,9 @@ def _has_skip_ancestor(element: Tag) -> bool:
     return False
 
 
-def _translate_html_bilingual(html_content: str, source: str, target: str) -> str:
+def _translate_html_bilingual(
+    html_content: str, source: str, target: str, provider: TranslationProvider
+) -> str:
     """
     Translate HTML content in bilingual mode.
 
@@ -84,6 +90,7 @@ def _translate_html_bilingual(html_content: str, source: str, target: str) -> st
         html_content: Original HTML string.
         source: Source language code (or "auto").
         target: Target language code (e.g. "zh-CN", "en").
+        provider: Translation provider instance.
 
     Returns:
         HTML string with interleaved original and translated blocks.
@@ -102,57 +109,26 @@ def _translate_html_bilingual(html_content: str, source: str, target: str) -> st
     if not blocks:
         return html_content
 
-    # Batch blocks into groups that fit within CHUNK_SIZE
-    batches: list[list[tuple[Tag, str]]] = []
-    current_batch: list[tuple[Tag, str]] = []
-    current_length = 0
-    separator = " ||| "
+    # Batch-translate all block texts at once
+    all_texts = [t for _, t in blocks]
+    translated_texts = provider.translate_batch(all_texts, source, target)
 
-    for el, text in blocks:
-        needed = len(text) + len(separator)
-        if current_length + needed > CHUNK_SIZE and current_batch:
-            batches.append(current_batch)
-            current_batch = []
-            current_length = 0
-        current_batch.append((el, text))
-        current_length += needed
-
-    if current_batch:
-        batches.append(current_batch)
-
-    # Translate batches and insert bilingual elements
-    translator = GoogleTranslator(source=source, target=target)
-
-    for batch in batches:
-        texts = [t for _, t in batch]
-        combined = separator.join(texts)
-
-        if len(combined) <= CHUNK_SIZE and all(len(t) <= CHUNK_SIZE for _, t in batch):
-            translated_combined: str = translator.translate(combined)
-            translated_parts = translated_combined.split("|||")
-
-            for i, (el, _) in enumerate(batch):
-                translated_text = translated_parts[i].strip() if i < len(translated_parts) else ""
-                if translated_text:
-                    new_tag = soup.new_tag(el.name)
-                    new_tag.string = translated_text
-                    new_tag["class"] = "glean-translation"
-                    el.insert_after(new_tag)
-        else:
-            # Translate individually if batch is too long
-            for el, text in batch:
-                translated = _translate_text(text, source, target)
-                if translated and translated.strip():
-                    new_tag = soup.new_tag(el.name)
-                    new_tag.string = translated.strip()
-                    new_tag["class"] = "glean-translation"
-                    el.insert_after(new_tag)
+    for i, (el, _) in enumerate(blocks):
+        translated_text = translated_texts[i].strip() if i < len(translated_texts) else ""
+        if translated_text:
+            new_tag = soup.new_tag(el.name)
+            new_tag.string = translated_text
+            new_tag["class"] = "glean-translation"
+            el.insert_after(new_tag)
 
     return str(soup)
 
 
 async def translate_entry_task(
-    _ctx: dict[str, Any], entry_id: str, target_language: str
+    _ctx: dict[str, Any],
+    entry_id: str,
+    target_language: str,
+    user_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Translate an entry's title and content.
@@ -161,16 +137,27 @@ async def translate_entry_task(
         _ctx: Worker context.
         entry_id: Entry UUID.
         target_language: Target language code (e.g. "zh-CN", "en").
+        user_id: Optional user ID to look up translation provider settings.
 
     Returns:
         Result dictionary with status.
     """
     logger.info(
         "Starting translation task",
-        extra={"entry_id": entry_id, "target_language": target_language},
+        extra={"entry_id": entry_id, "target_language": target_language, "user_id": user_id},
     )
 
     async with get_session_context() as session:
+        # Look up user settings for translation provider
+        user_settings: dict[str, Any] | None = None
+        if user_id:
+            user_result = await session.execute(select(User).where(User.id == user_id))
+            user = user_result.scalar_one_or_none()
+            if user:
+                user_settings = user.settings
+
+        provider = create_translation_provider(user_settings)
+
         # Get the translation record
         stmt = select(EntryTranslation).where(
             EntryTranslation.entry_id == entry_id,
@@ -204,7 +191,7 @@ async def translate_entry_task(
             # Translate title
             translated_title = None
             if entry.title:
-                translated_title = _translate_text(entry.title, source, target_language)
+                translated_title = _translate_text(entry.title, source, target_language, provider)
                 logger.info(
                     "Title translated",
                     extra={"entry_id": entry_id, "original": entry.title[:50]},
@@ -214,7 +201,9 @@ async def translate_entry_task(
             translated_content = None
             content = entry.content or entry.summary
             if content:
-                translated_content = _translate_html_bilingual(content, source, target_language)
+                translated_content = _translate_html_bilingual(
+                    content, source, target_language, provider
+                )
                 logger.info(
                     "Content translated",
                     extra={
