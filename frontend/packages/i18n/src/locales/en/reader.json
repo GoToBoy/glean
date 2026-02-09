@@ -20,7 +20,9 @@
     "like": "Like",
     "liked": "Liked",
     "dislike": "Dislike",
-    "disliked": "Disliked"
+    "disliked": "Disliked",
+    "showOriginal": "Original",
+    "hideOriginal": "Original"
   },
   "entries": {
     "loadError": "Failed to load entries",
