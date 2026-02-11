@@ -213,7 +213,7 @@ jobs:
 
       - name: Build Electron app
         working-directory: frontend/apps/web
-        run: pnpm build:electron -- --${{ matrix.platform }}
+        run: pnpm build:electron -- --${{ matrix.platform }} --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
