@@ -15,6 +15,7 @@
     "name": "Name",
     "notSet": "Not set",
     "email": "Email",
+    "phone": "Phone",
     "accountStatus": "Account Status",
     "active": "Active",
     "inactive": "Inactive",

@@ -91,89 +91,99 @@ export default function SettingsPage() {
     }
   }
 
-  const ProfileContent = () => (
-    <div className="stagger-children space-y-5">
-      {/* Name */}
-      <div className="animate-fade-in">
-        <Label className="text-muted-foreground mb-2 block text-sm font-medium">
-          {t('profile.name')}
-        </Label>
-        <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
-          <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-            <User className="text-primary h-5 w-5" />
-          </div>
-          <span className="text-foreground font-medium">{user?.name || t('profile.notSet')}</span>
-        </div>
-      </div>
+  const ProfileContent = () => {
+    // Display priority: username > name for display name
+    const displayName = user?.username || user?.name || t('profile.notSet')
+    // Display priority: email > phone for contact info
+    const contactInfo = user?.email || user?.phone || t('profile.notSet')
 
-      {/* Email */}
-      <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-        <Label className="text-muted-foreground mb-2 block text-sm font-medium">
-          {t('profile.email')}
-        </Label>
-        <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
-          <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-            <Mail className="text-primary h-5 w-5" />
+    return (
+      <div className="stagger-children space-y-5">
+        {/* Name */}
+        <div className="animate-fade-in">
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {t('profile.name')}
+          </Label>
+          <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <User className="text-primary h-5 w-5" />
+            </div>
+            <span className="text-foreground font-medium">{displayName}</span>
           </div>
-          <span className="text-foreground font-medium">{user?.email}</span>
         </div>
-      </div>
 
-      {/* Account Status */}
-      <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
-        <Label className="text-muted-foreground mb-2 block text-sm font-medium">
-          {t('profile.accountStatus')}
-        </Label>
-        <div className="flex flex-wrap items-center gap-3">
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium shadow-sm ring-1 transition-all ${
-              user?.is_active
-                ? 'bg-green-500/10 text-green-600 ring-green-500/20 hover:bg-green-500/20'
-                : 'bg-destructive/10 text-destructive ring-destructive/20 hover:bg-destructive/20'
-            }`}
-          >
-            {user?.is_active ? (
-              <CheckCircle className="h-3.5 w-3.5" />
-            ) : (
-              <AlertCircle className="h-3.5 w-3.5" />
-            )}
-            {user?.is_active ? t('profile.active') : t('profile.inactive')}
-          </span>
-          <span
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium shadow-sm ring-1 transition-all ${
-              user?.is_verified
-                ? 'bg-primary/10 text-primary ring-primary/20 hover:bg-primary/20'
-                : 'bg-muted/50 text-muted-foreground ring-border/50 hover:bg-muted'
-            }`}
-          >
-            <Shield className="h-3.5 w-3.5" />
-            {user?.is_verified ? t('profile.verified') : t('profile.notVerified')}
-          </span>
-        </div>
-      </div>
-
-      {/* Language */}
-      <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
-        <Label className="text-muted-foreground mb-2 block text-sm font-medium">
-          {t('profile.language')}
-        </Label>
-        <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
-          <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
-            <Languages className="text-primary h-5 w-5" />
+        {/* Contact Info (Email or Phone) */}
+        <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {user?.email ? t('profile.email') : t('profile.phone')}
+          </Label>
+          <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <Mail className="text-primary h-5 w-5" />
+            </div>
+            <span className="text-foreground font-medium">{contactInfo}</span>
           </div>
-          <Select value={language} onValueChange={(value) => setLanguage(value as 'en' | 'zh-CN')}>
-            <SelectTrigger className="flex-1">
-              <SelectValue>{language === 'en' ? '🇺🇸 English' : '🇨🇳 简体中文'}</SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="en">🇺🇸 English</SelectItem>
-              <SelectItem value="zh-CN">🇨🇳 简体中文</SelectItem>
-            </SelectContent>
-          </Select>
+        </div>
+
+        {/* Account Status */}
+        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {t('profile.accountStatus')}
+          </Label>
+          <div className="flex flex-wrap items-center gap-3">
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium shadow-sm ring-1 transition-all ${
+                user?.is_active
+                  ? 'bg-green-500/10 text-green-600 ring-green-500/20 hover:bg-green-500/20'
+                  : 'bg-destructive/10 text-destructive ring-destructive/20 hover:bg-destructive/20'
+              }`}
+            >
+              {user?.is_active ? (
+                <CheckCircle className="h-3.5 w-3.5" />
+              ) : (
+                <AlertCircle className="h-3.5 w-3.5" />
+              )}
+              {user?.is_active ? t('profile.active') : t('profile.inactive')}
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium shadow-sm ring-1 transition-all ${
+                user?.is_verified
+                  ? 'bg-primary/10 text-primary ring-primary/20 hover:bg-primary/20'
+                  : 'bg-muted/50 text-muted-foreground ring-border/50 hover:bg-muted'
+              }`}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              {user?.is_verified ? t('profile.verified') : t('profile.notVerified')}
+            </span>
+          </div>
+        </div>
+
+        {/* Language */}
+        <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {t('profile.language')}
+          </Label>
+          <div className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center gap-3 rounded-xl bg-gradient-to-br p-4 ring-1 transition-all">
+            <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
+              <Languages className="text-primary h-5 w-5" />
+            </div>
+            <Select
+              value={language}
+              onValueChange={(value) => setLanguage(value as 'en' | 'zh-CN')}
+            >
+              <SelectTrigger className="flex-1">
+                <SelectValue>{language === 'en' ? '🇺🇸 English' : '🇨🇳 简体中文'}</SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="en">🇺🇸 English</SelectItem>
+                <SelectItem value="zh-CN">🇨🇳 简体中文</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   const ReadLaterContent = () => (
     <div className="stagger-children space-y-6">

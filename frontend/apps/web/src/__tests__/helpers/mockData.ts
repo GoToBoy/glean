@@ -20,6 +20,8 @@ export const createMockUser = (overrides: Partial<User> = {}): User => ({
   id: 'user-1',
   email: 'test@example.com',
   name: 'Test User',
+  username: null,
+  phone: null,
   avatar_url: null,
   is_active: true,
   is_verified: true,

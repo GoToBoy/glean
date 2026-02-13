@@ -15,6 +15,7 @@
     "name": "姓名",
     "notSet": "未设置",
     "email": "邮箱",
+    "phone": "手机",
     "accountStatus": "账号状态",
     "active": "激活",
     "inactive": "未激活",

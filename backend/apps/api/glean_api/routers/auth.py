@@ -6,8 +6,11 @@ Provides endpoints for user registration, login, token refresh, and user profile
 
 from typing import Annotated
 
+from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
+from glean_core import RedisKeys
 from glean_core.schemas import (
     LoginRequest,
     RefreshTokenRequest,
@@ -21,6 +24,7 @@ from glean_core.services import AuthService, TypedConfigService, UserService
 from ..dependencies import (
     get_auth_service,
     get_current_user,
+    get_redis_pool,
     get_typed_config_service,
     get_user_service,
 )
@@ -158,3 +162,154 @@ async def update_me(
         Updated user profile data.
     """
     return await user_service.update_user(current_user.id, data)
+
+
+# OAuth/OIDC endpoints
+
+
+@router.get("/oauth/oidc/authorize")
+async def oidc_authorize(
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+):
+    """
+    Get OIDC authorization URL.
+
+    Args:
+        auth_service: Authentication service.
+        redis: Redis connection pool for state storage.
+
+    Returns:
+        authorization_url: URL to redirect user to OIDC provider.
+        state: CSRF protection token.
+
+    Raises:
+        HTTPException: If OIDC is not enabled or provider not configured.
+    """
+    from secrets import token_urlsafe
+
+    from fastapi.responses import JSONResponse
+
+    from glean_core.auth.providers import AuthProviderFactory
+    from glean_core.config import auth_provider_config
+
+    # Check if OIDC is enabled
+    if not auth_provider_config.oidc_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="OIDC authentication is not enabled"
+        )
+
+    # Get OIDC provider config
+    provider_config = auth_service.provider_configs.get("oidc")
+    if not provider_config:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC provider not configured",
+        )
+
+    try:
+        # Create OIDC provider
+        provider = AuthProviderFactory.create("oidc", provider_config)
+
+        # Load OIDC discovery config
+        await provider._get_oidc_config()  # type: ignore[attr-defined]
+
+        # Generate CSRF state with timestamp to prevent caching
+        state = token_urlsafe(32)
+
+        # Store state in Redis with 5-minute TTL for verification in callback
+        await redis.setex(
+            RedisKeys.oidc_state(state),
+            RedisKeys.OIDC_STATE_TTL,
+            "1",
+        )
+
+        # Get authorization URL with nonce to prevent caching
+        auth_url = provider.get_authorization_url(
+            state=state, redirect_uri=str(provider_config["redirect_uri"])
+        )
+
+        if not auth_url:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to generate authorization URL",
+            )
+
+        # Return response with no-cache headers to prevent browser caching
+        return JSONResponse(
+            content={
+                "authorization_url": auth_url,
+                "state": state,
+            },
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate authorization URL: {e}",
+        ) from None
+
+
+class OIDCCallbackRequest(BaseModel):
+    """OIDC callback request payload."""
+
+    code: str
+    state: str
+
+
+@router.post("/oauth/oidc/callback")
+async def oidc_callback(
+    data: OIDCCallbackRequest,
+    auth_service: Annotated[AuthService, Depends(get_auth_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, UserResponse | TokenResponse]:
+    """
+    Handle OIDC callback after user authorization.
+
+    Args:
+        data: OIDC callback data containing code and state.
+        auth_service: Authentication service.
+        redis: Redis connection pool for state validation.
+
+    Returns:
+        user: User profile.
+        tokens: JWT access and refresh tokens.
+
+    Raises:
+        HTTPException: If authentication fails or provider not configured.
+    """
+    # Validate state from Redis to prevent CSRF attacks
+    state_key = RedisKeys.oidc_state(data.state)
+    state_valid = await redis.exists(state_key)
+    if not state_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
+        )
+
+    # Delete state from Redis to prevent replay attacks
+    await redis.delete(state_key)
+
+    # Get provider config
+    provider_config = auth_service.provider_configs.get("oidc")
+    if not provider_config:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="OIDC provider not configured",
+        )
+
+    # Prepare credentials
+    credentials = {
+        "code": data.code,
+        "redirect_uri": str(provider_config["redirect_uri"]),
+    }
+
+    try:
+        # Authenticate with OIDC provider
+        user, tokens = await auth_service.login_with_provider("oidc", credentials)
+        return {"user": user, "tokens": tokens}
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None

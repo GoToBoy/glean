@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from glean_core import get_logger
+from glean_core import RedisKeys, get_logger
 from glean_core.schemas.bookmark import (
     BookmarkCreate,
     BookmarkFolderSimple,
@@ -302,14 +302,13 @@ class BookmarkService:
         if entry_id and self.redis_pool:
             try:
                 # Debounce: Check if we recently queued bookmark signal for this entry
-                debounce_key = f"pref_update_debounce:{user_id}:{entry_id}:bookmark"
-                debounce_ttl = 30  # 30 seconds debounce
+                debounce_key = RedisKeys.pref_update_debounce(user_id, entry_id, "bookmark")
 
                 # Try to set the key only if it doesn't exist (NX)
                 was_set = await self.redis_pool.set(
                     debounce_key,
                     "1",
-                    ex=debounce_ttl,
+                    ex=RedisKeys.PREF_UPDATE_DEBOUNCE_TTL,
                     nx=True,  # SET if not exists
                 )
 

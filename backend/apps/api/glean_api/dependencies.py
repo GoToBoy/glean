@@ -109,8 +109,28 @@ def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     jwt_config: Annotated[JWTConfig, Depends(get_jwt_config)],
 ) -> AuthService:
-    """Get authentication service instance."""
-    return AuthService(session, jwt_config)
+    """Get authentication service instance with provider configs."""
+    from glean_core.config import auth_provider_config
+
+    # Build provider configs from settings
+    provider_configs: dict[str, dict[str, str | list[str]]] = {}
+
+    if auth_provider_config.oidc_enabled:
+        oidc_config: dict[str, str | list[str]] = {
+            "client_id": auth_provider_config.oidc_client_id,
+            "client_secret": auth_provider_config.oidc_client_secret,
+            "issuer": auth_provider_config.oidc_issuer,
+            "scopes": auth_provider_config.oidc_scopes.split(),
+            "redirect_uri": auth_provider_config.oidc_redirect_uri,
+        }
+
+        # Optional discovery URL override
+        if auth_provider_config.oidc_discovery_url:
+            oidc_config["discovery_url"] = auth_provider_config.oidc_discovery_url
+
+        provider_configs["oidc"] = oidc_config
+
+    return AuthService(session, jwt_config, provider_configs)
 
 
 def get_user_service(session: Annotated[AsyncSession, Depends(get_session)]) -> UserService:
