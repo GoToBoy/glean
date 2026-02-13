@@ -17,7 +17,7 @@ import { tokenStorage } from '../tokenStorage'
  * Handles user registration, login, token refresh, and profile retrieval.
  */
 export class AuthService {
-  constructor(private client: ApiClient) {}
+  constructor(private readonly client: ApiClient) {}
 
   /**
    * Register a new user account.
@@ -60,6 +60,7 @@ export class AuthService {
     await tokenStorage.clearTokens()
     // Clear OIDC state to prevent stale data on next login
     if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('oidc_state')
       localStorage.removeItem('oidc_state')
     }
   }

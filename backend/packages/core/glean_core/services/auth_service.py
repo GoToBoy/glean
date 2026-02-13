@@ -8,8 +8,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from glean_core import get_logger
 from glean_core.auth import (
     JWTConfig,
     create_access_token,
@@ -21,6 +23,8 @@ from glean_core.auth import (
 from glean_core.auth.providers import AuthProviderFactory, AuthResult
 from glean_core.schemas import LoginRequest, RegisterRequest, TokenResponse, UserResponse
 from glean_database.models import User, UserAuthProvider
+
+logger = get_logger(__name__)
 
 
 class AuthService:
@@ -275,21 +279,7 @@ class AuthService:
         user = result.scalar_one_or_none()
 
         if user:
-            # Update user info from provider if needed
-            if auth_result.get("name") and not user.name:
-                user.name = auth_result["name"]
-            if auth_result.get("username") and not user.username:
-                user.username = auth_result.get("username")
-            if auth_result.get("phone") and not user.phone:
-                user.phone = auth_result.get("phone")
-            if auth_result.get("avatar_url") and not user.avatar_url:
-                user.avatar_url = auth_result["avatar_url"]
-            # Update email if provided and not set
-            if auth_result.get("email") and not user.email:
-                user.email = auth_result["email"]
-            # Mark as verified if provider verified the email
-            if auth_result["metadata"].get("email_verified"):
-                user.is_verified = True
+            await self._apply_provider_profile_updates(user, auth_result)
             return user
 
         # If email is provided, try to find existing user by email
@@ -301,18 +291,7 @@ class AuthService:
             if user:
                 # Link this OAuth provider to existing user
                 # The provider mapping will be created in _update_auth_provider
-                # Update user info from provider if needed
-                if auth_result.get("name") and not user.name:
-                    user.name = auth_result["name"]
-                if auth_result.get("username") and not user.username:
-                    user.username = auth_result.get("username")
-                if auth_result.get("phone") and not user.phone:
-                    user.phone = auth_result.get("phone")
-                if auth_result.get("avatar_url") and not user.avatar_url:
-                    user.avatar_url = auth_result["avatar_url"]
-                # Mark as verified if provider verified the email
-                if auth_result["metadata"].get("email_verified"):
-                    user.is_verified = True
+                await self._apply_provider_profile_updates(user, auth_result)
                 return user
 
         # Create new user from OAuth data
@@ -330,9 +309,85 @@ class AuthService:
         )
 
         self.session.add(user)
-        await self.session.flush()  # Flush to get user.id without committing
+        try:
+            await self.session.flush()  # Flush to get user.id without committing
+        except IntegrityError:
+            # Another concurrent request likely created this user first.
+            await self.session.rollback()
+            existing_user = await self._find_existing_oauth_user(provider_id, auth_result)
+            if existing_user is None:
+                raise ValueError(
+                    "Failed to create OAuth user due to a concurrent request"
+                ) from None
+            return existing_user
 
         return user
+
+    async def _find_existing_oauth_user(
+        self, provider_id: str, auth_result: AuthResult
+    ) -> User | None:
+        """Find an existing OAuth user without creating records."""
+        stmt = (
+            select(User)
+            .join(UserAuthProvider)
+            .where(
+                UserAuthProvider.provider_id == provider_id,
+                UserAuthProvider.provider_user_id == auth_result["provider_user_id"],
+            )
+        )
+        result = await self.session.execute(stmt)
+        user = result.scalar_one_or_none()
+        if user:
+            return user
+
+        email = auth_result.get("email")
+        if email:
+            email_stmt = select(User).where(User.email == email)
+            email_result = await self.session.execute(email_stmt)
+            user = email_result.scalar_one_or_none()
+            if user:
+                return user
+
+        fallback_stmt = select(User).where(
+            User.primary_auth_provider == provider_id,
+            User.provider_user_id == auth_result["provider_user_id"],
+        )
+        fallback_result = await self.session.execute(fallback_stmt)
+        return fallback_result.scalars().first()
+
+    async def _apply_provider_profile_updates(self, user: User, auth_result: AuthResult) -> None:
+        """Apply provider profile updates while preserving unique email constraints."""
+        self._update_user_from_auth_result(user, auth_result)
+
+        provider_email = auth_result.get("email")
+        if provider_email and not user.email:
+            if await self._email_used_by_other_user(provider_email, user.id):
+                logger.warning(
+                    "[Auth] skipping OAuth email update because email is already in use",
+                    extra={"user_id": user.id, "email": provider_email},
+                )
+            else:
+                user.email = provider_email
+
+        if auth_result["metadata"].get("email_verified"):
+            user.is_verified = True
+
+    def _update_user_from_auth_result(self, user: User, auth_result: AuthResult) -> None:
+        """Apply non-email profile fields from provider payload for partially empty users."""
+        if auth_result.get("name") and not user.name:
+            user.name = auth_result["name"]
+        if auth_result.get("username") and not user.username:
+            user.username = auth_result.get("username")
+        if auth_result.get("phone") and not user.phone:
+            user.phone = auth_result.get("phone")
+        if auth_result.get("avatar_url") and not user.avatar_url:
+            user.avatar_url = auth_result["avatar_url"]
+
+    async def _email_used_by_other_user(self, email: str, user_id: str) -> bool:
+        """Return True when another user already owns this email."""
+        stmt = select(User).where(User.email == email, User.id != user_id)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none() is not None
 
     async def _update_auth_provider(
         self, user_id: str, provider_id: str, auth_result: AuthResult

@@ -4,11 +4,14 @@ OpenID Connect (OIDC) authentication provider.
 This module implements OIDC authentication for OAuth providers like Google, Microsoft, etc.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import urlencode
 
 import httpx
-from jose import jwt
+from jose import jwk, jwt
+from jose.constants import ALGORITHMS
+from jose.exceptions import ExpiredSignatureError, JWTClaimsError, JWTError
 
 from glean_core import get_logger
 
@@ -47,6 +50,7 @@ class OIDCProvider(AuthProvider):
             "discovery_url", f"{self.issuer}/.well-known/openid-configuration"
         )
         self._oidc_config: dict[str, Any] | None = None
+        self._jwks: dict[str, Any] | None = None  # JWKS cache
 
     async def authenticate(self, credentials: dict[str, Any]) -> AuthResult:
         """
@@ -56,6 +60,7 @@ class OIDCProvider(AuthProvider):
             credentials: Dictionary containing:
                 - code: Authorization code from OIDC provider
                 - redirect_uri: OAuth callback URL (must match registration)
+                - nonce: Nonce value from authorization request (for replay protection)
 
         Returns:
             AuthResult with user information from ID token.
@@ -65,9 +70,13 @@ class OIDCProvider(AuthProvider):
         """
         code = credentials.get("code")
         redirect_uri = credentials.get("redirect_uri")
+        nonce = credentials.get("nonce")
 
         if not code or not redirect_uri:
             raise ValueError("Authorization code and redirect_uri are required")
+
+        if not nonce:
+            raise ValueError("Nonce is required for token verification")
 
         # Get OIDC configuration
         oidc_config = await self._get_oidc_config()
@@ -91,7 +100,12 @@ class OIDCProvider(AuthProvider):
             tokens = response.json()
 
         # Verify ID token and extract user info
-        user_info = await self._verify_id_token(tokens["id_token"], oidc_config)
+        user_info = await self._verify_id_token(
+            tokens["id_token"],
+            oidc_config,
+            nonce,
+            tokens.get("access_token"),
+        )
 
         logger.info("[OIDC] received user info from IdP", extra={"user_info": user_info})
 
@@ -130,7 +144,9 @@ class OIDCProvider(AuthProvider):
         await self._get_oidc_config()
         return True
 
-    def get_authorization_url(self, state: str, redirect_uri: str) -> str | None:
+    def get_authorization_url(
+        self, state: str, redirect_uri: str, nonce: str | None = None
+    ) -> str | None:
         """
         Generate OIDC authorization URL.
 
@@ -139,6 +155,7 @@ class OIDCProvider(AuthProvider):
         Args:
             state: CSRF protection state parameter.
             redirect_uri: OAuth callback URL.
+            nonce: Nonce value for replay attack prevention.
 
         Returns:
             Authorization URL to redirect user to.
@@ -146,11 +163,13 @@ class OIDCProvider(AuthProvider):
         Raises:
             ValueError: If OIDC config not loaded.
         """
-        from secrets import token_urlsafe
         from time import time_ns
 
         if not self._oidc_config:
             raise ValueError("OIDC config not loaded - call _get_oidc_config() first")
+
+        if not nonce:
+            raise ValueError("Nonce is required for OIDC authorization")
 
         scope = " ".join(self.scopes)
         auth_endpoint = self._oidc_config["authorization_endpoint"]
@@ -162,8 +181,7 @@ class OIDCProvider(AuthProvider):
             "response_type": "code",
             "scope": scope,
             "state": state,
-            # Add nonce and timestamp to prevent caching
-            "nonce": token_urlsafe(16),
+            "nonce": nonce,  # Nonce for replay attack prevention
             # Add timestamp as cache-buster (in nanoseconds to ensure uniqueness)
             "_t": str(time_ns()),
         }
@@ -193,13 +211,26 @@ class OIDCProvider(AuthProvider):
             self._oidc_config = config
             return config
 
-    async def _verify_id_token(self, id_token: str, _oidc_config: dict[str, Any]) -> dict[str, Any]:
+    async def _verify_id_token(
+        self,
+        id_token: str,
+        oidc_config: dict[str, Any],
+        nonce: str,
+        access_token: str | None = None,
+    ) -> dict[str, Any]:
         """
-        Verify and decode ID token.
+        Verify and decode ID token with proper signature verification.
+
+        This implementation follows OpenID Connect Core 1.0 specification:
+        - Verifies JWT signature using JWKS from provider
+        - Validates issuer, audience, expiration, not-before time
+        - Validates nonce to prevent replay attacks
 
         Args:
             id_token: JWT ID token from OIDC provider.
-            _oidc_config: OIDC configuration dictionary (unused in simplified implementation).
+            oidc_config: OIDC configuration dictionary with jwks_uri.
+            nonce: Expected nonce value from authorization request.
+            access_token: OAuth access token used for at_hash validation when present.
 
         Returns:
             Decoded token claims.
@@ -207,24 +238,142 @@ class OIDCProvider(AuthProvider):
         Raises:
             ValueError: If token verification fails.
 
-        Note:
-            This is a simplified implementation that decodes without signature verification.
-            Production deployments should implement proper JWKS verification.
+        References:
+            OpenID Connect Core 1.0: https://openid.net/specs/openid-connect-core-1_0.html#IDTokenValidation
         """
         try:
-            # Decode without verification (simplified for now)
-            # TODO: Implement proper JWKS verification in production
-            claims = jwt.get_unverified_claims(id_token)
+            # Step 1: Decode header to get key ID (kid)
+            unverified_header = jwt.get_unverified_header(id_token)
+            kid = unverified_header.get("kid")
 
-            # Basic validation
-            if claims.get("iss") != self.issuer:
-                raise ValueError("Invalid issuer")
+            if not kid:
+                raise ValueError("ID token missing 'kid' in header")
 
-            if claims.get("aud") != self.client_id:
-                raise ValueError("Invalid audience")
+            # Step 2: Fetch JWKS (JSON Web Key Set) from provider
+            jwks = await self._get_jwks(oidc_config)
 
-            # TODO: Verify expiration, signature, etc.
+            # Step 3: Find matching key in JWKS
+            signing_key = None
+            for key in jwks.get("keys", []):
+                if key.get("kid") == kid:
+                    signing_key = key
+                    break
+
+            if not signing_key:
+                raise ValueError(f"No matching key found for kid: {kid}")
+
+            # Step 4: Construct RSA public key from JWK
+            public_key = jwk.construct(signing_key)
+
+            # Step 5: Verify signature and decode claims
+            # This performs cryptographic signature verification
+            claims = jwt.decode(
+                id_token,
+                public_key,
+                algorithms=[signing_key.get("alg", ALGORITHMS.RS256)],
+                audience=self.client_id,
+                issuer=self.issuer,
+                access_token=access_token,
+                options={
+                    "verify_signature": True,
+                    "verify_aud": True,
+                    "verify_iat": True,
+                    "verify_exp": True,
+                    "verify_nbf": True,
+                    "verify_iss": True,
+                    "require_exp": True,
+                    "require_iat": True,
+                },
+            )
+
+            # Step 6: Additional OIDC-specific validations
+
+            # Validate nonce (prevents replay attacks)
+            token_nonce = claims.get("nonce")
+            if token_nonce != nonce:
+                raise ValueError("Nonce mismatch - possible replay attack")
+
+            # Validate issued-at time (iat) is not in the future
+            iat = claims.get("iat")
+            if iat:
+                iat_time = datetime.fromtimestamp(iat, UTC)
+                now = datetime.now(UTC)
+                # Allow 60 seconds clock skew
+                if iat_time.timestamp() > now.timestamp() + 60:
+                    raise ValueError("Token issued in the future")
+
+            # Validate not-before time (nbf) if present
+            nbf = claims.get("nbf")
+            if nbf:
+                nbf_time = datetime.fromtimestamp(nbf, UTC)
+                now = datetime.now(UTC)
+                # Allow 60 seconds clock skew
+                if now.timestamp() < nbf_time.timestamp() - 60:
+                    raise ValueError("Token not yet valid (nbf)")
+
+            # Validate expiration is checked (already done by jwt.decode, but log it)
+            exp = claims.get("exp")
+            if exp:
+                exp_time = datetime.fromtimestamp(exp, UTC)
+                logger.debug(
+                    "[OIDC] Token expiration validated",
+                    extra={"expires_at": exp_time.isoformat()},
+                )
+
+            logger.info(
+                "[OIDC] ID token verified successfully",
+                extra={
+                    "sub": claims.get("sub"),
+                    "iss": claims.get("iss"),
+                    "aud": claims.get("aud"),
+                },
+            )
 
             return claims
+
+        except ExpiredSignatureError as e:
+            raise ValueError("ID token has expired") from e
+        except JWTClaimsError as e:
+            raise ValueError(f"ID token claims validation failed: {e}") from e
+        except JWTError as e:
+            raise ValueError(f"ID token verification failed: {e}") from e
         except Exception as e:
             raise ValueError(f"ID token verification failed: {e}") from e
+
+    async def _get_jwks(self, oidc_config: dict[str, Any]) -> dict[str, Any]:
+        """
+        Fetch JSON Web Key Set (JWKS) from provider.
+
+        JWKS contains public keys used to verify JWT signatures.
+
+        Args:
+            oidc_config: OIDC configuration dictionary with jwks_uri.
+
+        Returns:
+            JWKS dictionary with keys.
+
+        Raises:
+            ValueError: If JWKS fetch fails.
+        """
+        if self._jwks is not None:
+            return self._jwks
+
+        jwks_uri = oidc_config.get("jwks_uri")
+        if not jwks_uri:
+            raise ValueError("OIDC config missing 'jwks_uri'")
+
+        async with httpx.AsyncClient() as client:
+            response = await client.get(jwks_uri)
+
+            if response.status_code != 200:
+                raise ValueError(f"Failed to fetch JWKS: {response.text}")
+
+            jwks: dict[str, Any] = response.json()
+            self._jwks = jwks
+
+            logger.debug(
+                "[OIDC] JWKS fetched successfully",
+                extra={"num_keys": len(jwks.get("keys", []))},
+            )
+
+            return jwks

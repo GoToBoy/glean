@@ -42,7 +42,7 @@ export default function AuthCallbackPage() {
         }
 
         // Validate state (CSRF protection)
-        const savedState = localStorage.getItem('oidc_state')
+        const savedState = sessionStorage.getItem('oidc_state')
         if (state !== savedState) {
           throw new Error('Invalid state parameter - possible CSRF attack')
         }
@@ -50,8 +50,9 @@ export default function AuthCallbackPage() {
         // Exchange code for tokens
         const { user, tokens } = await authService.handleOIDCCallback(code, state)
 
-        // Clean up state
-        localStorage.removeItem('oidc_state')
+        // Clean up state from session-scoped storage.
+        // Production deployments should enforce strict CSP to reduce XSS risk for web storage.
+        sessionStorage.removeItem('oidc_state')
 
         // Save tokens
         await authService.saveTokens(tokens)
@@ -67,7 +68,7 @@ export default function AuthCallbackPage() {
         setError(errorMessage)
 
         // Clean up state on error
-        localStorage.removeItem('oidc_state')
+        sessionStorage.removeItem('oidc_state')
 
         // Redirect to login after 3 seconds
         setTimeout(() => navigate('/login'), 3000)

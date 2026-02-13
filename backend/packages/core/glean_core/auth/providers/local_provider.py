@@ -61,11 +61,18 @@ class LocalAuthProvider(AuthProvider):
         """
         return True
 
-    def get_authorization_url(self, state: str, redirect_uri: str) -> str | None:
+    def get_authorization_url(
+        self, state: str, redirect_uri: str, nonce: str | None = None
+    ) -> str | None:
         """
         Get OAuth authorization URL.
 
         Local provider does not use OAuth, so returns None.
+
+        Args:
+            state: CSRF protection state parameter (unused).
+            redirect_uri: OAuth callback URL (unused).
+            nonce: Nonce for replay attack prevention (unused).
 
         Returns:
             None (not an OAuth provider).

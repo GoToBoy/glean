@@ -7,10 +7,11 @@ Provides endpoints for user registration, login, token refresh, and user profile
 from typing import Annotated
 
 from arq.connections import ArqRedis
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from glean_core import RedisKeys
+from glean_core import RedisKeys, get_logger
 from glean_core.schemas import (
     LoginRequest,
     RefreshTokenRequest,
@@ -30,6 +31,40 @@ from ..dependencies import (
 )
 
 router = APIRouter()
+logger = get_logger(__name__)
+
+OIDC_RATE_LIMIT_WINDOW_SECONDS = 60
+OIDC_AUTHORIZE_RATE_LIMIT = 30
+OIDC_CALLBACK_RATE_LIMIT = 30
+
+
+def _get_client_identifier(request: Request) -> str:
+    """Get a stable client identifier for endpoint-level rate limiting."""
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        # Use the first IP in X-Forwarded-For chain.
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+async def _enforce_oidc_rate_limit(
+    redis: ArqRedis, request: Request, action: str, limit: int
+) -> None:
+    """Apply Redis-backed fixed-window rate limiting for OIDC endpoints."""
+    client_id = _get_client_identifier(request)
+    key = RedisKeys.oidc_rate_limit(action, client_id)
+    current_count = await redis.incr(key)
+
+    if current_count == 1:
+        await redis.expire(key, OIDC_RATE_LIMIT_WINDOW_SECONDS)
+
+    if current_count > limit:
+        retry_after = await redis.ttl(key)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests. Please try again later.",
+            headers={"Retry-After": str(max(retry_after, 1))},
+        )
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
@@ -169,6 +204,7 @@ async def update_me(
 
 @router.get("/oauth/oidc/authorize")
 async def oidc_authorize(
+    request: Request,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ):
@@ -188,8 +224,6 @@ async def oidc_authorize(
     """
     from secrets import token_urlsafe
 
-    from fastapi.responses import JSONResponse
-
     from glean_core.auth.providers import AuthProviderFactory
     from glean_core.config import auth_provider_config
 
@@ -198,6 +232,8 @@ async def oidc_authorize(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="OIDC authentication is not enabled"
         )
+
+    await _enforce_oidc_rate_limit(redis, request, "authorize", OIDC_AUTHORIZE_RATE_LIMIT)
 
     # Get OIDC provider config
     provider_config = auth_service.provider_configs.get("oidc")
@@ -214,8 +250,9 @@ async def oidc_authorize(
         # Load OIDC discovery config
         await provider._get_oidc_config()  # type: ignore[attr-defined]
 
-        # Generate CSRF state with timestamp to prevent caching
+        # Generate CSRF state and nonce
         state = token_urlsafe(32)
+        nonce = token_urlsafe(32)
 
         # Store state in Redis with 5-minute TTL for verification in callback
         await redis.setex(
@@ -224,9 +261,16 @@ async def oidc_authorize(
             "1",
         )
 
-        # Get authorization URL with nonce to prevent caching
+        # Store nonce in Redis for verification during token validation
+        await redis.setex(
+            RedisKeys.oidc_nonce(state),
+            RedisKeys.OIDC_NONCE_TTL,
+            nonce,
+        )
+
+        # Get authorization URL with state and nonce
         auth_url = provider.get_authorization_url(
-            state=state, redirect_uri=str(provider_config["redirect_uri"])
+            state=state, redirect_uri=str(provider_config["redirect_uri"]), nonce=nonce
         )
 
         if not auth_url:
@@ -247,10 +291,13 @@ async def oidc_authorize(
                 "Expires": "0",
             },
         )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("[OIDC] failed to generate authorization URL")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to generate authorization URL: {e}",
+            detail="Failed to generate authorization URL",
         ) from None
 
 
@@ -263,10 +310,11 @@ class OIDCCallbackRequest(BaseModel):
 
 @router.post("/oauth/oidc/callback")
 async def oidc_callback(
+    request: Request,
     data: OIDCCallbackRequest,
     auth_service: Annotated[AuthService, Depends(get_auth_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> dict[str, UserResponse | TokenResponse]:
+) -> JSONResponse:
     """
     Handle OIDC callback after user authorization.
 
@@ -282,6 +330,8 @@ async def oidc_callback(
     Raises:
         HTTPException: If authentication fails or provider not configured.
     """
+    await _enforce_oidc_rate_limit(redis, request, "callback", OIDC_CALLBACK_RATE_LIMIT)
+
     # Validate state from Redis to prevent CSRF attacks
     state_key = RedisKeys.oidc_state(data.state)
     state_valid = await redis.exists(state_key)
@@ -290,8 +340,21 @@ async def oidc_callback(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
         )
 
-    # Delete state from Redis to prevent replay attacks
+    # Retrieve nonce from Redis for token verification
+    nonce_key = RedisKeys.oidc_nonce(data.state)
+    nonce = await redis.get(nonce_key)
+    if not nonce:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired nonce"
+        )
+
+    # Decode nonce from bytes if needed
+    if isinstance(nonce, bytes):
+        nonce = nonce.decode("utf-8")
+
+    # Delete state and nonce from Redis to prevent replay attacks
     await redis.delete(state_key)
+    await redis.delete(nonce_key)
 
     # Get provider config
     provider_config = auth_service.provider_configs.get("oidc")
@@ -301,15 +364,30 @@ async def oidc_callback(
             detail="OIDC provider not configured",
         )
 
-    # Prepare credentials
+    # Prepare credentials with nonce for token verification
     credentials = {
         "code": data.code,
         "redirect_uri": str(provider_config["redirect_uri"]),
+        "nonce": nonce,
     }
 
     try:
         # Authenticate with OIDC provider
         user, tokens = await auth_service.login_with_provider("oidc", credentials)
-        return {"user": user, "tokens": tokens}
+        return JSONResponse(
+            content={
+                "user": user.model_dump(mode="json"),
+                "tokens": tokens.model_dump(mode="json"),
+            },
+            headers={
+                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+                "Pragma": "no-cache",
+                "Expires": "0",
+            },
+        )
     except ValueError as e:
+        logger.warning(
+            f"[OIDC] callback authentication failed: {e}",
+            extra={"state_prefix": data.state[:8]},
+        )
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None

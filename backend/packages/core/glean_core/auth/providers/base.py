@@ -69,7 +69,9 @@ class AuthProvider(ABC):
         pass
 
     @abstractmethod
-    def get_authorization_url(self, state: str, redirect_uri: str) -> str | None:
+    def get_authorization_url(
+        self, state: str, redirect_uri: str, nonce: str | None = None
+    ) -> str | None:
         """
         Get OAuth authorization URL (None for non-OAuth providers).
 
@@ -79,6 +81,7 @@ class AuthProvider(ABC):
         Args:
             state: CSRF protection state parameter.
             redirect_uri: OAuth callback URL.
+            nonce: Nonce for replay attack prevention (required for OIDC).
 
         Returns:
             Authorization URL for OAuth providers, None for non-OAuth providers.
