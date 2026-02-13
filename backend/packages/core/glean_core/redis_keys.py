@@ -50,6 +50,26 @@ class RedisKeys:
         """
         return f"oidc_nonce:{state}"
 
+    # OIDC PKCE code verifier
+    # Format: oidc_pkce_verifier:{state}
+    # TTL: 5 minutes (300 seconds) - same as state
+    OIDC_PKCE_VERIFIER_TTL = 300
+
+    @staticmethod
+    def oidc_pkce_verifier(state: str) -> str:
+        """
+        Get OIDC PKCE verifier key.
+
+        PKCE verifier is stored with state as key to simplify cleanup.
+
+        Args:
+            state: State token used as key (same as in authorization).
+
+        Returns:
+            Redis key string.
+        """
+        return f"oidc_pkce_verifier:{state}"
+
     # OIDC endpoint rate-limit key
     # Format: oidc_rate_limit:{action}:{client_id}
     @staticmethod

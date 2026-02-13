@@ -42,8 +42,8 @@ class AuthProviderConfig(BaseSettings):
     oidc_redirect_uri: str = ""  # e.g., "http://localhost:3000/auth/callback"
     oidc_jwks_cache_ttl_seconds: int = 86400
     oidc_rate_limit_window_seconds: int = 60
-    oidc_authorize_rate_limit: int = 30
-    oidc_callback_rate_limit: int = 30
+    oidc_authorize_rate_limit: int = 10
+    oidc_callback_rate_limit: int = 5
     oidc_trusted_proxy_ips: str = ""  # Comma-separated proxy IPs allowed to set forwarded headers
     oidc_client_ip_headers: str = "cf-connecting-ip,x-real-ip"  # Priority-ordered, comma-separated
 

@@ -38,6 +38,7 @@ class _FakeHTTPClient:
             {
                 "id_token": "id-token",
                 "access_token": "access-token",
+                "token_type": "Bearer",
             },
         )
 
@@ -73,7 +74,10 @@ async def test_prepare_loads_discovery_configuration() -> None:
 
     await provider.prepare()
     auth_url = provider.get_authorization_url(
-        "state", provider.config["redirect_uri"], nonce="nonce"
+        "state",
+        provider.config["redirect_uri"],
+        nonce="nonce",
+        code_challenge="pkce-challenge",
     )
 
     assert "authorization_endpoint" in provider._oidc_config

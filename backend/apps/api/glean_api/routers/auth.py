@@ -5,7 +5,7 @@ Provides endpoints for user registration, login, token refresh, and user profile
 """
 
 import ipaddress
-from typing import Annotated
+from typing import Annotated, cast
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -48,6 +48,25 @@ def _parse_csv_config(value: str) -> list[str]:
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def _authentication_failed_exception() -> HTTPException:
+    """Create a generic auth failure response without internal details."""
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Authentication failed. Please try again.",
+    )
+
+
+def _oidc_no_cache_headers() -> dict[str, str]:
+    """Standard no-cache and security headers for OIDC responses."""
+    return {
+        "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+    }
+
+
 def _get_client_identifier(request: Request) -> str:
     """Get client IP for rate limiting with trusted proxy header handling."""
     from glean_core.config import auth_provider_config
@@ -78,22 +97,25 @@ def _get_client_identifier(request: Request) -> str:
     return direct_ip
 
 
-async def _consume_oidc_state_and_nonce(redis: ArqRedis, state: str) -> str:
+async def _consume_oidc_auth_context(redis: ArqRedis, state: str) -> tuple[str, str]:
     """
-    Validate state and atomically consume state+nonce in Redis.
+    Validate state and atomically consume state+nonce+PKCE verifier in Redis.
 
     Returns:
-        Nonce string for ID token verification.
+        Tuple of (nonce, code_verifier).
     """
     state_key = RedisKeys.oidc_state(state)
     nonce_key = RedisKeys.oidc_nonce(state)
+    code_verifier_key = RedisKeys.oidc_pkce_verifier(state)
 
     pipe = redis.pipeline(transaction=True)
     pipe.exists(state_key)
     pipe.get(nonce_key)
+    pipe.get(code_verifier_key)
     pipe.delete(state_key)
     pipe.delete(nonce_key)
-    state_valid, nonce, _, _ = await pipe.execute()
+    pipe.delete(code_verifier_key)
+    state_valid, nonce, code_verifier, _, _, _ = await pipe.execute()
 
     if not state_valid:
         raise HTTPException(
@@ -104,8 +126,17 @@ async def _consume_oidc_state_and_nonce(redis: ArqRedis, state: str) -> str:
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired nonce"
         )
     if isinstance(nonce, bytes):
-        return nonce.decode("utf-8")
-    return str(nonce)
+        nonce = nonce.decode("utf-8")
+
+    if not code_verifier:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired PKCE verifier",
+        )
+    if isinstance(code_verifier, bytes):
+        code_verifier = code_verifier.decode("utf-8")
+
+    return str(nonce), str(code_verifier)
 
 
 async def _enforce_oidc_rate_limit(
@@ -185,7 +216,8 @@ async def login(
         user, tokens = await auth_service.login(data)
         return {"user": user, "tokens": tokens}
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
+        logger.info("Login failed", extra={"error_type": type(e).__name__})
+        raise _authentication_failed_exception() from None
 
 
 @router.post("/refresh")
@@ -210,7 +242,8 @@ async def refresh_token(
         tokens = await auth_service.refresh_access_token(data.refresh_token)
         return tokens
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
+        logger.info("Token refresh failed", extra={"error_type": type(e).__name__})
+        raise _authentication_failed_exception() from None
 
 
 @router.post("/logout")
@@ -287,7 +320,7 @@ async def oidc_authorize(
     """
     from secrets import token_urlsafe
 
-    from glean_core.auth.providers import AuthProviderFactory
+    from glean_core.auth.providers import AuthProviderFactory, OIDCProvider
     from glean_core.config import auth_provider_config
 
     # Check if OIDC is enabled
@@ -311,13 +344,15 @@ async def oidc_authorize(
     try:
         # Create OIDC provider
         provider = AuthProviderFactory.create("oidc", provider_config)
+        oidc_provider = cast(OIDCProvider, provider)
 
         # Load OIDC discovery config before generating authorization URL.
-        await provider.prepare()
+        await oidc_provider.prepare()
 
-        # Generate CSRF state and nonce
+        # Generate CSRF state, nonce, and PKCE verifier/challenge
         state = token_urlsafe(32)
         nonce = token_urlsafe(32)
+        code_verifier, code_challenge = oidc_provider.generate_pkce_pair()
 
         # Store state in Redis with 5-minute TTL for verification in callback
         await redis.setex(
@@ -332,10 +367,18 @@ async def oidc_authorize(
             RedisKeys.OIDC_NONCE_TTL,
             nonce,
         )
+        await redis.setex(
+            RedisKeys.oidc_pkce_verifier(state),
+            RedisKeys.OIDC_PKCE_VERIFIER_TTL,
+            code_verifier,
+        )
 
-        # Get authorization URL with state and nonce
-        auth_url = provider.get_authorization_url(
-            state=state, redirect_uri=str(provider_config["redirect_uri"]), nonce=nonce
+        # Get authorization URL with state, nonce, and PKCE challenge
+        auth_url = oidc_provider.get_authorization_url(
+            state=state,
+            redirect_uri=str(provider_config["redirect_uri"]),
+            nonce=nonce,
+            code_challenge=code_challenge,
         )
 
         if not auth_url:
@@ -350,11 +393,7 @@ async def oidc_authorize(
                 "authorization_url": auth_url,
                 "state": state,
             },
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
+            headers=_oidc_no_cache_headers(),
         )
     except HTTPException:
         raise
@@ -406,7 +445,7 @@ async def oidc_callback(
         redis, request, "callback", auth_provider_config.oidc_callback_rate_limit
     )
 
-    nonce = await _consume_oidc_state_and_nonce(redis, data.state)
+    nonce, code_verifier = await _consume_oidc_auth_context(redis, data.state)
 
     # Get provider config
     provider_config = auth_service.provider_configs.get("oidc")
@@ -421,6 +460,7 @@ async def oidc_callback(
         "code": data.code,
         "redirect_uri": str(provider_config["redirect_uri"]),
         "nonce": nonce,
+        "code_verifier": code_verifier,
     }
 
     try:
@@ -431,15 +471,11 @@ async def oidc_callback(
                 "user": user.model_dump(mode="json"),
                 "tokens": tokens.model_dump(mode="json"),
             },
-            headers={
-                "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
-                "Pragma": "no-cache",
-                "Expires": "0",
-            },
+            headers=_oidc_no_cache_headers(),
         )
     except ValueError as e:
         logger.warning(
-            f"[OIDC] callback authentication failed: {e}",
-            extra={"state_prefix": data.state[:8]},
+            "[OIDC] callback authentication failed",
+            extra={"state_prefix": data.state[:8], "error_type": type(e).__name__},
         )
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(e)) from None
+        raise _authentication_failed_exception() from None

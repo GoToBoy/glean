@@ -20,19 +20,8 @@ export function OIDCLoginButton() {
       setLoading(true)
       setErrorMessage('')
 
-      // Clear any previous OIDC state to prevent stale data.
-      // Keep this in sessionStorage since state is only needed during one auth flow.
-      sessionStorage.removeItem('oidc_state')
-
       // Get authorization URL from backend
-      const { authorization_url, state } = await authService.getOIDCAuthUrl()
-
-      // Save state for CSRF validation.
-      // Production deployments should enforce strict CSP to reduce XSS risk for web storage.
-      sessionStorage.setItem('oidc_state', state)
-
-      // Add a small delay to ensure sessionStorage is updated before redirect
-      await new Promise((resolve) => setTimeout(resolve, 50))
+      const { authorization_url } = await authService.getOIDCAuthUrl()
 
       // Redirect to OIDC provider
       window.location.href = authorization_url

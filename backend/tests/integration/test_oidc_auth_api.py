@@ -14,11 +14,23 @@ class _FakeOIDCProvider:
     async def prepare(self) -> None:
         return None
 
-    def get_authorization_url(self, state: str, redirect_uri: str, nonce: str | None = None) -> str:
+    @staticmethod
+    def generate_pkce_pair() -> tuple[str, str]:
+        return "code-verifier", "code-challenge"
+
+    def get_authorization_url(
+        self,
+        state: str,
+        redirect_uri: str,
+        nonce: str | None = None,
+        code_challenge: str | None = None,
+    ) -> str:
         assert nonce is not None
+        assert code_challenge is not None
         return (
             "https://issuer.example.com/oauth/authorize"
             f"?state={state}&redirect_uri={redirect_uri}&nonce={nonce}"
+            f"&code_challenge={code_challenge}"
         )
 
 
@@ -30,6 +42,7 @@ class _FakeAuthService:
     async def login_with_provider(self, provider_id: str, credentials: dict[str, str]):
         assert provider_id == "oidc"
         assert credentials["nonce"]
+        assert credentials["code_verifier"]
 
         if self.should_fail:
             raise ValueError("Token verification failed")
@@ -87,6 +100,7 @@ async def test_oidc_authorize_success(
     state = payload["state"]
     assert test_mock_redis.has_key(f"oidc_state:{state}")
     assert test_mock_redis.has_key(f"oidc_nonce:{state}")
+    assert test_mock_redis.has_key(f"oidc_pkce_verifier:{state}")
 
 
 @pytest.mark.asyncio
@@ -129,6 +143,7 @@ async def test_oidc_callback_rejects_missing_nonce(
 ) -> None:
     app.dependency_overrides[get_auth_service] = lambda: _FakeAuthService()
     test_mock_redis.seed("oidc_state:state-1", "1")
+    test_mock_redis.seed("oidc_pkce_verifier:state-1", "code-verifier")
 
     response = await client.post(
         "/api/auth/oauth/oidc/callback",
@@ -144,6 +159,7 @@ async def test_oidc_callback_success(client: AsyncClient, test_mock_redis, _enab
     app.dependency_overrides[get_auth_service] = lambda: _FakeAuthService()
     test_mock_redis.seed("oidc_state:state-2", "1")
     test_mock_redis.seed("oidc_nonce:state-2", "nonce-2")
+    test_mock_redis.seed("oidc_pkce_verifier:state-2", "code-verifier")
 
     response = await client.post(
         "/api/auth/oauth/oidc/callback",
@@ -156,6 +172,7 @@ async def test_oidc_callback_success(client: AsyncClient, test_mock_redis, _enab
     assert payload["tokens"]["access_token"] == "access-token"
     assert not test_mock_redis.has_key("oidc_state:state-2")
     assert not test_mock_redis.has_key("oidc_nonce:state-2")
+    assert not test_mock_redis.has_key("oidc_pkce_verifier:state-2")
 
 
 @pytest.mark.asyncio
@@ -165,6 +182,7 @@ async def test_oidc_callback_auth_failure_returns_401(
     app.dependency_overrides[get_auth_service] = lambda: _FakeAuthService(should_fail=True)
     test_mock_redis.seed("oidc_state:state-3", "1")
     test_mock_redis.seed("oidc_nonce:state-3", "nonce-3")
+    test_mock_redis.seed("oidc_pkce_verifier:state-3", "code-verifier")
 
     response = await client.post(
         "/api/auth/oauth/oidc/callback",
@@ -172,7 +190,7 @@ async def test_oidc_callback_auth_failure_returns_401(
     )
 
     assert response.status_code == 401
-    assert "Token verification failed" in response.text
+    assert "Authentication failed. Please try again." in response.text
 
 
 @pytest.mark.asyncio
@@ -185,8 +203,10 @@ async def test_oidc_callback_rate_limited(
     monkeypatch.setattr(auth_provider_config, "oidc_callback_rate_limit", 1)
     test_mock_redis.seed("oidc_state:state-4a", "1")
     test_mock_redis.seed("oidc_nonce:state-4a", "nonce-4a")
+    test_mock_redis.seed("oidc_pkce_verifier:state-4a", "code-verifier")
     test_mock_redis.seed("oidc_state:state-4b", "1")
     test_mock_redis.seed("oidc_nonce:state-4b", "nonce-4b")
+    test_mock_redis.seed("oidc_pkce_verifier:state-4b", "code-verifier")
 
     first = await client.post(
         "/api/auth/oauth/oidc/callback",

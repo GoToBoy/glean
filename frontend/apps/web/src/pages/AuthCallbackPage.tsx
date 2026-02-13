@@ -41,18 +41,8 @@ export default function AuthCallbackPage() {
           throw new Error('Missing authorization code or state')
         }
 
-        // Validate state (CSRF protection)
-        const savedState = sessionStorage.getItem('oidc_state')
-        if (state !== savedState) {
-          throw new Error('Invalid state parameter - possible CSRF attack')
-        }
-
         // Exchange code for tokens
         const { user, tokens } = await authService.handleOIDCCallback(code, state)
-
-        // Clean up state from session-scoped storage.
-        // Production deployments should enforce strict CSP to reduce XSS risk for web storage.
-        sessionStorage.removeItem('oidc_state')
 
         // Save tokens
         await authService.saveTokens(tokens)
@@ -66,9 +56,6 @@ export default function AuthCallbackPage() {
         const errorMessage = err instanceof Error ? err.message : 'Authentication failed'
         logger.error('OAuth callback error', { error: err })
         setError(errorMessage)
-
-        // Clean up state on error
-        sessionStorage.removeItem('oidc_state')
 
         // Redirect to login after 3 seconds
         setTimeout(() => navigate('/login'), 3000)
