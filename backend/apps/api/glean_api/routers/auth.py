@@ -4,6 +4,7 @@ Authentication router.
 Provides endpoints for user registration, login, token refresh, and user profile.
 """
 
+import ipaddress
 from typing import Annotated
 
 from arq.connections import ArqRedis
@@ -33,18 +34,78 @@ from ..dependencies import (
 router = APIRouter()
 logger = get_logger(__name__)
 
-OIDC_RATE_LIMIT_WINDOW_SECONDS = 60
-OIDC_AUTHORIZE_RATE_LIMIT = 30
-OIDC_CALLBACK_RATE_LIMIT = 30
+
+def _parse_ip(ip_value: str) -> str | None:
+    """Return normalized IP string when valid, otherwise None."""
+    try:
+        return str(ipaddress.ip_address(ip_value.strip()))
+    except ValueError:
+        return None
+
+
+def _parse_csv_config(value: str) -> list[str]:
+    """Parse comma-separated config into normalized values."""
+    return [item.strip() for item in value.split(",") if item.strip()]
 
 
 def _get_client_identifier(request: Request) -> str:
-    """Get a stable client identifier for endpoint-level rate limiting."""
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        # Use the first IP in X-Forwarded-For chain.
-        return forwarded_for.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """Get client IP for rate limiting with trusted proxy header handling."""
+    from glean_core.config import auth_provider_config
+
+    direct_ip = _parse_ip(request.client.host) if request.client else None
+    if not direct_ip:
+        return "unknown"
+
+    trusted_proxies = {
+        parsed
+        for value in _parse_csv_config(auth_provider_config.oidc_trusted_proxy_ips)
+        if (parsed := _parse_ip(value)) is not None
+    }
+    client_ip_headers = _parse_csv_config(auth_provider_config.oidc_client_ip_headers)
+
+    # Only trust forwarding headers when request originates from a trusted proxy.
+    if direct_ip in trusted_proxies:
+        for header_name in client_ip_headers:
+            raw_header_value = request.headers.get(header_name)
+            if not raw_header_value:
+                continue
+
+            header_candidate = raw_header_value.split(",")[0].strip()
+            parsed_ip = _parse_ip(header_candidate)
+            if parsed_ip:
+                return parsed_ip
+
+    return direct_ip
+
+
+async def _consume_oidc_state_and_nonce(redis: ArqRedis, state: str) -> str:
+    """
+    Validate state and atomically consume state+nonce in Redis.
+
+    Returns:
+        Nonce string for ID token verification.
+    """
+    state_key = RedisKeys.oidc_state(state)
+    nonce_key = RedisKeys.oidc_nonce(state)
+
+    pipe = redis.pipeline(transaction=True)
+    pipe.exists(state_key)
+    pipe.get(nonce_key)
+    pipe.delete(state_key)
+    pipe.delete(nonce_key)
+    state_valid, nonce, _, _ = await pipe.execute()
+
+    if not state_valid:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
+        )
+    if not nonce:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired nonce"
+        )
+    if isinstance(nonce, bytes):
+        return nonce.decode("utf-8")
+    return str(nonce)
 
 
 async def _enforce_oidc_rate_limit(
@@ -56,7 +117,9 @@ async def _enforce_oidc_rate_limit(
     current_count = await redis.incr(key)
 
     if current_count == 1:
-        await redis.expire(key, OIDC_RATE_LIMIT_WINDOW_SECONDS)
+        from glean_core.config import auth_provider_config
+
+        await redis.expire(key, auth_provider_config.oidc_rate_limit_window_seconds)
 
     if current_count > limit:
         retry_after = await redis.ttl(key)
@@ -233,7 +296,9 @@ async def oidc_authorize(
             status_code=status.HTTP_404_NOT_FOUND, detail="OIDC authentication is not enabled"
         )
 
-    await _enforce_oidc_rate_limit(redis, request, "authorize", OIDC_AUTHORIZE_RATE_LIMIT)
+    await _enforce_oidc_rate_limit(
+        redis, request, "authorize", auth_provider_config.oidc_authorize_rate_limit
+    )
 
     # Get OIDC provider config
     provider_config = auth_service.provider_configs.get("oidc")
@@ -247,8 +312,8 @@ async def oidc_authorize(
         # Create OIDC provider
         provider = AuthProviderFactory.create("oidc", provider_config)
 
-        # Load OIDC discovery config
-        await provider._get_oidc_config()  # type: ignore[attr-defined]
+        # Load OIDC discovery config before generating authorization URL.
+        await provider.prepare()
 
         # Generate CSRF state and nonce
         state = token_urlsafe(32)
@@ -330,31 +395,18 @@ async def oidc_callback(
     Raises:
         HTTPException: If authentication fails or provider not configured.
     """
-    await _enforce_oidc_rate_limit(redis, request, "callback", OIDC_CALLBACK_RATE_LIMIT)
+    from glean_core.config import auth_provider_config
 
-    # Validate state from Redis to prevent CSRF attacks
-    state_key = RedisKeys.oidc_state(data.state)
-    state_valid = await redis.exists(state_key)
-    if not state_valid:
+    if not auth_provider_config.oidc_enabled:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired state"
+            status_code=status.HTTP_404_NOT_FOUND, detail="OIDC authentication is not enabled"
         )
 
-    # Retrieve nonce from Redis for token verification
-    nonce_key = RedisKeys.oidc_nonce(data.state)
-    nonce = await redis.get(nonce_key)
-    if not nonce:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired nonce"
-        )
+    await _enforce_oidc_rate_limit(
+        redis, request, "callback", auth_provider_config.oidc_callback_rate_limit
+    )
 
-    # Decode nonce from bytes if needed
-    if isinstance(nonce, bytes):
-        nonce = nonce.decode("utf-8")
-
-    # Delete state and nonce from Redis to prevent replay attacks
-    await redis.delete(state_key)
-    await redis.delete(nonce_key)
+    nonce = await _consume_oidc_state_and_nonce(redis, data.state)
 
     # Get provider config
     provider_config = auth_service.provider_configs.get("oidc")

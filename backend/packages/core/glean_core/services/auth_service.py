@@ -4,6 +4,7 @@ Authentication service.
 Handles user registration, login, and token management with provider support.
 """
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -25,6 +26,9 @@ from glean_core.schemas import LoginRequest, RegisterRequest, TokenResponse, Use
 from glean_database.models import User, UserAuthProvider
 
 logger = get_logger(__name__)
+
+OAUTH_CONCURRENT_LOOKUP_RETRIES = 3
+OAUTH_CONCURRENT_LOOKUP_DELAY_SECONDS = 0.05
 
 
 class AuthService:
@@ -314,7 +318,7 @@ class AuthService:
         except IntegrityError:
             # Another concurrent request likely created this user first.
             await self.session.rollback()
-            existing_user = await self._find_existing_oauth_user(provider_id, auth_result)
+            existing_user = await self._retry_find_existing_oauth_user(provider_id, auth_result)
             if existing_user is None:
                 raise ValueError(
                     "Failed to create OAuth user due to a concurrent request"
@@ -354,6 +358,20 @@ class AuthService:
         )
         fallback_result = await self.session.execute(fallback_stmt)
         return fallback_result.scalars().first()
+
+    async def _retry_find_existing_oauth_user(
+        self, provider_id: str, auth_result: AuthResult
+    ) -> User | None:
+        """
+        Retry existing user lookup briefly for commit-visibility race windows.
+        """
+        for attempt in range(OAUTH_CONCURRENT_LOOKUP_RETRIES):
+            existing_user = await self._find_existing_oauth_user(provider_id, auth_result)
+            if existing_user is not None:
+                return existing_user
+            if attempt < OAUTH_CONCURRENT_LOOKUP_RETRIES - 1:
+                await asyncio.sleep(OAUTH_CONCURRENT_LOOKUP_DELAY_SECONDS)
+        return None
 
     async def _apply_provider_profile_updates(self, user: User, auth_result: AuthResult) -> None:
         """Apply provider profile updates while preserving unique email constraints."""

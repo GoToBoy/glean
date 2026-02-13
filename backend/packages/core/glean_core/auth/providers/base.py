@@ -68,6 +68,14 @@ class AuthProvider(ABC):
         """
         pass
 
+    async def prepare(self) -> None:
+        """
+        Prepare provider state before synchronous authorization URL generation.
+
+        OAuth/OIDC providers can override this to preload discovery metadata.
+        """
+        return None
+
     @abstractmethod
     def get_authorization_url(
         self, state: str, redirect_uri: str, nonce: str | None = None

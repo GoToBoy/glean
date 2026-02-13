@@ -5,6 +5,7 @@ This module implements OIDC authentication for OAuth providers like Google, Micr
 """
 
 from datetime import UTC, datetime
+from time import monotonic
 from typing import Any
 from urllib.parse import urlencode
 
@@ -49,8 +50,19 @@ class OIDCProvider(AuthProvider):
         self.discovery_url = config.get(
             "discovery_url", f"{self.issuer}/.well-known/openid-configuration"
         )
+        self.jwks_cache_ttl_seconds = int(config.get("jwks_cache_ttl_seconds", 86400))
         self._oidc_config: dict[str, Any] | None = None
         self._jwks: dict[str, Any] | None = None  # JWKS cache
+        self._jwks_cached_at: float | None = None
+        self._http_client: httpx.AsyncClient | None = None
+
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        """
+        Get or create a reusable HTTP client for OIDC network calls.
+        """
+        if self._http_client is None:
+            self._http_client = httpx.AsyncClient(timeout=10.0)
+        return self._http_client
 
     async def authenticate(self, credentials: dict[str, Any]) -> AuthResult:
         """
@@ -78,26 +90,29 @@ class OIDCProvider(AuthProvider):
         if not nonce:
             raise ValueError("Nonce is required for token verification")
 
+        # Ensure provider metadata is loaded before auth flow.
+        await self.prepare()
+
         # Get OIDC configuration
         oidc_config = await self._get_oidc_config()
 
         # Exchange authorization code for tokens
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                oidc_config["token_endpoint"],
-                data={
-                    "grant_type": "authorization_code",
-                    "code": code,
-                    "redirect_uri": redirect_uri,
-                    "client_id": self.client_id,
-                    "client_secret": self.client_secret,
-                },
-            )
+        client = await self._get_http_client()
+        response = await client.post(
+            oidc_config["token_endpoint"],
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": self.client_id,
+                "client_secret": self.client_secret,
+            },
+        )
 
-            if response.status_code != 200:
-                raise ValueError(f"Token exchange failed: {response.text}")
+        if response.status_code != 200:
+            raise ValueError(f"Token exchange failed: {response.text}")
 
-            tokens = response.json()
+        tokens = response.json()
 
         # Verify ID token and extract user info
         user_info = await self._verify_id_token(
@@ -143,6 +158,12 @@ class OIDCProvider(AuthProvider):
         # Try to fetch OIDC discovery configuration
         await self._get_oidc_config()
         return True
+
+    async def prepare(self) -> None:
+        """
+        Load OIDC discovery metadata required before URL generation.
+        """
+        await self._get_oidc_config()
 
     def get_authorization_url(
         self, state: str, redirect_uri: str, nonce: str | None = None
@@ -201,15 +222,15 @@ class OIDCProvider(AuthProvider):
         if self._oidc_config is not None:
             return self._oidc_config
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(self.discovery_url)
+        client = await self._get_http_client()
+        response = await client.get(self.discovery_url)
 
-            if response.status_code != 200:
-                raise ValueError(f"Failed to fetch OIDC config: {response.text}")
+        if response.status_code != 200:
+            raise ValueError(f"Failed to fetch OIDC config: {response.text}")
 
-            config: dict[str, Any] = response.json()
-            self._oidc_config = config
-            return config
+        config: dict[str, Any] = response.json()
+        self._oidc_config = config
+        return config
 
     async def _verify_id_token(
         self,
@@ -355,25 +376,30 @@ class OIDCProvider(AuthProvider):
         Raises:
             ValueError: If JWKS fetch fails.
         """
-        if self._jwks is not None:
+        if (
+            self._jwks is not None
+            and self._jwks_cached_at is not None
+            and monotonic() - self._jwks_cached_at <= self.jwks_cache_ttl_seconds
+        ):
             return self._jwks
 
         jwks_uri = oidc_config.get("jwks_uri")
         if not jwks_uri:
             raise ValueError("OIDC config missing 'jwks_uri'")
 
-        async with httpx.AsyncClient() as client:
-            response = await client.get(jwks_uri)
+        client = await self._get_http_client()
+        response = await client.get(jwks_uri)
 
-            if response.status_code != 200:
-                raise ValueError(f"Failed to fetch JWKS: {response.text}")
+        if response.status_code != 200:
+            raise ValueError(f"Failed to fetch JWKS: {response.text}")
 
-            jwks: dict[str, Any] = response.json()
-            self._jwks = jwks
+        jwks: dict[str, Any] = response.json()
+        self._jwks = jwks
+        self._jwks_cached_at = monotonic()
 
-            logger.debug(
-                "[OIDC] JWKS fetched successfully",
-                extra={"num_keys": len(jwks.get("keys", []))},
-            )
+        logger.debug(
+            "[OIDC] JWKS fetched successfully",
+            extra={"num_keys": len(jwks.get("keys", []))},
+        )
 
-            return jwks
+        return jwks
