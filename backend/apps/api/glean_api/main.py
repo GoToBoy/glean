@@ -3,14 +3,20 @@ Glean API - FastAPI application entry point.
 
 This module initializes the FastAPI application and configures
 middleware, routers, and lifecycle events.
+
+Provides a ``create_app()`` factory function that can be called by
+extension layers (e.g. SaaS) to create a customised application
+instance with additional routers, middleware and lifecycle hooks.
 """
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from enum import Enum
+from typing import Any, cast
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from glean_core import get_logger, init_logging
@@ -40,9 +46,9 @@ logger = get_logger(__name__)
 # Global Redis connection pool for task queue
 redis_pool: ArqRedis | None = None
 
-# Global MCP server instance (created before FastAPI app)
-_mcp_server = create_mcp_server()
-_mcp_http_app = _mcp_server.streamable_http_app()
+RouterTags = list[str | Enum]
+RouterConfig = tuple[APIRouter, str, RouterTags]
+MiddlewareConfig = tuple[type[Any], dict[str, Any]]
 
 
 async def get_redis_pool() -> ArqRedis:
@@ -60,87 +66,127 @@ async def get_redis_pool() -> ArqRedis:
     return redis_pool
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    """
-    Application lifecycle manager.
+def get_oss_routers() -> list[RouterConfig]:
+    """Return all OSS routers as (router, prefix, tags) tuples."""
+    return [
+        (auth.router, "/api/auth", ["Authentication"]),
+        (feeds.router, "/api/feeds", ["Feeds"]),
+        (entries.router, "/api/entries", ["Entries"]),
+        (admin.router, "/api/admin", ["Admin"]),
+        (bookmarks.router, "/api/bookmarks", ["Bookmarks"]),
+        (folders.router, "/api/folders", ["Folders"]),
+        (tags.router, "/api/tags", ["Tags"]),
+        (preference.router, "/api/preference", ["Preference"]),
+        (system.router, "/api/system", ["System"]),
+        (api_tokens.router, "/api/tokens", ["API Tokens"]),
+    ]
 
-    Handles startup and shutdown events for the application.
+
+def create_app(
+    extra_routers: list[RouterConfig] | None = None,
+    extra_startup: Callable[[], Awaitable[None]] | None = None,
+    extra_shutdown: Callable[[], Awaitable[None]] | None = None,
+    extra_middleware: list[MiddlewareConfig] | None = None,
+) -> FastAPI:
+    """
+    Composable App factory.
+
+    Extensions (e.g. SaaS layer) inject additional routers,
+    middleware and lifecycle hooks via parameters.
 
     Args:
-        app: The FastAPI application instance.
-
-    Yields:
-        None during application runtime.
-    """
-    # Startup: Initialize resources
-    from glean_database.session import init_database
-
-    global redis_pool
-
-    logger.info(f"Starting Glean API v{settings.version}")
-    init_database(settings.database_url)
-
-    # Initialize Redis pool for task queue
-    redis_settings = RedisSettings.from_dsn(settings.redis_url)
-    redis_pool = await create_pool(redis_settings)
-    logger.info("Redis pool initialized")
-
-    # Initialize MCP server session manager
-    async with _mcp_server.session_manager.run():
-        logger.info("MCP server initialized")
-        yield
-
-    # Shutdown: Cleanup resources
-    if redis_pool:
-        await redis_pool.close()
-        logger.info("Redis pool closed")
-    logger.info("Shutting down Glean API")
-
-
-app = FastAPI(
-    title="Glean API",
-    description="Glean - Personal Knowledge Management Tool API",
-    version=settings.version,
-    lifespan=lifespan,
-    docs_url="/api/docs" if settings.debug else None,
-    redoc_url="/api/redoc" if settings.debug else None,
-)
-
-# Configure CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Configure logging middleware
-app.add_middleware(LoggingMiddleware)
-
-# Register API routers
-app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
-app.include_router(feeds.router, prefix="/api/feeds", tags=["Feeds"])
-app.include_router(entries.router, prefix="/api/entries", tags=["Entries"])
-app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
-app.include_router(bookmarks.router, prefix="/api/bookmarks", tags=["Bookmarks"])
-app.include_router(folders.router, prefix="/api/folders", tags=["Folders"])
-app.include_router(tags.router, prefix="/api/tags", tags=["Tags"])
-app.include_router(preference.router, prefix="/api/preference", tags=["Preference"])
-app.include_router(system.router, prefix="/api/system", tags=["System"])
-app.include_router(api_tokens.router, prefix="/api/tokens", tags=["API Tokens"])
-
-# Mount MCP server (using pre-created instance from top of file)
-app.mount("/mcp", _mcp_http_app)
-
-
-@app.get("/api/health")
-async def health_check() -> dict[str, str]:
-    """
-    Health check endpoint.
+        extra_routers: Additional (router, prefix, tags) to register.
+        extra_startup: Async callable invoked during startup.
+        extra_shutdown: Async callable invoked during shutdown.
+        extra_middleware: Additional (middleware_class, kwargs) to add.
 
     Returns:
-        Dictionary containing service status and version.
+        Configured FastAPI application.
     """
+    # Create MCP server instance per app
+    mcp_server = create_mcp_server()
+    mcp_http_app = mcp_server.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
+        from glean_database.session import init_database
+
+        global redis_pool
+
+        logger.info(f"Starting Glean API v{settings.version}")
+        init_database(settings.database_url)
+
+        # Initialize Redis pool for task queue
+        redis_settings = RedisSettings.from_dsn(settings.redis_url)
+        redis_pool = await create_pool(redis_settings)
+        logger.info("Redis pool initialized")
+
+        # Run extra startup hook
+        if extra_startup:
+            await extra_startup()
+
+        # Initialize MCP server session manager
+        async with mcp_server.session_manager.run():
+            logger.info("MCP server initialized")
+            yield
+
+        # Shutdown: Cleanup resources
+        try:
+            if extra_shutdown:
+                await extra_shutdown()
+        finally:
+            if redis_pool:
+                await redis_pool.close()
+                logger.info("Redis pool closed")
+            logger.info("Shutting down Glean API")
+
+    application = FastAPI(
+        title="Glean API",
+        description="Glean - Personal Knowledge Management Tool API",
+        version=settings.version,
+        lifespan=lifespan,
+        docs_url="/api/docs" if settings.debug else None,
+        redoc_url="/api/redoc" if settings.debug else None,
+    )
+
+    # Configure CORS middleware
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    # Configure logging middleware
+    application.add_middleware(LoggingMiddleware)
+
+    # Register extra middleware
+    if extra_middleware:
+        for middleware_cls, kwargs in extra_middleware:
+            application.add_middleware(cast(Any, middleware_cls), **kwargs)
+
+    # Register OSS routers
+    for router, prefix, router_tags in get_oss_routers():
+        application.include_router(router, prefix=prefix, tags=router_tags)
+
+    # Register extra routers
+    if extra_routers:
+        for router, prefix, router_tags in extra_routers:
+            application.include_router(router, prefix=prefix, tags=router_tags)
+
+    # Mount MCP server
+    application.mount("/mcp", mcp_http_app)
+
+    application.add_api_route("/api/health", health_check, methods=["GET"])
+
+    return application
+
+
+async def health_check() -> dict[str, str]:
+    """Health check endpoint."""
     return {"status": "healthy", "version": settings.version}
+
+
+# Backward compatible: OSS mode uses the factory directly
+app = create_app()

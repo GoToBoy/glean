@@ -62,6 +62,9 @@ class Settings(BaseSettings):
     mcp_issuer_url: str = "http://localhost:8000"
     mcp_resource_server_url: str = "http://localhost:8000/mcp"
 
+    # SaaS mode (set to True when running with SaaS extensions)
+    saas_mode: bool = False
+
 
 @lru_cache
 def get_settings() -> Settings:

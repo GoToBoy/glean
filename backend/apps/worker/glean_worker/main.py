@@ -5,10 +5,12 @@ This module configures the arq worker with task functions,
 cron jobs, and Redis connection settings.
 """
 
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 from arq import cron
 from arq.connections import RedisSettings
+from arq.cron import CronJob
 
 from glean_core import get_logger, init_logging
 from glean_database.session import init_database
@@ -30,6 +32,8 @@ init_logging()
 
 # Get logger instance
 logger = get_logger(__name__)
+
+TaskFunction = Callable[..., Awaitable[Any]]
 
 
 async def startup(ctx: dict[str, Any]) -> None:
@@ -81,7 +85,8 @@ async def startup(ctx: dict[str, Any]) -> None:
     # Dynamically log registered task functions
     logger.info("Registered task functions:")
     for func in WorkerSettings.functions:
-        logger.info(f"  - {func.__name__}")
+        func_name = cast(str, getattr(func, "__name__", repr(func)))
+        logger.info(f"  - {func_name}")
 
     # Dynamically log scheduled cron jobs
     logger.info("Scheduled cron jobs:")
@@ -114,15 +119,9 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     logger.info("=" * 60)
 
 
-class WorkerSettings:
-    """
-    arq Worker configuration.
-
-    Defines task functions, cron jobs, and worker settings.
-    """
-
-    # Registered task functions
-    functions = [
+def get_oss_functions() -> list[TaskFunction]:
+    """Return all OSS task functions."""
+    return [
         feed_fetcher.fetch_feed_task,
         feed_fetcher.fetch_all_feeds,
         cleanup.cleanup_read_later,
@@ -140,13 +139,26 @@ class WorkerSettings:
         subscription_cleanup.cleanup_orphan_embeddings,
     ]
 
-    # Scheduled cron jobs
-    cron_jobs = [
+
+def get_oss_cron_jobs() -> list[CronJob]:
+    """Return all OSS cron jobs."""
+    return [
         # Feed fetch (every 15 minutes)
         cron(feed_fetcher.scheduled_fetch, minute={0, 15, 30, 45}),
         # Read-later cleanup (hourly at minute 0)
         cron(cleanup.scheduled_cleanup, minute=0),
     ]
+
+
+class WorkerSettings:
+    """
+    arq Worker configuration.
+
+    Defines task functions, cron jobs, and worker settings.
+    """
+
+    functions: list[TaskFunction] = get_oss_functions()
+    cron_jobs: list[CronJob] = get_oss_cron_jobs()
 
     # Lifecycle handlers
     on_startup = startup
