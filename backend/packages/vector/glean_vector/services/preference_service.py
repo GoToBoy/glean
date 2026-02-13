@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from glean_core import RedisKeys
 from glean_database.models import Entry, UserEntry, UserPreferenceStats
 from glean_vector.clients.milvus_client import MilvusClient
 from glean_vector.config import preference_config
@@ -112,8 +113,12 @@ class PreferenceService:
 
         # Use Redis lock if available to prevent race conditions
         if self.redis:
-            lock_key = f"preference_lock:{user_id}:{vector_type}"
-            lock = self.redis.lock(lock_key, timeout=10, blocking_timeout=5)
+            lock_key = RedisKeys.preference_lock(user_id, vector_type)
+            lock = self.redis.lock(
+                lock_key,
+                timeout=RedisKeys.PREFERENCE_LOCK_TTL,
+                blocking_timeout=RedisKeys.PREFERENCE_LOCK_BLOCKING_TIMEOUT,
+            )
 
             try:
                 # Acquire lock (blocks up to 5 seconds if another task holds it)

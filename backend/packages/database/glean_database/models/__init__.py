@@ -15,6 +15,7 @@ from .junction import BookmarkFolder, BookmarkTag, UserEntryTag
 from .subscription import Subscription
 from .tag import Tag
 from .user import User
+from .user_auth_provider import UserAuthProvider
 from .user_entry import UserEntry
 from .user_preference_stats import UserPreferenceStats
 
@@ -22,6 +23,7 @@ __all__ = [
     "Base",
     "TimestampMixin",
     "User",
+    "UserAuthProvider",
     "Feed",
     "FeedStatus",
     "Entry",

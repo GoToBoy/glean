@@ -32,10 +32,96 @@ class MockArqRedis:
 
     def __init__(self):
         self.enqueued_jobs: list[tuple[str, tuple[Any, ...]]] = []
+        self._store: dict[str, Any] = {}
+        self._ttl: dict[str, int] = {}
+        self._incr_counts: dict[str, int] = {}
 
     async def enqueue_job(self, func_name: str, *args: Any, **kwargs: Any) -> None:
         """Mock enqueue_job that records calls without actually queuing."""
         self.enqueued_jobs.append((func_name, args))
+
+    async def setex(self, key: str, ttl_seconds: int, value: Any) -> bool:
+        self._store[key] = value
+        self._ttl[key] = ttl_seconds
+        return True
+
+    async def exists(self, key: str) -> int:
+        return 1 if key in self._store else 0
+
+    async def get(self, key: str) -> Any:
+        return self._store.get(key)
+
+    async def delete(self, *keys: str) -> int:
+        deleted = 0
+        for key in keys:
+            if key in self._store:
+                deleted += 1
+                self._store.pop(key, None)
+                self._ttl.pop(key, None)
+        return deleted
+
+    async def incr(self, key: str) -> int:
+        next_count = self._incr_counts.get(key, 0) + 1
+        self._incr_counts[key] = next_count
+        self._store[key] = next_count
+        return next_count
+
+    async def expire(self, key: str, ttl_seconds: int) -> bool:
+        if key not in self._store:
+            return False
+        self._ttl[key] = ttl_seconds
+        return True
+
+    async def ttl(self, key: str) -> int:
+        return self._ttl.get(key, -1)
+
+    def pipeline(self, transaction: bool = True) -> "MockRedisPipeline":
+        return MockRedisPipeline(self)
+
+    def reset(self) -> None:
+        """Reset all in-memory redis state."""
+        self.enqueued_jobs.clear()
+        self._store.clear()
+        self._ttl.clear()
+        self._incr_counts.clear()
+
+    def seed(self, key: str, value: Any, ttl_seconds: int | None = None) -> None:
+        """Seed redis key/value directly for tests."""
+        self._store[key] = value
+        if ttl_seconds is not None:
+            self._ttl[key] = ttl_seconds
+
+    def has_key(self, key: str) -> bool:
+        """Return whether key exists in mock store."""
+        return key in self._store
+
+
+class MockRedisPipeline:
+    """Minimal async Redis pipeline used by auth tests."""
+
+    def __init__(self, redis: MockArqRedis):
+        self._redis = redis
+        self._commands: list[tuple[str, tuple[Any, ...]]] = []
+
+    def exists(self, key: str) -> "MockRedisPipeline":
+        self._commands.append(("exists", (key,)))
+        return self
+
+    def get(self, key: str) -> "MockRedisPipeline":
+        self._commands.append(("get", (key,)))
+        return self
+
+    def delete(self, *keys: str) -> "MockRedisPipeline":
+        self._commands.append(("delete", keys))
+        return self
+
+    async def execute(self) -> list[Any]:
+        results: list[Any] = []
+        for command_name, args in self._commands:
+            method = getattr(self._redis, command_name)
+            results.append(await method(*args))
+        self._commands.clear()
+        return results
 
 
 # Global mock redis instance for testing
@@ -124,7 +210,7 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_redis_pool] = override_get_redis_pool
 
     # Reset mock redis state before each test
-    mock_redis.enqueued_jobs.clear()
+    mock_redis.reset()
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:

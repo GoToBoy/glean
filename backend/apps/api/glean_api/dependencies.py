@@ -4,7 +4,7 @@ FastAPI dependencies.
 Provides dependency injection for database sessions, authentication, and services.
 """
 
-from typing import Annotated
+from typing import Annotated, Any, TypedDict
 
 from arq.connections import ArqRedis
 from fastapi import Depends, HTTPException, status
@@ -34,6 +34,18 @@ from .config import settings
 
 # Security scheme for JWT bearer tokens
 security = HTTPBearer()
+
+
+class OIDCProviderInternalConfig(TypedDict, total=False):
+    """Server-only OIDC provider config (must never be returned in API payloads)."""
+
+    client_id: str
+    client_secret: str
+    issuer: str
+    scopes: list[str]
+    redirect_uri: str
+    discovery_url: str
+    jwks_cache_ttl_seconds: int
 
 
 async def get_redis_pool() -> ArqRedis:
@@ -109,8 +121,30 @@ def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     jwt_config: Annotated[JWTConfig, Depends(get_jwt_config)],
 ) -> AuthService:
-    """Get authentication service instance."""
-    return AuthService(session, jwt_config)
+    """Get authentication service instance with provider configs."""
+    from glean_core.config import auth_provider_config
+
+    # Build provider configs from settings
+    provider_configs: dict[str, dict[str, Any]] = {}
+
+    if auth_provider_config.oidc_enabled:
+        oidc_config: OIDCProviderInternalConfig = {
+            "client_id": auth_provider_config.oidc_client_id,
+            # Internal-only secret consumed by backend provider clients.
+            "client_secret": auth_provider_config.oidc_client_secret,
+            "issuer": auth_provider_config.oidc_issuer,
+            "scopes": auth_provider_config.oidc_scopes.split(),
+            "redirect_uri": auth_provider_config.oidc_redirect_uri,
+            "jwks_cache_ttl_seconds": auth_provider_config.oidc_jwks_cache_ttl_seconds,
+        }
+
+        # Optional discovery URL override
+        if auth_provider_config.oidc_discovery_url:
+            oidc_config["discovery_url"] = auth_provider_config.oidc_discovery_url
+
+        provider_configs["oidc"] = dict(oidc_config)
+
+    return AuthService(session, jwt_config, provider_configs)
 
 
 def get_user_service(session: Annotated[AsyncSession, Depends(get_session)]) -> UserService:

@@ -17,7 +17,7 @@ import { tokenStorage } from '../tokenStorage'
  * Handles user registration, login, token refresh, and profile retrieval.
  */
 export class AuthService {
-  constructor(private client: ApiClient) {}
+  constructor(private readonly client: ApiClient) {}
 
   /**
    * Register a new user account.
@@ -58,6 +58,11 @@ export class AuthService {
   async logout(): Promise<void> {
     await this.client.post<{ message: string }>('/auth/logout')
     await tokenStorage.clearTokens()
+    // Clear OIDC state to prevent stale data on next login
+    if (typeof window !== 'undefined') {
+      sessionStorage.removeItem('oidc_state')
+      localStorage.removeItem('oidc_state')
+    }
   }
 
   /**
@@ -94,5 +99,25 @@ export class AuthService {
    */
   async isAuthenticated(): Promise<boolean> {
     return await tokenStorage.isAuthenticated()
+  }
+
+  /**
+   * Get OIDC authorization URL.
+   *
+   * Returns authorization URL and state token for CSRF protection.
+   */
+  async getOIDCAuthUrl(): Promise<{ authorization_url: string; state: string }> {
+    return this.client.get<{ authorization_url: string; state: string }>(
+      '/auth/oauth/oidc/authorize'
+    )
+  }
+
+  /**
+   * Handle OIDC callback after authorization.
+   *
+   * Exchanges authorization code for user profile and tokens.
+   */
+  async handleOIDCCallback(code: string, state: string): Promise<AuthResponse> {
+    return this.client.post<AuthResponse>('/auth/oauth/oidc/callback', { code, state })
   }
 }

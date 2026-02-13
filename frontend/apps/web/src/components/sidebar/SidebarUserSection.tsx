@@ -21,6 +21,19 @@ export function SidebarUserSection({
 }: SidebarUserSectionProps) {
   const { t } = useTranslation('feeds')
 
+  // Display priority: username > name > email > phone > 'User'
+  const displayName = user?.username || user?.name || user?.email || user?.phone || 'User'
+  // Avatar initial: use first char from username/name/email/phone
+  const avatarInitial =
+    user?.username?.[0]?.toUpperCase() ||
+    user?.name?.[0]?.toUpperCase() ||
+    user?.email?.[0]?.toUpperCase() ||
+    user?.phone?.[0]?.toUpperCase() ||
+    'U'
+  // Show contact info (email/phone) if not already displayed as primary name
+  const showContactInfo = user?.username || user?.name
+  const contactInfo = showContactInfo ? user?.email || user?.phone : null
+
   return (
     <div className="border-border border-t p-2 md:p-3">
       <div className="mb-2 space-y-0.5 md:mb-3">
@@ -38,14 +51,12 @@ export function SidebarUserSection({
           <div className="flex items-center justify-between gap-2.5 md:gap-3">
             <div className="flex min-w-0 flex-1 items-center gap-2.5 md:gap-3">
               <div className="from-primary-400 to-primary-600 text-primary-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-sm font-medium shadow-md md:h-10 md:w-10">
-                {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}
+                {avatarInitial}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-foreground truncate text-sm font-medium">
-                  {user?.name || user?.email}
-                </p>
-                {user?.name && (
-                  <p className="text-muted-foreground truncate text-xs">{user.email}</p>
+                <p className="text-foreground truncate text-sm font-medium">{displayName}</p>
+                {contactInfo && (
+                  <p className="text-muted-foreground truncate text-xs">{contactInfo}</p>
                 )}
               </div>
             </div>
@@ -63,7 +74,7 @@ export function SidebarUserSection({
       ) : (
         <div className="flex flex-col items-center gap-2">
           <div className="from-primary-400 to-primary-600 text-primary-foreground flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br font-medium shadow-md">
-            {user?.name?.[0]?.toUpperCase() || user?.email?.[0]?.toUpperCase()}
+            {avatarInitial}
           </div>
           <Button
             variant="ghost"
