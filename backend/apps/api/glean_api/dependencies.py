@@ -7,7 +7,7 @@ Provides dependency injection for database sessions, authentication, and service
 from typing import Annotated, Any, TypedDict
 
 from arq.connections import ArqRedis
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,16 +48,17 @@ class OIDCProviderInternalConfig(TypedDict, total=False):
     jwks_cache_ttl_seconds: int
 
 
-async def get_redis_pool() -> ArqRedis:
+async def get_redis_pool(request: Request) -> ArqRedis:
     """
     Get Redis connection pool for task queue.
 
     Returns:
         ArqRedis connection pool.
     """
-    from .main import get_redis_pool as _get_redis_pool
-
-    return await _get_redis_pool()
+    redis_pool = getattr(request.app.state, "redis_pool", None)
+    if redis_pool is None:
+        raise RuntimeError("Redis pool not initialized")
+    return redis_pool
 
 
 def get_jwt_config() -> JWTConfig:

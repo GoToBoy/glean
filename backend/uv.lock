@@ -662,6 +662,7 @@ name = "glean-api"
 version = "0.1.0"
 source = { editable = "apps/api" }
 dependencies = [
+    { name = "arq" },
     { name = "fastapi" },
     { name = "glean-core" },
     { name = "glean-database" },
@@ -680,6 +681,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "arq", specifier = ">=0.25.0" },
     { name = "fastapi", specifier = ">=0.110.0" },
     { name = "glean-core", editable = "packages/core" },
     { name = "glean-database", editable = "packages/database" },
