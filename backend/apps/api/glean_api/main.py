@@ -16,7 +16,7 @@ from typing import Any, cast
 
 from arq import create_pool
 from arq.connections import ArqRedis, RedisSettings
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from glean_core import get_logger, init_logging
@@ -43,17 +43,14 @@ init_logging()
 # Get logger instance
 logger = get_logger(__name__)
 
-# Global Redis connection pool for task queue
-redis_pool: ArqRedis | None = None
-
 RouterTags = list[str | Enum]
 RouterConfig = tuple[APIRouter, str, RouterTags]
 MiddlewareConfig = tuple[type[Any], dict[str, Any]]
 
 
-async def get_redis_pool() -> ArqRedis:
+async def get_redis_pool(request: Request) -> ArqRedis:
     """
-    Get the global Redis connection pool for arq.
+    Get the app-scoped Redis connection pool for arq.
 
     Returns:
         ArqRedis connection pool.
@@ -61,6 +58,7 @@ async def get_redis_pool() -> ArqRedis:
     Raises:
         RuntimeError: If Redis pool not initialized.
     """
+    redis_pool = getattr(request.app.state, "redis_pool", None)
     if redis_pool is None:
         raise RuntimeError("Redis pool not initialized")
     return redis_pool
@@ -103,7 +101,8 @@ def create_app(
     Returns:
         Configured FastAPI application.
     """
-    # Create MCP server instance per app
+    # Intentionally create one MCP server per FastAPI app instance to keep
+    # lifecycle/session-manager state isolated between factory-created apps.
     mcp_server = create_mcp_server()
     mcp_http_app = mcp_server.streamable_http_app()
 
@@ -111,14 +110,12 @@ def create_app(
     async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
         from glean_database.session import init_database
 
-        global redis_pool
-
         logger.info(f"Starting Glean API v{settings.version}")
         init_database(settings.database_url)
 
         # Initialize Redis pool for task queue
         redis_settings = RedisSettings.from_dsn(settings.redis_url)
-        redis_pool = await create_pool(redis_settings)
+        _app.state.redis_pool = await create_pool(redis_settings)
         logger.info("Redis pool initialized")
 
         # Run extra startup hook
@@ -135,8 +132,10 @@ def create_app(
             if extra_shutdown:
                 await extra_shutdown()
         finally:
+            redis_pool = getattr(_app.state, "redis_pool", None)
             if redis_pool:
                 await redis_pool.close()
+                _app.state.redis_pool = None
                 logger.info("Redis pool closed")
             logger.info("Shutting down Glean API")
 
