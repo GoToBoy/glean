@@ -102,5 +102,3 @@ docker-compose.personal.yml
 *.db
 *.sqlite3
 
-# Docs
-docs
