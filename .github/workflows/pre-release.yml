@@ -214,8 +214,6 @@ jobs:
       - name: Build Electron app
         working-directory: frontend/apps/web
         run: pnpm build:electron -- --${{ matrix.platform }} --publish never
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifacts to release
         uses: softprops/action-gh-release@v2
