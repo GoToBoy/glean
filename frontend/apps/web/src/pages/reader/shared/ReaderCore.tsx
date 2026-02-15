@@ -1,12 +1,14 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useInfiniteEntries, useEntry, useUpdateEntryState } from '../../../hooks/useEntries'
+import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
 import { useAuthStore } from '../../../stores/authStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
+import { useLanguageStore } from '../../../stores/languageStore'
 import type { EntryWithState } from '@glean/types'
-import { Loader2, AlertCircle, Sparkles, Info, Inbox } from 'lucide-react'
+import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@glean/ui'
 import { useReaderController, type FilterType } from './useReaderController'
 import {
@@ -19,6 +21,7 @@ import {
   ReaderSmartTabs,
   ReaderFilterTabs,
 } from './components/ReaderCoreParts'
+import { stripHtmlTags } from '../../../lib/html'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 
@@ -43,6 +46,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   } = useReaderController()
   const { user } = useAuthStore()
   const { showPreferenceScore } = useUIStore()
+  const { language } = useLanguageStore()
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
@@ -76,6 +80,15 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const exitingEntryRef = useRef<EntryWithState | null>(null)
   const entryListRef = useRef<HTMLDivElement>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
+  const translationObserverRef = useRef<IntersectionObserver | null>(null)
+  const translationCacheRef = useRef<Map<string, string>>(new Map())
+  const pendingTranslationEntryIdsRef = useRef<Set<string>>(new Set())
+  const [isListTranslationActive, setIsListTranslationActive] = useState(
+    user?.settings?.list_translation_auto_enabled ?? false
+  )
+  const [translatedEntryTexts, setTranslatedEntryTexts] = useState<
+    Record<string, { title?: string; summary?: string }>
+  >({})
 
   const updateMutation = useUpdateEntryState()
 
@@ -202,6 +215,16 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
   })()
 
+  const entriesById = useMemo(() => {
+    const map = new Map<string, EntryWithState>()
+    for (const entry of entries) {
+      map.set(entry.id, entry)
+    }
+    return map
+  }, [entries])
+
+  const listTranslationTargetLanguage = language === 'en' ? 'zh-CN' : 'en'
+
   // Handle filter change with slide direction
   const handleFilterChange = (newFilter: FilterType) => {
     if (newFilter === filterType) return
@@ -248,6 +271,98 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     // Filter params (filterType, feedId, folderId, viewParam) are handled by React Query
     // fetchNextPage is stable and always uses current query parameters
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
+
+  // Initialize list translation toggle from persisted setting
+  useEffect(() => {
+    setIsListTranslationActive(user?.settings?.list_translation_auto_enabled ?? false)
+  }, [user?.settings?.list_translation_auto_enabled])
+
+  const translateListEntry = useCallback(
+    async (entryId: string) => {
+      if (!isListTranslationActive) return
+      if (pendingTranslationEntryIdsRef.current.has(entryId)) return
+
+      const entry = entriesById.get(entryId)
+      if (!entry) return
+
+      const summaryPlain = stripHtmlTags(entry.summary || '').trim()
+      const sourceTexts = [entry.title, summaryPlain].filter((text) => text.length > 0)
+      if (sourceTexts.length === 0) return
+
+      const uncachedTexts = sourceTexts.filter((text) => !translationCacheRef.current.has(text))
+      pendingTranslationEntryIdsRef.current.add(entryId)
+      try {
+        if (uncachedTexts.length > 0) {
+          const response = await entryService.translateTexts(
+            uncachedTexts,
+            listTranslationTargetLanguage,
+            'auto',
+            entry.id
+          )
+          uncachedTexts.forEach((text, index) => {
+            const translated = response.translations[index]
+            if (translated && translated.trim()) {
+              translationCacheRef.current.set(text, translated.trim())
+            }
+          })
+        }
+
+        setTranslatedEntryTexts((prev) => ({
+          ...prev,
+          [entryId]: {
+            title: translationCacheRef.current.get(entry.title),
+            summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
+          },
+        }))
+      } catch (error) {
+        console.error('Failed to translate list entry:', error)
+      } finally {
+        pendingTranslationEntryIdsRef.current.delete(entryId)
+      }
+    },
+    [entriesById, isListTranslationActive, listTranslationTargetLanguage]
+  )
+
+  // Viewport-only list translation to reduce API usage
+  useEffect(() => {
+    if (!isListTranslationActive || !entryListRef.current || entries.length === 0) return
+
+    const container = entryListRef.current
+    let pendingIds: string[] = []
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const observer = new IntersectionObserver(
+      (intersectionEntries) => {
+        const visibleIds = intersectionEntries
+          .filter((item) => item.isIntersecting)
+          .map((item) => (item.target as HTMLElement).dataset.entryId)
+          .filter((id): id is string => !!id)
+
+        if (visibleIds.length === 0) return
+        pendingIds.push(...visibleIds)
+
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          const unique = Array.from(new Set(pendingIds))
+          pendingIds = []
+          unique.forEach((id) => {
+            void translateListEntry(id)
+          })
+        }, 120)
+      },
+      { root: container, rootMargin: '0px 0px 220px 0px', threshold: 0.1 }
+    )
+
+    translationObserverRef.current = observer
+    const entryNodes = container.querySelectorAll('[data-entry-id]')
+    entryNodes.forEach((node) => observer.observe(node))
+
+    return () => {
+      if (timer) clearTimeout(timer)
+      observer.disconnect()
+      translationObserverRef.current = null
+    }
+  }, [entries, isListTranslationActive, translateListEntry])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
@@ -393,27 +508,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
   }
 
-  const handleQuickMarkRead = useCallback(
-    (entry: EntryWithState) => {
-      if (entry.is_read) return
-      void updateMutation.mutateAsync({
-        entryId: entry.id,
-        data: { is_read: true },
-      })
-    },
-    [updateMutation]
-  )
-
-  const handleQuickToggleReadLater = useCallback(
-    (entry: EntryWithState) => {
-      void updateMutation.mutateAsync({
-        entryId: entry.id,
-        data: { read_later: !entry.read_later },
-      })
-    },
-    [updateMutation]
-  )
-
   useEffect(() => {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
@@ -482,6 +576,19 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                     onFilterChange={handleFilterChange}
                     isSmartView={isSmartView && !selectedFeedId && !selectedFolderId}
                   />
+                  <button
+                    onClick={() => setIsListTranslationActive((v) => !v)}
+                    title={
+                      isListTranslationActive
+                        ? t('translation.hideTranslation')
+                        : t('translation.translate')
+                    }
+                    className={`hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                      isListTranslationActive ? 'text-primary' : 'text-muted-foreground'
+                    }`}
+                  >
+                    <Languages className="h-4 w-4" />
+                  </button>
                   <MarkAllReadButton feedId={selectedFeedId} folderId={selectedFolderId} />
                 </div>
               ) : (
@@ -516,6 +623,20 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                           onFilterChange={handleFilterChange}
                         />
                       </div>
+
+                      <button
+                        onClick={() => setIsListTranslationActive((v) => !v)}
+                        title={
+                          isListTranslationActive
+                            ? t('translation.hideTranslation')
+                            : t('translation.translate')
+                        }
+                        className={`hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
+                          isListTranslationActive ? 'text-primary' : 'text-muted-foreground'
+                        }`}
+                      >
+                        <Languages className="h-4 w-4" />
+                      </button>
 
                       {/* Mark all read button */}
                       <MarkAllReadButton feedId={selectedFeedId} folderId={selectedFolderId} />
@@ -590,16 +711,22 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                       entry={entry}
                       isSelected={selectedEntryId === entry.id}
                       onClick={() => handleSelectEntry(entry)}
-                      onSwipeRight={() => handleQuickMarkRead(entry)}
-                      onSwipeLeft={() => handleQuickToggleReadLater(entry)}
-                      enableSwipeActions={isMobile}
                       style={{ animationDelay: `${index * 0.03}s` }}
                       showFeedInfo={!selectedFeedId}
                       showReadLaterRemaining={
+                        !isMobile &&
                         filterType === 'read-later' &&
                         (user?.settings?.show_read_later_remaining ?? true)
                       }
                       showPreferenceScore={usesSmartSorting && showPreferenceScore}
+                      hideReadStatusIndicator={isMobile}
+                      hideReadLaterIndicator={isMobile}
+                      translatedTitle={
+                        isListTranslationActive ? translatedEntryTexts[entry.id]?.title : undefined
+                      }
+                      translatedSummary={
+                        isListTranslationActive ? translatedEntryTexts[entry.id]?.summary : undefined
+                      }
                       dataEntryId={entry.id}
                     />
                   ))}

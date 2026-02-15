@@ -8,6 +8,7 @@ import {
   SelectValue,
   SelectContent,
   SelectItem,
+  Switch,
 } from '@glean/ui'
 import { CheckCircle, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
@@ -40,11 +41,15 @@ export function TranslationTab() {
   const currentApiKey = user?.settings?.translation_api_key ?? ''
   const currentModel = user?.settings?.translation_model ?? 'gpt-4o-mini'
   const currentBaseUrl = user?.settings?.translation_base_url ?? ''
+  const currentListTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
 
   const [provider, setProvider] = useState<Provider>(currentProvider)
   const [apiKey, setApiKey] = useState(currentApiKey)
   const [model, setModel] = useState(currentModel)
   const [baseUrl, setBaseUrl] = useState(currentBaseUrl)
+  const [listTranslationAutoEnabled, setListTranslationAutoEnabled] = useState(
+    currentListTranslationAutoEnabled
+  )
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
@@ -56,7 +61,8 @@ export function TranslationTab() {
     provider !== currentProvider ||
     apiKey !== currentApiKey ||
     model !== currentModel ||
-    baseUrl !== currentBaseUrl
+    baseUrl !== currentBaseUrl ||
+    listTranslationAutoEnabled !== currentListTranslationAutoEnabled
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -68,6 +74,7 @@ export function TranslationTab() {
         translation_api_key: apiKey,
         translation_model: model,
         translation_base_url: baseUrl,
+        list_translation_auto_enabled: listTranslationAutoEnabled,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -131,6 +138,26 @@ export function TranslationTab() {
           />
         </div>
       )}
+
+      {/* List translation default toggle */}
+      <div
+        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in rounded-xl border bg-gradient-to-br p-5 ring-1"
+        style={{ animationDelay: '80ms' }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <Label className="text-foreground block text-sm font-medium">
+              {t('translation.listAutoEnable')}
+            </Label>
+            <p className="text-muted-foreground text-xs">{t('translation.listAutoEnableDesc')}</p>
+          </div>
+          <Switch
+            checked={listTranslationAutoEnabled}
+            onCheckedChange={setListTranslationAutoEnabled}
+            disabled={isSaving || isLoading}
+          />
+        </div>
+      </div>
 
       {/* API Key input */}
       {needsKey && (

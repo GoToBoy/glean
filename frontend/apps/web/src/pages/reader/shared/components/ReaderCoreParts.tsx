@@ -109,79 +109,34 @@ export function EntryListItem({
   entry,
   isSelected,
   onClick,
-  onSwipeLeft,
-  onSwipeRight,
-  enableSwipeActions = false,
   style,
   showFeedInfo = false,
   showReadLaterRemaining = false,
   showPreferenceScore = false,
+  hideReadStatusIndicator = false,
+  hideReadLaterIndicator = false,
+  translatedTitle,
+  translatedSummary,
   dataEntryId,
 }: {
   entry: EntryWithState
   isSelected: boolean
   onClick: () => void
-  onSwipeLeft?: () => void
-  onSwipeRight?: () => void
-  enableSwipeActions?: boolean
   style?: React.CSSProperties
   showFeedInfo?: boolean
   showReadLaterRemaining?: boolean
   showPreferenceScore?: boolean
+  hideReadStatusIndicator?: boolean
+  hideReadLaterIndicator?: boolean
+  translatedTitle?: string
+  translatedSummary?: string
   dataEntryId?: string
 }) {
-  const { t } = useTranslation('reader')
-  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
-  const [dragX, setDragX] = useState(0)
-  const [swipeHandled, setSwipeHandled] = useState(false)
   const remainingTime = showReadLaterRemaining ? formatRemainingTime(entry.read_later_until) : null
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!enableSwipeActions) return
-    const touch = e.touches[0]
-    touchStartRef.current = { x: touch.clientX, y: touch.clientY }
-    setSwipeHandled(false)
-  }
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!enableSwipeActions || !touchStartRef.current) return
-    const touch = e.touches[0]
-    const dx = touch.clientX - touchStartRef.current.x
-    const dy = touch.clientY - touchStartRef.current.y
-
-    if (Math.abs(dx) > Math.abs(dy) * 1.2) {
-      setDragX(Math.max(-96, Math.min(96, dx)))
-    }
-  }
-
-  const handleTouchEnd = () => {
-    if (!enableSwipeActions) return
-    const threshold = 72
-
-    if (dragX >= threshold && onSwipeRight) {
-      onSwipeRight()
-      setSwipeHandled(true)
-    } else if (dragX <= -threshold && onSwipeLeft) {
-      onSwipeLeft()
-      setSwipeHandled(true)
-    }
-
-    setDragX(0)
-    touchStartRef.current = null
-  }
 
   return (
     <div
-      onClick={() => {
-        if (swipeHandled) {
-          setSwipeHandled(false)
-          return
-        }
-        onClick()
-      }}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onClick={onClick}
       data-entry-id={dataEntryId}
       className={`group animate-fade-in relative cursor-pointer px-1.5 py-1.5 transition-all duration-200 ${
         isSelected
@@ -190,27 +145,14 @@ export function EntryListItem({
       }`}
       style={style}
     >
-      {enableSwipeActions && (
-        <>
-          <div className="text-primary pointer-events-none absolute inset-y-1.5 left-3 flex items-center text-xs font-medium">
-            <CheckCheck className="mr-1.5 h-4 w-4" />
-            {t('actions.markRead')}
-          </div>
-          <div className="text-primary pointer-events-none absolute inset-y-1.5 right-3 flex items-center text-xs font-medium">
-            {t('filters.readLater')}
-            <Clock className="ml-1.5 h-4 w-4" />
-          </div>
-        </>
-      )}
       <div
         className={`rounded-lg px-2.5 py-2 transition-all duration-200 ${
           isSelected ? 'bg-primary/8 ring-primary/20 ring-1' : 'hover:bg-accent/40'
         }`}
-        style={enableSwipeActions ? { transform: `translateX(${dragX}px)` } : undefined}
       >
         <div className="flex gap-2.5">
           <div className="mt-1.5 flex w-2.5 shrink-0 justify-center">
-            {!entry.is_read && (
+            {!hideReadStatusIndicator && !entry.is_read && (
               <div className="bg-primary shadow-primary/40 h-1.5 w-1.5 rounded-full shadow-[0_0_6px_1px]" />
             )}
           </div>
@@ -240,13 +182,13 @@ export function EntryListItem({
                   : 'text-foreground font-medium'
               }`}
             >
-              {entry.title}
+              {translatedTitle || entry.title}
             </h3>
 
             <div className="mb-1.5 h-10">
-              {entry.summary && (
+              {(translatedSummary || entry.summary) && (
                 <p className="text-muted-foreground/70 line-clamp-2 text-sm leading-relaxed">
-                  {stripHtmlTags(entry.summary)}
+                  {translatedSummary || stripHtmlTags(entry.summary || '')}
                 </p>
               )}
             </div>
@@ -283,10 +225,10 @@ export function EntryListItem({
                 {entry.is_liked === false && (
                   <ThumbsDown className="text-muted-foreground h-3.5 w-3.5 fill-current" />
                 )}
-                {entry.read_later && !showReadLaterRemaining && (
+                {!hideReadLaterIndicator && entry.read_later && !showReadLaterRemaining && (
                   <Clock className="text-primary h-3.5 w-3.5" />
                 )}
-                {remainingTime && (
+                {!hideReadLaterIndicator && remainingTime && (
                   <span
                     className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium ${
                       remainingTime === 'Expired'
