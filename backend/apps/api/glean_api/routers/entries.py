@@ -497,7 +497,5 @@ async def get_translation(
     """
     result = await translation_service.get_translation(entry_id, target_language)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Translation not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Translation not found")
     return result

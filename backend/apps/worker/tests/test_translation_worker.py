@@ -297,9 +297,7 @@ class TestTranslateEntryTask:
 
         with (
             patch("glean_worker.tasks.translation.get_session_context") as mock_ctx,
-            patch(
-                "glean_worker.tasks.translation.create_translation_provider"
-            ) as mock_create,
+            patch("glean_worker.tasks.translation.create_translation_provider") as mock_create,
             patch("glean_worker.tasks.translation._translate_text") as mock_translate_text,
             patch(
                 "glean_worker.tasks.translation._translate_html_bilingual"

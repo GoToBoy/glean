@@ -76,9 +76,7 @@ class GoogleFreeProvider(TranslationProvider):
                 translated_combined: str = translator.translate(combined)
                 translated_parts = translated_combined.split("|||")
                 for j, idx in enumerate(batch_indices):
-                    results[idx] = (
-                        translated_parts[j].strip() if j < len(translated_parts) else ""
-                    )
+                    results[idx] = translated_parts[j].strip() if j < len(translated_parts) else ""
             else:
                 for j, idx in enumerate(batch_indices):
                     result: str = translator.translate(batch_texts[j][:_CHUNK_SIZE])
@@ -119,7 +117,9 @@ class DeepLProvider(TranslationProvider):
         source_lang = self._map_lang(source, is_source=True)
         target_lang = self._map_lang(target)
         result = translator.translate_text(
-            text, source_lang=source_lang, target_lang=target_lang  # type: ignore[arg-type]
+            text,
+            source_lang=source_lang,
+            target_lang=target_lang,  # type: ignore[arg-type]
         )
         return str(result)
 
@@ -133,7 +133,9 @@ class DeepLProvider(TranslationProvider):
         source_lang = self._map_lang(source, is_source=True)
         target_lang = self._map_lang(target)
         results = translator.translate_text(
-            texts, source_lang=source_lang, target_lang=target_lang  # type: ignore[arg-type]
+            texts,
+            source_lang=source_lang,
+            target_lang=target_lang,  # type: ignore[arg-type]
         )
         if isinstance(results, list):
             return [str(r) for r in results]
@@ -180,7 +182,7 @@ class OpenAIProvider(TranslationProvider):
 
         client = OpenAI(api_key=self.api_key)
         source_desc = "the source language" if source == "auto" else source
-        numbered = "\n".join(f"[{i+1}] {t}" for i, t in enumerate(texts))
+        numbered = "\n".join(f"[{i + 1}] {t}" for i, t in enumerate(texts))
         response = client.chat.completions.create(
             model=self.model,
             messages=[
@@ -211,7 +213,7 @@ class OpenAIProvider(TranslationProvider):
                     try:
                         idx = int(line[1:bracket_end]) - 1
                         if 0 <= idx < len(texts):
-                            results[idx] = line[bracket_end + 1:].strip()
+                            results[idx] = line[bracket_end + 1 :].strip()
                     except ValueError:
                         pass
 
