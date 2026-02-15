@@ -45,6 +45,16 @@ services:
       - glean-network
     restart: unless-stopped
 
+  mtranserver:
+    image: ${MTRAN_IMAGE:-mtranserver/mtranserver:latest}
+    container_name: glean-mtranserver
+    profiles: ["mtran"]
+    ports:
+      - "${MTRAN_PORT:-5001}:5001"
+    networks:
+      - glean-network
+    restart: unless-stopped
+
   backend:
     # ========== YOUR FORK IMAGE ==========
     image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
@@ -55,6 +65,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       CORS_ORIGINS: '["http://localhost", "http://localhost:3000", "http://localhost:3001"]'
       DEBUG: ${DEBUG:-false}
+      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       RUN_MIGRATIONS: "true"
       CREATE_ADMIN: ${CREATE_ADMIN:-true}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -96,6 +107,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
+      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       MILVUS_HOST: milvus
       MILVUS_PORT: ${MILVUS_PORT:-19530}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}

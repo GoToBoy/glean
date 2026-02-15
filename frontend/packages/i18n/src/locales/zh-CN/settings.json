@@ -149,9 +149,16 @@
       "name": "OpenAI",
       "desc": "使用 GPT 模型的 AI 翻译"
     },
+    "mtran": {
+      "name": "MTranServer",
+      "desc": "自托管本地翻译服务"
+    },
     "apiKey": "API 密钥",
     "apiKeyPlaceholder": "输入您的 API 密钥",
+    "baseUrl": "MTran 服务地址",
+    "baseUrlPlaceholder": "http://mtranserver:5001",
     "model": "模型",
+    "modelPlaceholder": "可选模型名",
     "noKeyWarning": "{{provider}} 需要 API 密钥，将使用 Google 翻译作为备选。",
     "settingsSaved": "翻译设置已保存"
   },
@@ -211,9 +218,16 @@
       "name": "OpenAI",
       "desc": "使用 GPT 模型的 AI 翻译"
     },
+    "mtran": {
+      "name": "MTranServer",
+      "desc": "自托管本地翻译服务"
+    },
     "apiKey": "API 密钥",
     "apiKeyPlaceholder": "输入您的 API 密钥",
+    "baseUrl": "MTran 服务地址",
+    "baseUrlPlaceholder": "http://mtranserver:5001",
     "model": "模型",
+    "modelPlaceholder": "可选模型名",
     "noKeyWarning": "{{provider}} 需要 API 密钥，将使用 Google 翻译作为备选。",
     "settingsSaved": "翻译设置已保存"
   },

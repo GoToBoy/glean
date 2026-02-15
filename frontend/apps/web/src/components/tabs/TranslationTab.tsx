@@ -12,12 +12,13 @@ import {
 import { CheckCircle, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 
-type Provider = 'google' | 'deepl' | 'openai'
+type Provider = 'google' | 'deepl' | 'openai' | 'mtran'
 
 const PROVIDERS: { value: Provider; nameKey: string; descKey: string }[] = [
   { value: 'google', nameKey: 'translation.google.name', descKey: 'translation.google.desc' },
   { value: 'deepl', nameKey: 'translation.deepl.name', descKey: 'translation.deepl.desc' },
   { value: 'openai', nameKey: 'translation.openai.name', descKey: 'translation.openai.desc' },
+  { value: 'mtran', nameKey: 'translation.mtran.name', descKey: 'translation.mtran.desc' },
 ]
 
 const OPENAI_MODELS = [
@@ -38,19 +39,24 @@ export function TranslationTab() {
   const currentProvider = (user?.settings?.translation_provider ?? 'google') as Provider
   const currentApiKey = user?.settings?.translation_api_key ?? ''
   const currentModel = user?.settings?.translation_model ?? 'gpt-4o-mini'
+  const currentBaseUrl = user?.settings?.translation_base_url ?? ''
 
   const [provider, setProvider] = useState<Provider>(currentProvider)
   const [apiKey, setApiKey] = useState(currentApiKey)
   const [model, setModel] = useState(currentModel)
+  const [baseUrl, setBaseUrl] = useState(currentBaseUrl)
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
 
-  const needsKey = provider !== 'google'
+  const needsKey = provider === 'deepl' || provider === 'openai'
   const hasKeyWarning = needsKey && !apiKey.trim()
 
   const hasChanges =
-    provider !== currentProvider || apiKey !== currentApiKey || model !== currentModel
+    provider !== currentProvider ||
+    apiKey !== currentApiKey ||
+    model !== currentModel ||
+    baseUrl !== currentBaseUrl
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -61,6 +67,7 @@ export function TranslationTab() {
         translation_provider: provider,
         translation_api_key: apiKey,
         translation_model: model,
+        translation_base_url: baseUrl,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -109,6 +116,22 @@ export function TranslationTab() {
         </div>
       </div>
 
+      {/* Base URL input (MTran only) */}
+      {provider === 'mtran' && (
+        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {t('translation.baseUrl')}
+          </Label>
+          <input
+            type="text"
+            value={baseUrl}
+            onChange={(e) => setBaseUrl(e.target.value)}
+            placeholder={t('translation.baseUrlPlaceholder')}
+            className="border-border/50 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:ring-primary/30 focus:border-primary/50 w-full rounded-xl border px-4 py-3 text-sm transition-all focus:ring-2 focus:outline-none"
+          />
+        </div>
+      )}
+
       {/* API Key input */}
       {needsKey && (
         <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
@@ -154,6 +177,22 @@ export function TranslationTab() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      )}
+
+      {/* Model input (MTran optional) */}
+      {provider === 'mtran' && (
+        <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+          <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+            {t('translation.model')}
+          </Label>
+          <input
+            type="text"
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={t('translation.modelPlaceholder')}
+            className="border-border/50 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:ring-primary/30 focus:border-primary/50 w-full max-w-xs rounded-xl border px-4 py-3 text-sm transition-all focus:ring-2 focus:outline-none"
+          />
         </div>
       )}
 
