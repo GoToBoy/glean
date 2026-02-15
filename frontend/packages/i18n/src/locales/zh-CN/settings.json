@@ -153,7 +153,11 @@
     "apiKeyPlaceholder": "输入您的 API 密钥",
     "model": "模型",
     "noKeyWarning": "{{provider}} 需要 API 密钥，将使用 Google 翻译作为备选。",
-    "settingsSaved": "翻译设置已保存"
+    "settingsSaved": "翻译设置已保存",
+    "listAutoEnable": "默认开启列表翻译",
+    "listAutoEnableDesc": "在阅读列表中自动开启基于视窗的翻译",
+    "listEnglishOnly": "仅翻译英文内容",
+    "listEnglishOnlyDesc": "仅翻译以英文为主的列表条目"
   },
   "apiTokens": {
     "title": "API 令牌",
@@ -215,7 +219,11 @@
     "apiKeyPlaceholder": "输入您的 API 密钥",
     "model": "模型",
     "noKeyWarning": "{{provider}} 需要 API 密钥，将使用 Google 翻译作为备选。",
-    "settingsSaved": "翻译设置已保存"
+    "settingsSaved": "翻译设置已保存",
+    "listAutoEnable": "默认开启列表翻译",
+    "listAutoEnableDesc": "在阅读列表中自动开启基于视窗的翻译",
+    "listEnglishOnly": "仅翻译英文内容",
+    "listEnglishOnlyDesc": "仅翻译以英文为主的列表条目"
   },
   "version": "Glean v{{version}}"
 }

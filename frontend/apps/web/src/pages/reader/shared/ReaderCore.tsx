@@ -25,6 +25,18 @@ import { stripHtmlTags } from '../../../lib/html'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 
+function isLikelyEnglishText(text: string): boolean {
+  const sample = text.slice(0, 220)
+  const latinMatches = sample.match(/[A-Za-z]/g)
+  const chineseMatches = sample.match(/[\u4e00-\u9fff]/g)
+  const latinCount = latinMatches?.length ?? 0
+  const chineseCount = chineseMatches?.length ?? 0
+
+  if (latinCount < 6) return false
+  if (chineseCount === 0) return true
+  return latinCount / Math.max(chineseCount, 1) > 2.5
+}
+
 /**
  * Reader page.
  *
@@ -83,6 +95,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const translationObserverRef = useRef<IntersectionObserver | null>(null)
   const translationCacheRef = useRef<Map<string, string>>(new Map())
   const pendingTranslationEntryIdsRef = useRef<Set<string>>(new Set())
+  const translatedEntryIdsRef = useRef<Set<string>>(new Set())
   const [isListTranslationActive, setIsListTranslationActive] = useState(
     user?.settings?.list_translation_auto_enabled ?? false
   )
@@ -223,7 +236,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return map
   }, [entries])
 
-  const listTranslationTargetLanguage = language === 'en' ? 'zh-CN' : 'en'
+  const listTranslationTargetLanguage = language === 'zh-CN' ? 'zh-CN' : 'en'
+  const listTranslationEnglishOnly = user?.settings?.list_translation_english_only ?? true
 
   // Handle filter change with slide direction
   const handleFilterChange = (newFilter: FilterType) => {
@@ -277,16 +291,28 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     setIsListTranslationActive(user?.settings?.list_translation_auto_enabled ?? false)
   }, [user?.settings?.list_translation_auto_enabled])
 
+  useEffect(() => {
+    if (isListTranslationActive) return
+    translatedEntryIdsRef.current.clear()
+    pendingTranslationEntryIdsRef.current.clear()
+    translationCacheRef.current.clear()
+    setTranslatedEntryTexts({})
+  }, [isListTranslationActive])
+
   const translateListEntry = useCallback(
     async (entryId: string) => {
       if (!isListTranslationActive) return
       if (pendingTranslationEntryIdsRef.current.has(entryId)) return
+      if (translatedEntryIdsRef.current.has(entryId)) return
+      if (listTranslationTargetLanguage === 'en' && listTranslationEnglishOnly) return
 
       const entry = entriesById.get(entryId)
       if (!entry) return
 
       const summaryPlain = stripHtmlTags(entry.summary || '').trim()
-      const sourceTexts = [entry.title, summaryPlain].filter((text) => text.length > 0)
+      const sourceTexts = [entry.title, summaryPlain]
+        .filter((text) => text.length > 0)
+        .filter((text) => (listTranslationEnglishOnly ? isLikelyEnglishText(text) : true))
       if (sourceTexts.length === 0) return
 
       const uncachedTexts = sourceTexts.filter((text) => !translationCacheRef.current.has(text))
@@ -314,13 +340,19 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
           },
         }))
+        translatedEntryIdsRef.current.add(entryId)
       } catch (error) {
         console.error('Failed to translate list entry:', error)
       } finally {
         pendingTranslationEntryIdsRef.current.delete(entryId)
       }
     },
-    [entriesById, isListTranslationActive, listTranslationTargetLanguage]
+    [
+      entriesById,
+      isListTranslationActive,
+      listTranslationTargetLanguage,
+      listTranslationEnglishOnly,
+    ]
   )
 
   // Viewport-only list translation to reduce API usage

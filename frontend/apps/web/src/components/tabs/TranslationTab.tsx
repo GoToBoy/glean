@@ -40,12 +40,16 @@ export function TranslationTab() {
   const currentApiKey = user?.settings?.translation_api_key ?? ''
   const currentModel = user?.settings?.translation_model ?? 'gpt-4o-mini'
   const currentListTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
+  const currentListTranslationEnglishOnly = user?.settings?.list_translation_english_only ?? true
 
   const [provider, setProvider] = useState<Provider>(currentProvider)
   const [apiKey, setApiKey] = useState(currentApiKey)
   const [model, setModel] = useState(currentModel)
   const [listTranslationAutoEnabled, setListTranslationAutoEnabled] = useState(
     currentListTranslationAutoEnabled
+  )
+  const [listTranslationEnglishOnly, setListTranslationEnglishOnly] = useState(
+    currentListTranslationEnglishOnly
   )
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -58,7 +62,8 @@ export function TranslationTab() {
     provider !== currentProvider ||
     apiKey !== currentApiKey ||
     model !== currentModel ||
-    listTranslationAutoEnabled !== currentListTranslationAutoEnabled
+    listTranslationAutoEnabled !== currentListTranslationAutoEnabled ||
+    listTranslationEnglishOnly !== currentListTranslationEnglishOnly
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -70,6 +75,7 @@ export function TranslationTab() {
         translation_api_key: apiKey,
         translation_model: model,
         list_translation_auto_enabled: listTranslationAutoEnabled,
+        list_translation_english_only: listTranslationEnglishOnly,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -133,6 +139,25 @@ export function TranslationTab() {
           <Switch
             checked={listTranslationAutoEnabled}
             onCheckedChange={setListTranslationAutoEnabled}
+            disabled={isSaving || isLoading}
+          />
+        </div>
+      </div>
+
+      <div
+        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in rounded-xl border bg-gradient-to-br p-5 ring-1"
+        style={{ animationDelay: '120ms' }}
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <Label className="text-foreground block text-sm font-medium">
+              {t('translation.listEnglishOnly')}
+            </Label>
+            <p className="text-muted-foreground text-xs">{t('translation.listEnglishOnlyDesc')}</p>
+          </div>
+          <Switch
+            checked={listTranslationEnglishOnly}
+            onCheckedChange={setListTranslationEnglishOnly}
             disabled={isSaving || isLoading}
           />
         </div>

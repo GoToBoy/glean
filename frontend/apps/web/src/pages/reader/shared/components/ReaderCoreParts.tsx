@@ -105,6 +105,14 @@ function formatRemainingTime(readLaterUntil: string | null): string | null {
   return formatDistanceToNow(untilDate, { addSuffix: false })
 }
 
+function isLikelyImageUrl(url: string): boolean {
+  const lower = url.toLowerCase()
+  if (lower.includes('.mp4') || lower.includes('.webm') || lower.includes('.mov') || lower.includes('.m3u8')) {
+    return false
+  }
+  return true
+}
+
 export function EntryListItem({
   entry,
   isSelected,
@@ -132,6 +140,7 @@ export function EntryListItem({
   translatedSummary?: string
   dataEntryId?: string
 }) {
+  const [iconLoadFailed, setIconLoadFailed] = useState(false)
   const remainingTime = showReadLaterRemaining ? formatRemainingTime(entry.read_later_until) : null
 
   return (
@@ -160,11 +169,13 @@ export function EntryListItem({
           <div className="min-w-0 flex-1">
             {showFeedInfo && (entry.feed_title || entry.feed_icon_url) && (
               <div className="mb-1 flex items-center gap-1.5">
-                {entry.feed_icon_url ? (
+                {entry.feed_icon_url && !iconLoadFailed && isLikelyImageUrl(entry.feed_icon_url) ? (
                   <img
                     src={entry.feed_icon_url}
                     alt=""
                     className="h-3.5 w-3.5 shrink-0 rounded-sm object-cover"
+                    loading="lazy"
+                    onError={() => setIconLoadFailed(true)}
                   />
                 ) : (
                   <div className="bg-muted h-3.5 w-3.5 shrink-0 rounded-sm" />
