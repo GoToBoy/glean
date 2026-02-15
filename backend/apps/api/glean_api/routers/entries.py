@@ -269,7 +269,7 @@ async def translate_texts(
     if data.entry_id and translated_new:
         pairs = {
             text: trans
-            for text, trans in zip(to_translate, translated_new)
+            for text, trans in zip(to_translate, translated_new, strict=True)
             if trans.strip()
         }
         if pairs:

@@ -162,6 +162,7 @@ class TestTranslationServiceRequestTranslation:
             "translate_entry_task",
             entry_id="entry-1",
             target_language="zh-CN",
+            user_id="user-1",
         )
 
     @pytest.mark.asyncio

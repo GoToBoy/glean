@@ -182,7 +182,6 @@ export function ArticleReader({
     error: translationError,
     toggle: toggleTranslation,
     activate: activateTranslation,
-    deactivate: _deactivateTranslation,
   } = useViewportTranslation({
     contentRef,
     scrollContainerRef,

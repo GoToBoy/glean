@@ -3,11 +3,12 @@
 from datetime import UTC, datetime
 
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_entry_for_translation(db_session: AsyncSession, test_subscription, test_feed):
     """Create a test entry with English content for translation."""
     from glean_database.models.entry import Entry
@@ -25,7 +26,7 @@ async def test_entry_for_translation(db_session: AsyncSession, test_subscription
     return entry
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def test_chinese_entry(db_session: AsyncSession, test_subscription, test_feed):
     """Create a test entry with Chinese content."""
     from glean_database.models.entry import Entry

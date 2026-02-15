@@ -70,10 +70,7 @@ def _translate_text(
 
 def _has_skip_ancestor(element: Tag) -> bool:
     """Check if an element is nested inside code/pre/script/style."""
-    for parent in element.parents:
-        if parent.name in _SKIP_ANCESTORS:
-            return True
-    return False
+    return any(parent.name in _SKIP_ANCESTORS for parent in element.parents)
 
 
 def _translate_html_bilingual(
