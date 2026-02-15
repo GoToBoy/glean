@@ -17,6 +17,8 @@ from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
     ParagraphTranslationsResponse,
+    TrackEntryEventRequest,
+    TrackEntryEventResponse,
     TranslateEntryRequest,
     TranslateTextsRequest,
     TranslateTextsResponse,
@@ -85,6 +87,32 @@ async def list_entries(
         view=view,
         score_service=score_service,  # type: ignore[arg-type]
     )
+
+
+@router.get("/feedback-summary")
+async def get_feedback_summary(
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    entry_service: Annotated[EntryService, Depends(get_entry_service)],
+    days: int = Query(7, ge=1, le=30),
+) -> dict[str, int]:
+    """Get recent explicit feedback count for the current user."""
+    count = await entry_service.get_recent_explicit_feedback_count(current_user.id, days=days)
+    return {"recent_explicit_feedback_count": count}
+
+
+@router.post("/{entry_id}/events", response_model=TrackEntryEventResponse)
+async def track_entry_event(
+    entry_id: str,
+    data: TrackEntryEventRequest,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    entry_service: Annotated[EntryService, Depends(get_entry_service)],
+) -> TrackEntryEventResponse:
+    """Track implicit feedback event for an entry."""
+    try:
+        accepted, duplicate = await entry_service.track_entry_event(entry_id, current_user.id, data)
+        return TrackEntryEventResponse(accepted=accepted, duplicate=duplicate)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
 @router.get("/{entry_id}")

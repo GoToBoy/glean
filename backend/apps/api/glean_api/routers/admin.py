@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_core.schemas import EmbeddingConfigUpdateRequest
+from glean_core.schemas import EmbeddingConfigUpdateRequest, ImplicitFeedbackConfigUpdateRequest
 from glean_core.schemas.admin import (
     AdminBatchEntryRequest,
     AdminBatchFeedRequest,
@@ -1082,3 +1082,29 @@ async def set_registration_status(
     """
     await config_service.set_registration_enabled(enabled)
     return {"enabled": enabled}
+
+
+@router.get("/settings/implicit-feedback")
+async def get_implicit_feedback_settings(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Get implicit feedback configuration."""
+    from glean_core.schemas.config import ImplicitFeedbackConfig
+
+    config = await config_service.get(ImplicitFeedbackConfig)
+    return config.model_dump(exclude={"NAMESPACE"})
+
+
+@router.post("/settings/implicit-feedback")
+async def update_implicit_feedback_settings(
+    request: ImplicitFeedbackConfigUpdateRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Update implicit feedback configuration."""
+    from glean_core.schemas.config import ImplicitFeedbackConfig
+
+    updates = request.model_dump(exclude_unset=True)
+    updated = await config_service.update(ImplicitFeedbackConfig, **updates)
+    return updated.model_dump(exclude={"NAMESPACE"})

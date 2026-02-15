@@ -11,6 +11,7 @@ from .bookmark_service import BookmarkService
 from .entry_service import EntryService
 from .feed_service import FeedService
 from .folder_service import FolderService
+from .implicit_feedback_service import ImplicitFeedbackService
 from .preference_service import PreferenceService
 from .simple_score_service import SimpleScoreService
 from .system_config_service import SystemConfigService
@@ -26,6 +27,7 @@ __all__ = [
     "UserService",
     "FeedService",
     "EntryService",
+    "ImplicitFeedbackService",
     # M2 services
     "BookmarkService",
     "FolderService",

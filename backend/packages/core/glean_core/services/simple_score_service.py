@@ -11,6 +11,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from glean_core.services.implicit_feedback_service import ImplicitFeedbackService
 from glean_database.models import Entry, UserPreferenceStats
 
 
@@ -33,6 +34,7 @@ class SimpleScoreService:
         """
         self.session = session
         self._user_stats_cache: dict[str, UserPreferenceStats | None] = {}
+        self._implicit_feedback = ImplicitFeedbackService(session)
 
     async def _get_user_stats(self, user_id: str) -> UserPreferenceStats | None:
         """Get user preference stats with caching."""
@@ -153,6 +155,11 @@ class SimpleScoreService:
         # Author affinity contribution: -12.5 to +12.5
         score += (author_affinity - 0.5) * 25
 
+        implicit_boost = (await self._implicit_feedback.batch_get_boosts(user_id, [entry.id])).get(
+            entry.id, 0.0
+        )
+        score += implicit_boost
+
         # Clamp to 0-100 range
         score = max(0.0, min(100.0, score))
 
@@ -162,6 +169,7 @@ class SimpleScoreService:
                 "source_affinity": round(source_affinity, 3),
                 "author_affinity": round(author_affinity, 3),
                 "recency": round(recency, 3),
+                "implicit_boost": round(implicit_boost, 3),
                 "method": "simple",  # Indicate non-vector scoring
             },
         }
@@ -181,12 +189,36 @@ class SimpleScoreService:
         Returns:
             Dictionary mapping entry_id to score info.
         """
-        # Pre-fetch user stats once
-        await self._get_user_stats(user_id)
+        # Pre-fetch user stats and implicit boosts once
+        stats = await self._get_user_stats(user_id)
+        implicit_boosts = await self._implicit_feedback.batch_get_boosts(
+            user_id, [entry.id for entry in entries]
+        )
 
         results: dict[str, dict[str, Any]] = {}
         for entry in entries:
-            results[entry.id] = await self.calculate_score(user_id, entry)
+            recency = self._calculate_recency_factor(entry.published_at)
+            source_affinity = self._get_source_affinity(stats, entry.feed_id)
+            author_affinity = self._get_author_affinity(stats, entry.author)
+            implicit_boost = implicit_boosts.get(entry.id, 0.0)
+
+            score = 50.0
+            score += (source_affinity - 0.5) * 40
+            score += (recency - 0.5) * 35
+            score += (author_affinity - 0.5) * 25
+            score += implicit_boost
+            score = max(0.0, min(100.0, score))
+
+            results[entry.id] = {
+                "score": score,
+                "factors": {
+                    "source_affinity": round(source_affinity, 3),
+                    "author_affinity": round(author_affinity, 3),
+                    "recency": round(recency, 3),
+                    "implicit_boost": round(implicit_boost, 3),
+                    "method": "simple",
+                },
+            }
 
         return results
 

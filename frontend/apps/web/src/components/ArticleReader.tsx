@@ -18,6 +18,8 @@ import {
   ChevronLeft,
   Menu as MenuIcon,
   Ellipsis,
+  ThumbsDown,
+  ThumbsUp,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
@@ -35,6 +37,8 @@ import {
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
+import { useEntryEngagementTracking } from '../hooks/useEntryEngagementTracking'
+import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 
 /**
  * Hook to track animation state for action buttons
@@ -237,6 +241,7 @@ export function ArticleReader({
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
@@ -258,6 +263,17 @@ export function ArticleReader({
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
   const pullToCloseHandlers = usePullToClose(scrollContainerRef, isMobile, onClose)
+  useEntryEngagementTracking({
+    entryId: entry.id,
+    content: displayContent,
+    scrollContainerRef,
+  })
+  const { showPrompt, dismissPrompt } = useEndOfArticleFeedbackPrompt({
+    entryId: entry.id,
+    isLiked: entry.is_liked,
+    content: displayContent,
+    scrollContainerRef,
+  })
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -308,6 +324,20 @@ export function ArticleReader({
       console.error('Failed to toggle bookmark:', err)
     } finally {
       setIsBookmarking(false)
+    }
+  }
+
+  const handlePromptFeedback = async (liked: boolean) => {
+    if (isSubmittingFeedback) return
+    setIsSubmittingFeedback(true)
+    try {
+      await updateMutation.mutateAsync({
+        entryId: entry.id,
+        data: { is_liked: liked },
+      })
+      dismissPrompt()
+    } finally {
+      setIsSubmittingFeedback(false)
     }
   }
 
@@ -549,6 +579,41 @@ export function ArticleReader({
                   <ExternalLink className="h-4 w-4" />
                   {t('article.viewOriginal')}
                 </Button>
+              </div>
+            )}
+
+            {showPrompt && (
+              <div className="border-border bg-card mt-6 rounded-xl border p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <p className="text-foreground text-sm font-medium">{t('feedback.title')}</p>
+                  <button
+                    onClick={dismissPrompt}
+                    className="text-muted-foreground hover:text-foreground text-xs"
+                  >
+                    {t('feedback.later')}
+                  </button>
+                </div>
+                <p className="text-muted-foreground mb-3 text-xs">{t('feedback.description')}</p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePromptFeedback(true)}
+                    disabled={isSubmittingFeedback}
+                  >
+                    <ThumbsUp className="h-4 w-4" />
+                    {t('actions.like')}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePromptFeedback(false)}
+                    disabled={isSubmittingFeedback}
+                  >
+                    <ThumbsDown className="h-4 w-4" />
+                    {t('actions.dislike')}
+                  </Button>
+                </div>
               </div>
             )}
           </div>

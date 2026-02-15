@@ -325,12 +325,25 @@ export function Layout() {
     exportMutation.mutate()
   }
 
-  const subscriptionsByFolder = subscriptions.reduce<Record<string, Subscription[]>>((acc, sub) => {
-    const key = sub.folder_id || '__ungrouped__'
-    if (!acc[key]) acc[key] = []
-    acc[key].push(sub)
-    return acc
-  }, {})
+  const sortUnreadFirst = (items: Subscription[]): Subscription[] => {
+    const unread = items.filter((sub) => sub.unread_count > 0)
+    const fullyRead = items.filter((sub) => sub.unread_count === 0)
+    return [...unread, ...fullyRead]
+  }
+
+  const rawSubscriptionsByFolder = subscriptions.reduce<Record<string, Subscription[]>>(
+    (acc, sub) => {
+      const key = sub.folder_id || '__ungrouped__'
+      if (!acc[key]) acc[key] = []
+      acc[key].push(sub)
+      return acc
+    },
+    {}
+  )
+
+  const subscriptionsByFolder = Object.fromEntries(
+    Object.entries(rawSubscriptionsByFolder).map(([key, items]) => [key, sortUnreadFirst(items)])
+  ) as Record<string, Subscription[]>
 
   const ungroupedSubscriptions = subscriptionsByFolder['__ungrouped__'] || []
 

@@ -100,6 +100,30 @@ class ScoreConfig(BaseModel):
     cache_ttl: int = 3600
 
 
+class ImplicitFeedbackConfig(BaseModel):
+    """
+    Implicit feedback configuration.
+
+    Stored in system_configs table with key = NAMESPACE.
+    """
+
+    NAMESPACE: ClassVar[str] = "implicit_feedback"
+
+    enabled: bool = False
+    weight: float = Field(default=1.0, ge=0.0, le=5.0)
+    sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+    min_events: int = Field(default=3, ge=1, le=1000)
+
+
+class ImplicitFeedbackConfigUpdateRequest(BaseModel):
+    """Partial update request for implicit feedback configuration."""
+
+    enabled: bool | None = None
+    weight: float | None = Field(default=None, ge=0.0, le=5.0)
+    sample_rate: float | None = Field(default=None, ge=0.0, le=1.0)
+    min_events: int | None = Field(default=None, ge=1, le=1000)
+
+
 class EmbeddingRebuildProgress(BaseModel):
     """Embedding rebuild progress tracking."""
 
