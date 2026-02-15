@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useInfiniteEntries,
@@ -352,6 +352,63 @@ export default function ReaderPage() {
     }
   }, [selectedFeedId, selectedFolderId, isSmartView, entryIdFromUrl])
 
+  // Keyboard navigation: arrow keys and j/k to switch between entries
+  const handleKeyboardNavigation = useCallback(
+    (e: KeyboardEvent) => {
+      // Ignore when focus is in input, textarea, or contenteditable elements
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      ) {
+        return
+      }
+
+      const isNext = e.key === 'ArrowDown' || e.key === 'j'
+      const isPrev = e.key === 'ArrowUp' || e.key === 'k'
+      if (!isNext && !isPrev) return
+
+      e.preventDefault()
+
+      if (entries.length === 0) return
+
+      const currentIndex = selectedEntryId
+        ? entries.findIndex((entry) => entry.id === selectedEntryId)
+        : -1
+
+      let nextIndex: number
+      if (currentIndex === -1) {
+        // No entry selected: select the first one
+        nextIndex = 0
+      } else if (isNext) {
+        if (currentIndex >= entries.length - 1) return // Already at the end
+        nextIndex = currentIndex + 1
+      } else {
+        if (currentIndex <= 0) return // Already at the beginning
+        nextIndex = currentIndex - 1
+      }
+
+      const nextEntry = entries[nextIndex]
+      if (nextEntry) {
+        handleSelectEntry(nextEntry)
+        // Scroll the entry into view within the list
+        const entryEl = entryListRef.current?.querySelector(
+          `[data-entry-id="${nextEntry.id}"]`
+        )
+        if (entryEl) {
+          entryEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        }
+      }
+    },
+    [entries, selectedEntryId] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyboardNavigation)
+    return () => document.removeEventListener('keydown', handleKeyboardNavigation)
+  }, [handleKeyboardNavigation])
+
   // Handle entry selection - automatically mark as read
   const handleSelectEntry = async (entry: EntryWithState) => {
     // On mobile, trigger entry list exit animation while opening reader
@@ -591,6 +648,7 @@ export default function ReaderPage() {
                         (user?.settings?.show_read_later_remaining ?? true)
                       }
                       showPreferenceScore={usesSmartSorting && showPreferenceScore}
+                      dataEntryId={entry.id}
                     />
                   ))}
                 </div>
@@ -778,6 +836,7 @@ function EntryListItem({
   showFeedInfo = false,
   showReadLaterRemaining = false,
   showPreferenceScore = false,
+  dataEntryId,
 }: {
   entry: EntryWithState
   isSelected: boolean
@@ -786,11 +845,13 @@ function EntryListItem({
   showFeedInfo?: boolean
   showReadLaterRemaining?: boolean
   showPreferenceScore?: boolean
+  dataEntryId?: string
 }) {
   const remainingTime = showReadLaterRemaining ? formatRemainingTime(entry.read_later_until) : null
   return (
     <div
       onClick={onClick}
+      data-entry-id={dataEntryId}
       className={`group animate-fade-in cursor-pointer px-1.5 py-1.5 transition-all duration-200 ${
         isSelected
           ? 'before:bg-primary relative before:absolute before:inset-y-0.5 before:left-0 before:w-0.5 before:rounded-full'
