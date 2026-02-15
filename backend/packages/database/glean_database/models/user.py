@@ -23,7 +23,9 @@ class User(Base, TimestampMixin):
     Attributes:
         id: Unique user identifier (UUID).
         email: User's email address (unique, indexed).
-        password_hash: Hashed password for authentication.
+        password_hash: Hashed password for authentication (nullable for OAuth users).
+        primary_auth_provider: Primary authentication provider (local, oidc, etc.).
+        provider_user_id: User ID from authentication provider.
         name: Optional display name.
         avatar_url: Optional URL to avatar image.
         is_active: Account active status.
@@ -38,11 +40,25 @@ class User(Base, TimestampMixin):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=generate_uuid)
 
     # Authentication
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    password_hash: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )  # OAuth users don't need passwords
+    primary_auth_provider: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="Primary authentication provider (local, oidc, etc.)"
+    )
+    provider_user_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, comment="User ID from authentication provider"
+    )
 
     # Profile
     name: Mapped[str | None] = mapped_column(String(100))
+    username: Mapped[str | None] = mapped_column(
+        String(100), comment="Username (e.g., preferred_username from OIDC)"
+    )
+    phone: Mapped[str | None] = mapped_column(
+        String(50), comment="Phone number (e.g., phone_number from OIDC)"
+    )
     avatar_url: Mapped[str | None] = mapped_column(String(500))
 
     # Status
@@ -67,3 +83,6 @@ class User(Base, TimestampMixin):
         "UserPreferenceStats", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
     api_tokens = relationship("APIToken", back_populates="user", cascade="all, delete-orphan")
+    auth_providers = relationship(
+        "UserAuthProvider", back_populates="user", cascade="all, delete-orphan"
+    )

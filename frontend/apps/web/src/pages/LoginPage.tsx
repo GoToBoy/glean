@@ -5,6 +5,7 @@ import { Rss, AlertCircle, Sparkles, Server } from 'lucide-react'
 import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
 import { useTranslation } from '@glean/i18n'
 import { ApiConfigDialog } from '../components/ApiConfigDialog'
+import { OIDCLoginButton } from '../components/auth/OIDCLoginButton'
 
 /**
  * Login page.
@@ -135,6 +136,19 @@ export default function LoginPage() {
               {isLoading ? t('login.signingIn') : t('login.signIn')}
             </Button>
           </form>
+
+          {/* OAuth divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="border-border w-full border-t" />
+            </div>
+            <div className="relative flex justify-center text-xs uppercase">
+              <span className="bg-card text-muted-foreground px-2">Or continue with</span>
+            </div>
+          </div>
+
+          {/* OIDC login button */}
+          <OIDCLoginButton />
 
           {/* Register link */}
           <div className="mt-8 text-center">

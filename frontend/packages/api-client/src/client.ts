@@ -101,10 +101,13 @@ export class ApiClient {
           return Promise.reject(error)
         }
 
-        // Don't try to refresh if this is already a refresh request or auth request
+        // Don't try to refresh if this is already a refresh request or one-time auth exchange.
+        // OIDC callback is not idempotent because state/nonce are single-use.
         if (
           originalRequest.url?.includes('/auth/refresh') ||
-          originalRequest.url?.includes('/auth/login')
+          originalRequest.url?.includes('/auth/login') ||
+          originalRequest.url?.includes('/auth/oauth/oidc/callback') ||
+          originalRequest.url?.includes('/auth/oauth/oidc/authorize')
         ) {
           logger.warn('Authentication failed, redirecting to login')
           await this.clearTokensAndRedirect()

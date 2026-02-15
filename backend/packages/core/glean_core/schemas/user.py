@@ -13,8 +13,10 @@ from pydantic import BaseModel, ConfigDict, EmailStr
 class UserBase(BaseModel):
     """Base user fields."""
 
-    email: EmailStr
-    name: str
+    email: EmailStr | None = None  # Email can be None for OAuth users without email scope
+    name: str | None = None
+    username: str | None = None  # Username (e.g., preferred_username from OIDC)
+    phone: str | None = None  # Phone number (e.g., phone_number from OIDC)
 
 
 class UserResponse(UserBase):
@@ -43,5 +45,7 @@ class UserUpdate(BaseModel):
     """User update request."""
 
     name: str | None = None
+    username: str | None = None
+    phone: str | None = None
     avatar_url: str | None = None
     settings: dict[str, Any] | None = None

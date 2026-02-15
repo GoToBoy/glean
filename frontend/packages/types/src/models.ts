@@ -17,11 +17,14 @@ export interface UserSettings {
 /** User account information */
 export interface User {
   id: string
-  email: string
-  name: string
+  email: string | null // Email can be null for OAuth users without email scope
+  name: string | null
+  username: string | null // Username (e.g., preferred_username from OIDC)
+  phone: string | null // Phone number (e.g., phone_number from OIDC)
   avatar_url: string | null
   is_active: boolean
   is_verified: boolean
+  primary_auth_provider?: string | null // Authentication provider (local, oidc, etc.)
   settings: UserSettings | null
   created_at: string
 }

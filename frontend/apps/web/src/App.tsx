@@ -17,6 +17,8 @@ const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 // M3 pages
 const PreferencePage = lazy(() => import('./pages/PreferencePage'))
+// Auth callback
+const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
 
 /**
  * Loading spinner component with branding
@@ -66,6 +68,7 @@ function App() {
         {/* Public routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
         {/* Protected routes */}
         <Route

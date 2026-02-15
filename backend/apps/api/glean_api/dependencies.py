@@ -4,10 +4,10 @@ FastAPI dependencies.
 Provides dependency injection for database sessions, authentication, and services.
 """
 
-from typing import Annotated
+from typing import Annotated, Any, TypedDict
 
 from arq.connections import ArqRedis
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -37,16 +37,29 @@ from .config import settings
 security = HTTPBearer()
 
 
-async def get_redis_pool() -> ArqRedis:
+class OIDCProviderInternalConfig(TypedDict, total=False):
+    """Server-only OIDC provider config (must never be returned in API payloads)."""
+
+    client_id: str
+    client_secret: str
+    issuer: str
+    scopes: list[str]
+    redirect_uri: str
+    discovery_url: str
+    jwks_cache_ttl_seconds: int
+
+
+async def get_redis_pool(request: Request) -> ArqRedis:
     """
     Get Redis connection pool for task queue.
 
     Returns:
         ArqRedis connection pool.
     """
-    from .main import get_redis_pool as _get_redis_pool
-
-    return await _get_redis_pool()
+    redis_pool = getattr(request.app.state, "redis_pool", None)
+    if redis_pool is None:
+        raise RuntimeError("Redis pool not initialized")
+    return redis_pool
 
 
 def get_jwt_config() -> JWTConfig:
@@ -110,8 +123,30 @@ def get_auth_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     jwt_config: Annotated[JWTConfig, Depends(get_jwt_config)],
 ) -> AuthService:
-    """Get authentication service instance."""
-    return AuthService(session, jwt_config)
+    """Get authentication service instance with provider configs."""
+    from glean_core.config import auth_provider_config
+
+    # Build provider configs from settings
+    provider_configs: dict[str, dict[str, Any]] = {}
+
+    if auth_provider_config.oidc_enabled:
+        oidc_config: OIDCProviderInternalConfig = {
+            "client_id": auth_provider_config.oidc_client_id,
+            # Internal-only secret consumed by backend provider clients.
+            "client_secret": auth_provider_config.oidc_client_secret,
+            "issuer": auth_provider_config.oidc_issuer,
+            "scopes": auth_provider_config.oidc_scopes.split(),
+            "redirect_uri": auth_provider_config.oidc_redirect_uri,
+            "jwks_cache_ttl_seconds": auth_provider_config.oidc_jwks_cache_ttl_seconds,
+        }
+
+        # Optional discovery URL override
+        if auth_provider_config.oidc_discovery_url:
+            oidc_config["discovery_url"] = auth_provider_config.oidc_discovery_url
+
+        provider_configs["oidc"] = dict(oidc_config)
+
+    return AuthService(session, jwt_config, provider_configs)
 
 
 def get_user_service(session: Annotated[AsyncSession, Depends(get_session)]) -> UserService:
