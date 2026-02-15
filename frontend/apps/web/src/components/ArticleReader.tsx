@@ -150,16 +150,19 @@ function useScrollHide(scrollContainerRef: React.RefObject<HTMLDivElement | null
 }
 
 /**
- * Mobile pull-down-to-close gesture.
- * Only triggers when content is at the top and the gesture is primarily vertical.
+ * Mobile close gestures:
+ * - Pull down to close when scrolled to top.
+ * - Edge swipe right (from left edge) to close.
  */
-function usePullToClose(
+function useMobileCloseGestures(
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
   enabled: boolean,
   onClose?: () => void
 ) {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const pullDistanceRef = useRef(0)
+  const edgeSwipeDistanceRef = useRef(0)
+  const startedFromLeftEdgeRef = useRef(false)
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
@@ -169,6 +172,8 @@ function usePullToClose(
       const touch = e.touches[0]
       touchStartRef.current = { x: touch.clientX, y: touch.clientY }
       pullDistanceRef.current = 0
+      edgeSwipeDistanceRef.current = 0
+      startedFromLeftEdgeRef.current = touch.clientX <= 36
     },
     [enabled, scrollContainerRef]
   )
@@ -186,6 +191,13 @@ function usePullToClose(
       } else {
         pullDistanceRef.current = 0
       }
+
+      // Track left-edge horizontal swipe-to-close.
+      if (startedFromLeftEdgeRef.current && dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        edgeSwipeDistanceRef.current = dx
+      } else {
+        edgeSwipeDistanceRef.current = 0
+      }
     },
     [enabled]
   )
@@ -193,11 +205,14 @@ function usePullToClose(
   const onTouchEnd = useCallback(() => {
     if (!enabled || !touchStartRef.current) return
 
-    const shouldClose = pullDistanceRef.current > 96
+    const shouldCloseByPull = pullDistanceRef.current > 96
+    const shouldCloseByEdgeSwipe = edgeSwipeDistanceRef.current > 96
     touchStartRef.current = null
     pullDistanceRef.current = 0
+    edgeSwipeDistanceRef.current = 0
+    startedFromLeftEdgeRef.current = false
 
-    if (shouldClose && onClose) {
+    if ((shouldCloseByPull || shouldCloseByEdgeSwipe) && onClose) {
       onClose()
     }
   }, [enabled, onClose])
@@ -257,7 +272,7 @@ export function ArticleReader({
   })
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
-  const pullToCloseHandlers = usePullToClose(scrollContainerRef, isMobile, onClose)
+  const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -481,9 +496,9 @@ export function ArticleReader({
           className={`hide-scrollbar reader-pan-y no-horizontal-overscroll flex-1 overflow-y-auto ${
             isMobile ? 'pt-14 pb-16' : ''
           }`}
-          onTouchStart={pullToCloseHandlers.onTouchStart}
-          onTouchMove={pullToCloseHandlers.onTouchMove}
-          onTouchEnd={pullToCloseHandlers.onTouchEnd}
+          onTouchStart={closeGestureHandlers.onTouchStart}
+          onTouchMove={closeGestureHandlers.onTouchMove}
+          onTouchEnd={closeGestureHandlers.onTouchEnd}
         >
           <div
             className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
