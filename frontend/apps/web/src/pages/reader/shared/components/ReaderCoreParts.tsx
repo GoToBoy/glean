@@ -1,0 +1,563 @@
+import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from '@glean/i18n'
+import type { EntryWithState } from '@glean/types'
+import { useMarkAllRead } from '../../../../hooks/useEntries'
+import { format, formatDistanceToNow, isPast } from 'date-fns'
+import {
+  Heart,
+  CheckCheck,
+  Clock,
+  Loader2,
+  Inbox,
+  ThumbsDown,
+  Timer,
+  Sparkles,
+  ChevronDown,
+} from 'lucide-react'
+import { stripHtmlTags } from '../../../../lib/html'
+import {
+  buttonVariants,
+  Skeleton,
+  AlertDialog,
+  AlertDialogPopup,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogClose,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@glean/ui'
+import type { FilterType } from '../useReaderController'
+
+export function BookOpenIcon(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" />
+      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+    </svg>
+  )
+}
+
+export function ResizeHandle({ onResize }: { onResize: (delta: number) => void }) {
+  const [isDragging, setIsDragging] = useState(false)
+  const startXRef = useRef(0)
+
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientX - startXRef.current
+      startXRef.current = e.clientX
+      onResize(delta)
+    }
+
+    const handleMouseUp = () => {
+      setIsDragging(false)
+    }
+
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [isDragging, onResize])
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    e.preventDefault()
+    startXRef.current = e.clientX
+    setIsDragging(true)
+  }
+
+  return (
+    <div
+      className="absolute top-0 -right-1 bottom-0 w-2 cursor-col-resize"
+      onMouseDown={handleMouseDown}
+    >
+      <div
+        className={`absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors ${
+          isDragging ? 'bg-primary' : 'hover:bg-border bg-transparent'
+        }`}
+      />
+    </div>
+  )
+}
+
+function formatRemainingTime(readLaterUntil: string | null): string | null {
+  if (!readLaterUntil) return null
+  const untilDate = new Date(readLaterUntil)
+  if (isPast(untilDate)) return 'Expired'
+  return formatDistanceToNow(untilDate, { addSuffix: false })
+}
+
+export function EntryListItem({
+  entry,
+  isSelected,
+  onClick,
+  onSwipeLeft,
+  onSwipeRight,
+  enableSwipeActions = false,
+  style,
+  showFeedInfo = false,
+  showReadLaterRemaining = false,
+  showPreferenceScore = false,
+  dataEntryId,
+}: {
+  entry: EntryWithState
+  isSelected: boolean
+  onClick: () => void
+  onSwipeLeft?: () => void
+  onSwipeRight?: () => void
+  enableSwipeActions?: boolean
+  style?: React.CSSProperties
+  showFeedInfo?: boolean
+  showReadLaterRemaining?: boolean
+  showPreferenceScore?: boolean
+  dataEntryId?: string
+}) {
+  const { t } = useTranslation('reader')
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const [dragX, setDragX] = useState(0)
+  const [swipeHandled, setSwipeHandled] = useState(false)
+  const remainingTime = showReadLaterRemaining ? formatRemainingTime(entry.read_later_until) : null
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!enableSwipeActions) return
+    const touch = e.touches[0]
+    touchStartRef.current = { x: touch.clientX, y: touch.clientY }
+    setSwipeHandled(false)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (!enableSwipeActions || !touchStartRef.current) return
+    const touch = e.touches[0]
+    const dx = touch.clientX - touchStartRef.current.x
+    const dy = touch.clientY - touchStartRef.current.y
+
+    if (Math.abs(dx) > Math.abs(dy) * 1.2) {
+      setDragX(Math.max(-96, Math.min(96, dx)))
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (!enableSwipeActions) return
+    const threshold = 72
+
+    if (dragX >= threshold && onSwipeRight) {
+      onSwipeRight()
+      setSwipeHandled(true)
+    } else if (dragX <= -threshold && onSwipeLeft) {
+      onSwipeLeft()
+      setSwipeHandled(true)
+    }
+
+    setDragX(0)
+    touchStartRef.current = null
+  }
+
+  return (
+    <div
+      onClick={() => {
+        if (swipeHandled) {
+          setSwipeHandled(false)
+          return
+        }
+        onClick()
+      }}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      data-entry-id={dataEntryId}
+      className={`group animate-fade-in relative cursor-pointer px-1.5 py-1.5 transition-all duration-200 ${
+        isSelected
+          ? 'before:bg-primary relative before:absolute before:inset-y-0.5 before:left-0 before:w-0.5 before:rounded-full'
+          : ''
+      }`}
+      style={style}
+    >
+      {enableSwipeActions && (
+        <>
+          <div className="text-primary pointer-events-none absolute inset-y-1.5 left-3 flex items-center text-xs font-medium">
+            <CheckCheck className="mr-1.5 h-4 w-4" />
+            {t('actions.markRead')}
+          </div>
+          <div className="text-primary pointer-events-none absolute inset-y-1.5 right-3 flex items-center text-xs font-medium">
+            {t('filters.readLater')}
+            <Clock className="ml-1.5 h-4 w-4" />
+          </div>
+        </>
+      )}
+      <div
+        className={`rounded-lg px-2.5 py-2 transition-all duration-200 ${
+          isSelected ? 'bg-primary/8 ring-primary/20 ring-1' : 'hover:bg-accent/40'
+        }`}
+        style={enableSwipeActions ? { transform: `translateX(${dragX}px)` } : undefined}
+      >
+        <div className="flex gap-2.5">
+          <div className="mt-1.5 flex w-2.5 shrink-0 justify-center">
+            {!entry.is_read && (
+              <div className="bg-primary shadow-primary/40 h-1.5 w-1.5 rounded-full shadow-[0_0_6px_1px]" />
+            )}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            {showFeedInfo && (entry.feed_title || entry.feed_icon_url) && (
+              <div className="mb-1 flex items-center gap-1.5">
+                {entry.feed_icon_url ? (
+                  <img
+                    src={entry.feed_icon_url}
+                    alt=""
+                    className="h-3.5 w-3.5 shrink-0 rounded-sm object-cover"
+                  />
+                ) : (
+                  <div className="bg-muted h-3.5 w-3.5 shrink-0 rounded-sm" />
+                )}
+                <span className="text-muted-foreground truncate text-xs font-medium">
+                  {entry.feed_title || 'Unknown feed'}
+                </span>
+              </div>
+            )}
+
+            <h3
+              className={`mb-1 line-clamp-2 text-[15px] leading-snug transition-colors duration-200 ${
+                entry.is_read
+                  ? 'text-muted-foreground group-hover:text-foreground/80'
+                  : 'text-foreground font-medium'
+              }`}
+            >
+              {entry.title}
+            </h3>
+
+            <div className="mb-1.5 h-10">
+              {entry.summary && (
+                <p className="text-muted-foreground/70 line-clamp-2 text-sm leading-relaxed">
+                  {stripHtmlTags(entry.summary)}
+                </p>
+              )}
+            </div>
+
+            <div className="text-muted-foreground/80 flex items-center gap-2 text-xs">
+              {entry.author && <span className="max-w-[120px] truncate">{entry.author}</span>}
+              {entry.author && entry.published_at && (
+                <span className="text-muted-foreground/40">·</span>
+              )}
+              {entry.published_at && (
+                <span className="tabular-nums">{format(new Date(entry.published_at), 'MMM d')}</span>
+              )}
+
+              <div className="ml-auto flex items-center gap-1.5">
+                {showPreferenceScore &&
+                  entry.preference_score !== null &&
+                  entry.preference_score !== undefined && (
+                    <span
+                      className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium tabular-nums ${
+                        entry.preference_score >= 70
+                          ? 'bg-green-500/10 text-green-500'
+                          : entry.preference_score >= 50
+                            ? 'bg-amber-500/10 text-amber-500'
+                            : 'bg-muted text-muted-foreground'
+                      }`}
+                      title={`Preference score: ${entry.preference_score.toFixed(0)}%`}
+                    >
+                      {entry.preference_score.toFixed(0)}%
+                    </span>
+                  )}
+                {entry.is_liked === true && (
+                  <Heart className="h-3.5 w-3.5 fill-current text-red-500" />
+                )}
+                {entry.is_liked === false && (
+                  <ThumbsDown className="text-muted-foreground h-3.5 w-3.5 fill-current" />
+                )}
+                {entry.read_later && !showReadLaterRemaining && (
+                  <Clock className="text-primary h-3.5 w-3.5" />
+                )}
+                {remainingTime && (
+                  <span
+                    className={`flex items-center gap-0.5 rounded px-1 py-0.5 text-[9px] font-medium ${
+                      remainingTime === 'Expired'
+                        ? 'bg-destructive/10 text-destructive'
+                        : 'bg-primary/10 text-primary'
+                    }`}
+                  >
+                    <Timer className="h-2.5 w-2.5" />
+                    {remainingTime}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function FilterTab({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex min-w-0 flex-1 items-center justify-center overflow-hidden rounded-md px-2 py-1 text-xs font-medium transition-all duration-200 ${
+        active
+          ? 'bg-background text-foreground shadow-sm'
+          : 'text-muted-foreground hover:text-foreground'
+      }`}
+    >
+      <span className={`shrink-0 transition-colors duration-200 ${active ? 'text-primary' : ''}`}>
+        {icon}
+      </span>
+      <span className="ml-0 max-w-0 overflow-hidden whitespace-nowrap opacity-0 transition-all duration-200 @[20rem]:ml-1.5 @[20rem]:max-w-full @[20rem]:opacity-100">
+        {label}
+      </span>
+    </button>
+  )
+}
+
+export function FilterDropdownMenu({
+  filterType,
+  onFilterChange,
+  isSmartView,
+}: {
+  filterType: FilterType
+  onFilterChange: (type: FilterType) => void
+  isSmartView: boolean
+}) {
+  const { t } = useTranslation('reader')
+
+  const getFilterIcon = (type: FilterType) => {
+    switch (type) {
+      case 'all':
+        return <Inbox className="h-4 w-4" />
+      case 'unread':
+        return <div className="h-2 w-2 rounded-full bg-current" />
+      case 'smart':
+        return <Sparkles className="h-4 w-4" />
+      case 'read-later':
+        return <Clock className="h-4 w-4" />
+    }
+  }
+
+  const getFilterLabel = (type: FilterType) => {
+    switch (type) {
+      case 'all':
+        return t('filters.all')
+      case 'unread':
+        return t('filters.unread')
+      case 'smart':
+        return t('filters.smart')
+      case 'read-later':
+        return t('filters.readLater')
+    }
+  }
+
+  const availableFilters: FilterType[] = isSmartView
+    ? ['unread', 'all']
+    : ['all', 'unread', 'smart', 'read-later']
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger className="text-foreground hover:bg-accent flex h-8 items-center gap-2 rounded-lg px-3 text-sm font-medium transition-colors">
+        <span className="flex items-center gap-2">
+          {getFilterIcon(filterType)}
+          <span>{getFilterLabel(filterType)}</span>
+        </span>
+        <ChevronDown className="h-4 w-4 opacity-50" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start">
+        {availableFilters.map((type) => (
+          <DropdownMenuItem
+            key={type}
+            onClick={() => onFilterChange(type)}
+            className={filterType === type ? 'bg-accent' : ''}
+          >
+            <span className="flex items-center gap-2">
+              <span className="flex w-4 items-center justify-center">{getFilterIcon(type)}</span>
+              <span>{getFilterLabel(type)}</span>
+            </span>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function MarkAllReadButton({ feedId, folderId }: { feedId?: string; folderId?: string }) {
+  const { t } = useTranslation('reader')
+  const markAllMutation = useMarkAllRead()
+  const [showConfirm, setShowConfirm] = useState(false)
+
+  const handleMarkAll = async () => {
+    await markAllMutation.mutateAsync({ feedId, folderId })
+    setShowConfirm(false)
+  }
+
+  const getScopeText = () => {
+    if (feedId) return t('entries.scope.feed')
+    if (folderId) return t('entries.scope.folder')
+    return t('entries.scope.all')
+  }
+
+  return (
+    <>
+      <button
+        onClick={() => setShowConfirm(true)}
+        disabled={markAllMutation.isPending}
+        title={t('entries.markAll')}
+        className="text-muted-foreground hover:bg-muted hover:text-foreground flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors disabled:opacity-50"
+      >
+        <CheckCheck className="h-4 w-4" />
+      </button>
+
+      <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('entries.markConfirm')}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('entries.markConfirmDescription', { scope: getScopeText() })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
+              {t('actions.close')}
+            </AlertDialogClose>
+            <AlertDialogClose
+              className={buttonVariants()}
+              onClick={handleMarkAll}
+              disabled={markAllMutation.isPending}
+            >
+              {markAllMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>{t('entries.marking')}</span>
+                </>
+              ) : (
+                t('entries.markAll')
+              )}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+    </>
+  )
+}
+
+export function EntryListItemSkeleton() {
+  return (
+    <div className="px-1.5 py-1.5">
+      <div className="rounded-lg px-2.5 py-2">
+        <div className="flex gap-2.5">
+          <div className="mt-1.5 flex w-2.5 shrink-0 justify-center">
+            <Skeleton className="h-1.5 w-1.5 rounded-full" />
+          </div>
+
+          <div className="min-w-0 flex-1 space-y-1">
+            <div className="space-y-1">
+              <Skeleton className="h-[18px] w-full" />
+              <Skeleton className="h-[18px] w-3/4" />
+            </div>
+
+            <div className="h-10 space-y-1">
+              <Skeleton className="h-4 w-full" />
+              <Skeleton className="h-4 w-5/6" />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-3 w-12" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function ReaderSmartTabs({
+  filterType,
+  onFilterChange,
+}: {
+  filterType: FilterType
+  onFilterChange: (filter: FilterType) => void
+}) {
+  const { t } = useTranslation('reader')
+
+  return (
+    <>
+      <FilterTab
+        active={filterType === 'unread'}
+        onClick={() => onFilterChange('unread')}
+        icon={<div className="h-2 w-2 rounded-full bg-current" />}
+        label={t('filters.unread')}
+      />
+      <FilterTab
+        active={filterType === 'all'}
+        onClick={() => onFilterChange('all')}
+        icon={<Inbox className="h-3.5 w-3.5" />}
+        label={t('filters.all')}
+      />
+    </>
+  )
+}
+
+export function ReaderFilterTabs({
+  filterType,
+  onFilterChange,
+}: {
+  filterType: FilterType
+  onFilterChange: (filter: FilterType) => void
+}) {
+  const { t } = useTranslation('reader')
+
+  return (
+    <>
+      <FilterTab
+        active={filterType === 'all'}
+        onClick={() => onFilterChange('all')}
+        icon={<Inbox className="h-3.5 w-3.5" />}
+        label={t('filters.all')}
+      />
+      <FilterTab
+        active={filterType === 'unread'}
+        onClick={() => onFilterChange('unread')}
+        icon={<div className="h-2 w-2 rounded-full bg-current" />}
+        label={t('filters.unread')}
+      />
+      <FilterTab
+        active={filterType === 'smart'}
+        onClick={() => onFilterChange('smart')}
+        icon={<Sparkles className="h-3.5 w-3.5" />}
+        label={t('filters.smart')}
+      />
+      <FilterTab
+        active={filterType === 'read-later'}
+        onClick={() => onFilterChange('read-later')}
+        icon={<Clock className="h-3.5 w-3.5" />}
+        label={t('filters.readLater')}
+      />
+    </>
+  )
+}

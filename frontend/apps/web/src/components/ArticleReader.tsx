@@ -17,11 +17,21 @@ import {
   X,
   ChevronLeft,
   Menu as MenuIcon,
+  Ellipsis,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
 import { detectTargetLanguage } from '../lib/languageDetect'
-import { Button, Skeleton } from '@glean/ui'
+import {
+  Button,
+  Skeleton,
+  Sheet,
+  SheetPopup,
+  SheetHeader,
+  SheetTitle,
+  SheetDescription,
+  SheetPanel,
+} from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
@@ -140,6 +150,62 @@ function useScrollHide(scrollContainerRef: React.RefObject<HTMLDivElement | null
 }
 
 /**
+ * Mobile pull-down-to-close gesture.
+ * Only triggers when content is at the top and the gesture is primarily vertical.
+ */
+function usePullToClose(
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>,
+  enabled: boolean,
+  onClose?: () => void
+) {
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
+  const pullDistanceRef = useRef(0)
+
+  const onTouchStart = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!enabled) return
+      if (!scrollContainerRef.current || scrollContainerRef.current.scrollTop > 0) return
+
+      const touch = e.touches[0]
+      touchStartRef.current = { x: touch.clientX, y: touch.clientY }
+      pullDistanceRef.current = 0
+    },
+    [enabled, scrollContainerRef]
+  )
+
+  const onTouchMove = useCallback(
+    (e: React.TouchEvent<HTMLDivElement>) => {
+      if (!enabled || !touchStartRef.current) return
+      const touch = e.touches[0]
+      const dx = touch.clientX - touchStartRef.current.x
+      const dy = touch.clientY - touchStartRef.current.y
+
+      // Only track mostly-vertical downward movement.
+      if (dy > 0 && Math.abs(dy) > Math.abs(dx) * 1.2) {
+        pullDistanceRef.current = dy
+      } else {
+        pullDistanceRef.current = 0
+      }
+    },
+    [enabled]
+  )
+
+  const onTouchEnd = useCallback(() => {
+    if (!enabled || !touchStartRef.current) return
+
+    const shouldClose = pullDistanceRef.current > 96
+    touchStartRef.current = null
+    pullDistanceRef.current = 0
+
+    if (shouldClose && onClose) {
+      onClose()
+    }
+  }, [enabled, onClose])
+
+  return { onTouchStart, onTouchMove, onTouchEnd }
+}
+
+/**
  * Standalone article reader component.
  *
  * Displays article content with actions like like, bookmark, mark read, etc.
@@ -168,6 +234,7 @@ export function ArticleReader({
 
   const contentRef = useContentRenderer(displayContent)
   const [isBookmarking, setIsBookmarking] = useState(false)
+  const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -190,6 +257,7 @@ export function ArticleReader({
   })
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef)
+  const pullToCloseHandlers = usePullToClose(scrollContainerRef, isMobile, onClose)
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -410,7 +478,12 @@ export function ArticleReader({
         {/* Scrollable content area - hide scrollbar for cleaner reading */}
         <div
           ref={scrollContainerRef}
-          className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
+          className={`hide-scrollbar reader-pan-y no-horizontal-overscroll flex-1 overflow-y-auto ${
+            isMobile ? 'pt-14 pb-16' : ''
+          }`}
+          onTouchStart={pullToCloseHandlers.onTouchStart}
+          onTouchMove={pullToCloseHandlers.onTouchMove}
+          onTouchEnd={pullToCloseHandlers.onTouchEnd}
         >
           <div
             className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
@@ -519,25 +592,6 @@ export function ArticleReader({
               <span className="text-[10px]">{t('actions.open')}</span>
             </button>
 
-            <button
-              onClick={toggleTranslation}
-              disabled={isTranslating}
-              className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                showTranslation ? 'text-primary' : 'text-muted-foreground'
-              } disabled:opacity-50`}
-            >
-              {isTranslating ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Languages className="h-5 w-5" />
-              )}
-              <span className="text-[10px]">
-                {showTranslation
-                  ? t('translation.hideTranslation')
-                  : t('translation.translate')}
-              </span>
-            </button>
-
             {!hideReadStatus && (
               <button
                 onClick={handleToggleRead}
@@ -552,36 +606,83 @@ export function ArticleReader({
               </button>
             )}
 
-            <PreferenceButtons entry={entry} mobileStyle />
-
             <button
-              onClick={handleToggleReadLater}
-              className={`action-btn action-btn-mobile ${readLaterAnimation} flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                entry.read_later ? 'text-primary' : 'text-muted-foreground'
+              onClick={toggleTranslation}
+              disabled={isTranslating}
+              className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                showTranslation ? 'text-primary' : 'text-muted-foreground'
               }`}
             >
-              <Clock className="h-5 w-5" />
-              <span className="text-[10px]">{t('filters.readLater')}</span>
+              {isTranslating ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Languages className="h-5 w-5" />
+              )}
+              <span className="text-[10px]">
+                {showTranslation ? t('translation.hideTranslation') : t('translation.translate')}
+              </span>
             </button>
 
             <button
-              onClick={handleToggleBookmark}
-              disabled={isBookmarking}
-              className={`action-btn action-btn-mobile ${bookmarkAnimation} flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                entry.is_bookmarked ? 'text-primary' : 'text-muted-foreground'
-              } disabled:opacity-50`}
+              onClick={() => setIsMoreSheetOpen(true)}
+              className="action-btn action-btn-mobile text-muted-foreground hover:text-foreground flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors"
             >
-              {isBookmarking ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Archive className="h-5 w-5" />
-              )}
-              <span className="text-[10px]">
-                {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
-              </span>
+              <Ellipsis className="h-5 w-5" />
+              <span className="text-[10px]">{t('actions.more')}</span>
             </button>
           </div>
         </div>
+      )}
+
+      {isMobile && (
+        <Sheet open={isMoreSheetOpen} onOpenChange={setIsMoreSheetOpen}>
+          <SheetPopup side="bottom">
+            <SheetHeader>
+              <SheetTitle>{t('actions.more')}</SheetTitle>
+              <SheetDescription>{t('actions.moreDescription')}</SheetDescription>
+            </SheetHeader>
+            <SheetPanel>
+              <div className="space-y-2">
+                <button
+                  onClick={handleToggleReadLater}
+                  className={`border-border hover:bg-accent ${readLaterAnimation} flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors ${
+                    entry.read_later ? 'text-primary' : 'text-foreground'
+                  }`}
+                >
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    <span>
+                      {entry.read_later ? t('actions.savedForLater') : t('actions.readLater')}
+                    </span>
+                  </span>
+                </button>
+
+                <div className="border-border rounded-lg border p-1.5">
+                  <PreferenceButtons entry={entry} mobileStyle />
+                </div>
+
+                <button
+                  onClick={handleToggleBookmark}
+                  disabled={isBookmarking}
+                  className={`border-border hover:bg-accent flex w-full items-center justify-between rounded-lg border px-3 py-3 text-left transition-colors ${
+                    entry.is_bookmarked ? 'text-primary' : 'text-foreground'
+                  } disabled:opacity-50`}
+                >
+                  <span className="flex items-center gap-2">
+                    {isBookmarking ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Archive className="h-4 w-4" />
+                    )}
+                    <span>
+                      {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </SheetPanel>
+          </SheetPopup>
+        </Sheet>
       )}
     </div>
   )
