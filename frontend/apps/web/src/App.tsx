@@ -10,7 +10,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/RegisterPage'))
-const ReaderPage = lazy(() => import('./pages/ReaderPage'))
+const ReaderRoute = lazy(() => import('./pages/reader/ReaderRoute'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
 // M2 pages
@@ -80,7 +80,7 @@ function App() {
           }
         >
           <Route index element={<Navigate to="/reader?view=smart&tab=unread" replace />} />
-          <Route path="reader" element={<ReaderPage />} />
+          <Route path="reader" element={<ReaderRoute />} />
           <Route path="subscriptions" element={<SubscriptionsPage />} />
           <Route path="bookmarks" element={<BookmarksPage />} />
           <Route path="preference" element={<PreferencePage />} />

@@ -1124,6 +1124,15 @@ body {
   overscroll-behavior-y: contain;
 }
 
+/* Reader touch behavior tuning for mobile */
+.reader-pan-y {
+  touch-action: pan-y;
+}
+
+.no-horizontal-overscroll {
+  overscroll-behavior-x: contain;
+}
+
 /* ==========================================================================
    Base UI Animation Styles
    For popover, menu, dialog animations with data attributes
