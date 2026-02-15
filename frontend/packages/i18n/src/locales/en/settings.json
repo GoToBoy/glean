@@ -149,9 +149,16 @@
       "name": "OpenAI",
       "desc": "AI-powered translation using GPT models"
     },
+    "mtran": {
+      "name": "MTranServer",
+      "desc": "Self-hosted local translation service"
+    },
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Enter your API key",
+    "baseUrl": "MTran Base URL",
+    "baseUrlPlaceholder": "http://mtranserver:5001",
     "model": "Model",
+    "modelPlaceholder": "Optional model name",
     "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
     "settingsSaved": "Translation settings saved"
   },
@@ -211,9 +218,16 @@
       "name": "OpenAI",
       "desc": "AI-powered translation using GPT models"
     },
+    "mtran": {
+      "name": "MTranServer",
+      "desc": "Self-hosted local translation service"
+    },
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Enter your API key",
+    "baseUrl": "MTran Base URL",
+    "baseUrlPlaceholder": "http://mtranserver:5001",
     "model": "Model",
+    "modelPlaceholder": "Optional model name",
     "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
     "settingsSaved": "Translation settings saved"
   },

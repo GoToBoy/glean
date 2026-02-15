@@ -6,8 +6,11 @@ translation backends. Users configure their preferred provider and
 API key via user settings; no key falls back to Google free.
 """
 
+import os
 from abc import ABC, abstractmethod
 from typing import Any
+
+import httpx
 
 from glean_core import get_logger
 
@@ -28,6 +31,28 @@ class TranslationProvider(ABC):
     def translate_batch(self, texts: list[str], source: str, target: str) -> list[str]:
         """Translate a list of texts. Default: translate one by one."""
         return [self.translate(t, source, target) for t in texts]
+
+
+class FallbackProvider(TranslationProvider):
+    """Provider wrapper that falls back to another provider on failures."""
+
+    def __init__(self, primary: TranslationProvider, fallback: TranslationProvider) -> None:
+        self.primary = primary
+        self.fallback = fallback
+
+    def translate(self, text: str, source: str, target: str) -> str:
+        try:
+            return self.primary.translate(text, source, target)
+        except Exception:
+            logger.exception("Primary translation provider failed; using fallback")
+            return self.fallback.translate(text, source, target)
+
+    def translate_batch(self, texts: list[str], source: str, target: str) -> list[str]:
+        try:
+            return self.primary.translate_batch(texts, source, target)
+        except Exception:
+            logger.exception("Primary batch translation failed; using fallback")
+            return self.fallback.translate_batch(texts, source, target)
 
 
 class GoogleFreeProvider(TranslationProvider):
@@ -220,14 +245,156 @@ class OpenAIProvider(TranslationProvider):
         return results
 
 
+class MTranProvider(TranslationProvider):
+    """MTranServer translation provider via local HTTP service."""
+
+    def __init__(
+        self,
+        base_url: str | None = None,
+        api_key: str = "",
+        model: str = "",
+        timeout: float = 20.0,
+    ) -> None:
+        self.base_url = (
+            (base_url or os.getenv("MTRAN_SERVER_URL", "http://mtranserver:5001")).rstrip("/")
+        )
+        self.api_key = api_key
+        self.model = model
+        self.timeout = timeout
+
+    def _headers(self) -> dict[str, str]:
+        headers: dict[str, str] = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
+        return headers
+
+    def _payload(self, text: str, source: str, target: str) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "text": text,
+            "source": source,
+            "target": target,
+            "source_language": source,
+            "target_language": target,
+        }
+        if self.model:
+            payload["model"] = self.model
+        return payload
+
+    def _extract_single(self, data: Any) -> str | None:
+        if isinstance(data, str):
+            return data
+
+        if isinstance(data, dict):
+            for key in ("translation", "translated_text", "text", "result"):
+                value = data.get(key)
+                if isinstance(value, str):
+                    return value
+
+            nested = data.get("data")
+            if isinstance(nested, dict):
+                for key in ("translation", "translated_text", "text", "result"):
+                    value = nested.get(key)
+                    if isinstance(value, str):
+                        return value
+        return None
+
+    def _extract_batch(self, data: Any, expected_count: int) -> list[str] | None:
+        items: Any | None = None
+        if isinstance(data, list):
+            items = data
+        elif isinstance(data, dict):
+            for key in ("translations", "translated_texts", "results", "data"):
+                value = data.get(key)
+                if isinstance(value, list):
+                    items = value
+                    break
+
+        if not isinstance(items, list):
+            return None
+
+        parsed: list[str] = []
+        for item in items:
+            single = self._extract_single(item)
+            if single is None:
+                return None
+            parsed.append(single)
+
+        if len(parsed) != expected_count:
+            return None
+        return parsed
+
+    def translate(self, text: str, source: str, target: str) -> str:
+        if not text or not text.strip():
+            return text
+
+        payload = self._payload(text, source, target)
+        with httpx.Client(timeout=self.timeout) as client:
+            response = client.post(
+                f"{self.base_url}/translate",
+                json=payload,
+                headers=self._headers(),
+            )
+            response.raise_for_status()
+            translated = self._extract_single(response.json())
+            if translated is None:
+                raise ValueError("MTranServer response does not contain translated text")
+            return translated
+
+    def translate_batch(self, texts: list[str], source: str, target: str) -> list[str]:
+        if not texts:
+            return []
+
+        payload: dict[str, Any] = {
+            "texts": texts,
+            "source": source,
+            "target": target,
+            "source_language": source,
+            "target_language": target,
+        }
+        if self.model:
+            payload["model"] = self.model
+
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                response = client.post(
+                    f"{self.base_url}/translate/batch",
+                    json=payload,
+                    headers=self._headers(),
+                )
+                response.raise_for_status()
+                parsed = self._extract_batch(response.json(), len(texts))
+                if parsed is not None:
+                    return parsed
+                raise ValueError("MTranServer batch response is not parseable")
+        except Exception:
+            logger.exception("MTranServer batch translation failed; fallback to single requests")
+            return [self.translate(t, source, target) for t in texts]
+
+
+def _is_mtran_available(base_url: str, timeout: float = 0.8) -> bool:
+    """Check whether MTranServer is reachable."""
+    check_urls = [f"{base_url}/health", base_url]
+    with httpx.Client(timeout=timeout) as client:
+        for url in check_urls:
+            try:
+                response = client.get(url)
+                # Any HTTP response means the server is reachable.
+                if response.status_code >= 100:
+                    return True
+            except httpx.RequestError:
+                continue
+    return False
+
+
 def create_translation_provider(settings: dict[str, Any] | None) -> TranslationProvider:
     """
     Create a translation provider from user settings.
 
     Settings keys:
-        - translation_provider: "google" | "deepl" | "openai"
+        - translation_provider: "google" | "deepl" | "openai" | "mtran"
         - translation_api_key: API key for non-Google providers
-        - translation_model: Model name for OpenAI (default: "gpt-4o-mini")
+        - translation_model: Model name for OpenAI/MTran (default: "gpt-4o-mini")
+        - translation_base_url: Base URL for MTranServer (optional)
 
     Falls back to GoogleFreeProvider when provider is google, no key is
     provided for non-google providers, or settings are empty.
@@ -237,17 +404,42 @@ def create_translation_provider(settings: dict[str, Any] | None) -> TranslationP
 
     provider = settings.get("translation_provider", "google")
     api_key = settings.get("translation_api_key", "")
-    model = settings.get("translation_model", "gpt-4o-mini")
+    raw_model = settings.get("translation_model")
+    model = raw_model if isinstance(raw_model, str) else None
+    base_url = settings.get("translation_base_url", "")
 
     if provider == "deepl" and api_key:
         logger.info("Using DeepL translation provider")
         return DeepLProvider(api_key)
 
     if provider == "openai" and api_key:
+        openai_model = model or "gpt-4o-mini"
         logger.info(
             "Using OpenAI translation provider",
-            extra={"model": model},
+            extra={"model": openai_model},
         )
-        return OpenAIProvider(api_key, model)
+        return OpenAIProvider(api_key, openai_model)
+
+    if provider == "mtran":
+        resolved_base_url = base_url or os.getenv("MTRAN_SERVER_URL", "http://mtranserver:5001")
+        logger.info(
+            "Using MTran translation provider",
+            extra={"base_url": resolved_base_url},
+        )
+        if not _is_mtran_available(resolved_base_url):
+            logger.warning(
+                "MTranServer is not reachable; falling back to Google Translate",
+                extra={"base_url": resolved_base_url},
+            )
+            return GoogleFreeProvider()
+
+        return FallbackProvider(
+            primary=MTranProvider(
+                base_url=resolved_base_url,
+                api_key=api_key,
+                model=model or "",
+            ),
+            fallback=GoogleFreeProvider(),
+        )
 
     return GoogleFreeProvider()

@@ -14,6 +14,8 @@
 #   - ADMIN_USERNAME/PASSWORD: Admin credentials (default: admin/Admin123!)
 #   - DEBUG: Enable debug mode (default: false)
 #   - MILVUS_HOST/PORT: Milvus connection (for Phase 3 features)
+#   - MTRAN_IMAGE: MTranServer image (default: mtranserver/mtranserver:latest)
+#   - MTRAN_SERVER_URL: MTranServer base URL for backend/worker (default: http://mtranserver:5001)
 
 services:
   postgres:
@@ -49,6 +51,16 @@ services:
       - glean-network
     restart: unless-stopped
 
+  mtranserver:
+    image: ${MTRAN_IMAGE:-mtranserver/mtranserver:latest}
+    container_name: glean-mtranserver
+    profiles: ["mtran"]
+    ports:
+      - "${MTRAN_PORT:-5001}:5001"
+    networks:
+      - glean-network
+    restart: unless-stopped
+
   backend:
     image: ghcr.io/leslieleung/glean-backend:${IMAGE_TAG:-latest}
     container_name: glean-backend
@@ -58,6 +70,7 @@ services:
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       CORS_ORIGINS: '["http://localhost", "http://localhost:3000", "http://localhost:3001"]'
       DEBUG: ${DEBUG:-false}
+      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       # Only backend runs migrations to avoid race conditions
       RUN_MIGRATIONS: "true"
       # Admin auto-creation (enabled by default, set to false to disable)
@@ -102,6 +115,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
+      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       # Milvus configuration
       MILVUS_HOST: milvus
       MILVUS_PORT: ${MILVUS_PORT:-19530}
