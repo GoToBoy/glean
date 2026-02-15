@@ -23,7 +23,11 @@
     "editFeed": "编辑订阅",
     "unsubscribe": "取消订阅",
     "markAllAsRead": "全部标为已读",
-    "moveTo": "移动到..."
+    "moveTo": "移动到...",
+    "selectFeeds": "多选订阅",
+    "groupSelectedFeeds": "所选归组为文件夹",
+    "groupIntoFolder": "归组到新文件夹",
+    "dissolveFolder": "解散文件夹"
   },
   "dialogs": {
     "addFeed": {
@@ -61,6 +65,14 @@
       "delete": "删除",
       "deleting": "删除中...",
       "description": "确定要删除“{{name}}”吗？此文件夹中的订阅将被移动到未分类。"
+    },
+    "dissolveFolder": {
+      "title": "解散文件夹？",
+      "description": "解散“{{name}}”后，文件夹内订阅会移动到未分类。"
+    },
+    "groupFeeds": {
+      "title": "将订阅归组到新文件夹",
+      "description": "为已选择的 {{count}} 个订阅创建一个新文件夹。"
     },
     "editFeed": {
       "title": "编辑订阅",
@@ -146,7 +158,8 @@
     "tagColor": "颜色",
     "noColor": "无颜色",
     "creating": "创建中...",
-    "ok": "确定"
+    "ok": "确定",
+    "selectedCount": "已选择 {{count}} 项"
   },
   "opml": {
     "importCompleted": "导入完成",

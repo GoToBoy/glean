@@ -10,6 +10,7 @@ from . import (
     embedding_rebuild,
     embedding_worker,
     feed_fetcher,
+    implicit_feedback_aggregation,
     preference_worker,
     subscription_cleanup,
 )
@@ -20,6 +21,7 @@ __all__ = [
     "bookmark_metadata",
     "embedding_worker",
     "embedding_rebuild",
+    "implicit_feedback_aggregation",
     "preference_worker",
     "subscription_cleanup",
 ]

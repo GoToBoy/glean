@@ -46,6 +46,8 @@ import {
   Pencil,
   MoreHorizontal as MoreIcon,
   CheckCheck,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import type { FolderTreeNode, Subscription } from '@glean/types'
 import {
@@ -117,9 +119,62 @@ export function SidebarFeedsSection({
   setDragOverFolderId,
 }: SidebarFeedsSectionProps) {
   const { t } = useTranslation('feeds')
+  const { createFolder } = useFolderStore()
   const updateMutation = useUpdateSubscription()
+  const [isSelectionMode, setIsSelectionMode] = useState(false)
+  const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set())
+  const [showGroupDialog, setShowGroupDialog] = useState(false)
+  const [groupFolderName, setGroupFolderName] = useState('')
+  const [isGrouping, setIsGrouping] = useState(false)
 
   const getSubscriptionsForFolder = (folderId: string) => subscriptionsByFolder[folderId] || []
+  const selectedCount = selectedSubscriptionIds.size
+
+  const toggleFeedSelection = (subscriptionId: string) => {
+    setSelectedSubscriptionIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(subscriptionId)) {
+        next.delete(subscriptionId)
+      } else {
+        next.add(subscriptionId)
+      }
+      return next
+    })
+  }
+
+  const exitSelectionMode = () => {
+    setIsSelectionMode(false)
+    setSelectedSubscriptionIds(new Set())
+  }
+
+  const handleGroupSelectedFeeds = async () => {
+    if (!groupFolderName.trim() || selectedCount < 2) return
+
+    setIsGrouping(true)
+    try {
+      const folder = await createFolder({
+        name: groupFolderName.trim(),
+        type: 'feed',
+        parent_id: null,
+      })
+      if (!folder) return
+
+      await Promise.all(
+        Array.from(selectedSubscriptionIds).map((subscriptionId) =>
+          updateMutation.mutateAsync({
+            subscriptionId,
+            data: { folder_id: folder.id },
+          })
+        )
+      )
+
+      setShowGroupDialog(false)
+      setGroupFolderName('')
+      exitSelectionMode()
+    } finally {
+      setIsGrouping(false)
+    }
+  }
 
   return (
     <>
@@ -177,6 +232,15 @@ export function SidebarFeedsSection({
                   <Download className="h-4 w-4" />
                   <span>{exportPending ? t('states.exporting') : t('actions.exportOPML')}</span>
                 </MenuItem>
+                {isSidebarOpen && !isMobileSidebarOpen && (
+                  <>
+                    <MenuSeparator />
+                    <MenuItem onClick={() => setIsSelectionMode(true)} disabled={isSelectionMode}>
+                      <CheckCheck className="h-4 w-4" />
+                      <span>{t('actions.selectFeeds')}</span>
+                    </MenuItem>
+                  </>
+                )}
               </MenuPopup>
             </Menu>
           </div>
@@ -215,6 +279,27 @@ export function SidebarFeedsSection({
             className="mt-0.5"
           />
 
+          {isSidebarOpen && !isMobileSidebarOpen && isSelectionMode && (
+            <div className="border-border bg-muted/30 mt-2 rounded-lg border px-3 py-2">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-muted-foreground text-xs">
+                  {t('common.selectedCount', { count: selectedCount })}
+                </span>
+                <Button size="sm" variant="ghost" onClick={exitSelectionMode}>
+                  {t('common.cancel')}
+                </Button>
+              </div>
+              <Button
+                size="sm"
+                className="w-full"
+                onClick={() => setShowGroupDialog(true)}
+                disabled={selectedCount < 2}
+              >
+                {t('actions.groupSelectedFeeds')}
+              </Button>
+            </div>
+          )}
+
           {(isSidebarOpen || isMobileSidebarOpen) && feedFolders.length > 0 && (
             <div className="space-y-0.5">
               {feedFolders.map((folder) => (
@@ -238,12 +323,16 @@ export function SidebarFeedsSection({
                   setDraggedFeed={setDraggedFeed}
                   dragOverFolderId={dragOverFolderId}
                   setDragOverFolderId={setDragOverFolderId}
+                  isSelectionMode={isSidebarOpen && !isMobileSidebarOpen && isSelectionMode}
+                  selectedSubscriptionIds={selectedSubscriptionIds}
+                  onToggleFeedSelection={toggleFeedSelection}
                 />
               ))}
             </div>
           )}
 
           {(isSidebarOpen || isMobileSidebarOpen) &&
+            !(isSidebarOpen && !isMobileSidebarOpen && isSelectionMode) &&
             draggedFeed !== null &&
             draggedFeed.folder_id !== null && (
               <section
@@ -284,18 +373,60 @@ export function SidebarFeedsSection({
                   isActive={isReaderPage && currentFeedId === sub.feed_id}
                   onClick={() => onFeedSelect(sub.feed_id)}
                   allFolders={feedFolders}
-                  isDragging={draggedFeed?.id === sub.id}
+                  isDragging={
+                    !(isSidebarOpen && !isMobileSidebarOpen && isSelectionMode) &&
+                    draggedFeed?.id === sub.id
+                  }
                   onDragStart={() => setDraggedFeed(sub)}
                   onDragEnd={() => {
                     setDraggedFeed(null)
                     setDragOverFolderId(null)
                   }}
+                  isSelectionMode={isSidebarOpen && !isMobileSidebarOpen && isSelectionMode}
+                  isSelected={selectedSubscriptionIds.has(sub.id)}
+                  onToggleSelect={toggleFeedSelection}
                 />
               ))}
             </div>
           )}
         </>
       )}
+
+      <Dialog open={showGroupDialog} onOpenChange={setShowGroupDialog}>
+        <DialogPopup>
+          <DialogHeader>
+            <DialogTitle>{t('dialogs.groupFeeds.title')}</DialogTitle>
+            <DialogDescription>
+              {t('dialogs.groupFeeds.description', { count: selectedCount })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 px-6 py-4">
+            <Label htmlFor="group-folder-name">{t('dialogs.createFolder.name')}</Label>
+            <Input
+              id="group-folder-name"
+              value={groupFolderName}
+              onChange={(e) => setGroupFolderName(e.target.value)}
+              placeholder={t('dialogs.createFolder.namePlaceholder')}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleGroupSelectedFeeds()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setShowGroupDialog(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              onClick={handleGroupSelectedFeeds}
+              disabled={isGrouping || !groupFolderName.trim() || selectedCount < 2}
+            >
+              {isGrouping ? t('common.creating') : t('actions.groupIntoFolder')}
+            </Button>
+          </DialogFooter>
+        </DialogPopup>
+      </Dialog>
     </>
   )
 }
@@ -319,6 +450,9 @@ interface SidebarFolderItemProps {
   readonly setDraggedFeed: (feed: Subscription | null) => void
   readonly dragOverFolderId: string | null
   readonly setDragOverFolderId: (id: string | null) => void
+  readonly isSelectionMode: boolean
+  readonly selectedSubscriptionIds: Set<string>
+  readonly onToggleFeedSelection: (subscriptionId: string) => void
 }
 
 function SidebarFolderItem({
@@ -340,13 +474,16 @@ function SidebarFolderItem({
   setDraggedFeed,
   dragOverFolderId,
   setDragOverFolderId,
+  isSelectionMode,
+  selectedSubscriptionIds,
+  onToggleFeedSelection,
 }: SidebarFolderItemProps) {
   const { t } = useTranslation('feeds')
   const { deleteFolder, updateFolder } = useFolderStore()
   const updateMutation = useUpdateSubscription()
   const markAllReadMutation = useMarkAllRead()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [showDissolveConfirm, setShowDissolveConfirm] = useState(false)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [renameFolderName, setRenameFolderName] = useState(folder.name)
   const [isRenaming, setIsRenaming] = useState(false)
@@ -357,6 +494,7 @@ function SidebarFolderItem({
   const canReceiveDrop = draggedFeed && draggedFeed.folder_id !== folder.id
 
   const handleDragOver = (e: React.DragEvent) => {
+    if (isSelectionMode) return
     e.preventDefault()
     e.dataTransfer.dropEffect = canReceiveDrop ? 'move' : 'none'
     setDragOverFolderId(folder.id)
@@ -367,6 +505,7 @@ function SidebarFolderItem({
   }
 
   const handleDrop = async (e: React.DragEvent) => {
+    if (isSelectionMode) return
     e.preventDefault()
     if (draggedFeed && draggedFeed.folder_id !== folder.id) {
       await updateMutation.mutateAsync({
@@ -378,9 +517,9 @@ function SidebarFolderItem({
     setDragOverFolderId(null)
   }
 
-  const handleDeleteFolder = async () => {
+  const handleDissolveFolder = async () => {
     await deleteFolder(folder.id)
-    setShowDeleteConfirm(false)
+    setShowDissolveConfirm(false)
   }
 
   const handleRenameFolder = async () => {
@@ -486,9 +625,9 @@ function SidebarFolderItem({
               <span>{t('common.rename')}</span>
             </MenuItem>
             <MenuSeparator />
-            <MenuItem variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
+            <MenuItem variant="destructive" onClick={() => setShowDissolveConfirm(true)}>
               <Trash2 className="h-4 w-4" />
-              <span>{t('common.delete')}</span>
+              <span>{t('actions.dissolveFolder')}</span>
             </MenuItem>
           </MenuPopup>
         </Menu>
@@ -517,6 +656,9 @@ function SidebarFolderItem({
               setDraggedFeed={setDraggedFeed}
               dragOverFolderId={dragOverFolderId}
               setDragOverFolderId={setDragOverFolderId}
+              isSelectionMode={isSelectionMode}
+              selectedSubscriptionIds={selectedSubscriptionIds}
+              onToggleFeedSelection={onToggleFeedSelection}
             />
           ))}
 
@@ -527,12 +669,15 @@ function SidebarFolderItem({
               isActive={currentFeedId === sub.feed_id}
               onClick={() => onFeedSelect(sub.feed_id)}
               allFolders={allFolders}
-              isDragging={draggedFeed?.id === sub.id}
+              isDragging={!isSelectionMode && draggedFeed?.id === sub.id}
               onDragStart={() => setDraggedFeed(sub)}
               onDragEnd={() => {
                 setDraggedFeed(null)
                 setDragOverFolderId(null)
               }}
+              isSelectionMode={isSelectionMode}
+              isSelected={selectedSubscriptionIds.has(sub.id)}
+              onToggleSelect={onToggleFeedSelection}
             />
           ))}
 
@@ -542,12 +687,12 @@ function SidebarFolderItem({
         </div>
       )}
 
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+      <AlertDialog open={showDissolveConfirm} onOpenChange={setShowDissolveConfirm}>
         <AlertDialogPopup>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('dialogs.deleteFolder.title')}</AlertDialogTitle>
+            <AlertDialogTitle>{t('dialogs.dissolveFolder.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('dialogs.deleteFolder.description', { name: folder.name })}
+              {t('dialogs.dissolveFolder.description', { name: folder.name })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -556,9 +701,9 @@ function SidebarFolderItem({
             </AlertDialogClose>
             <AlertDialogClose
               className={buttonVariants({ variant: 'destructive' })}
-              onClick={handleDeleteFolder}
+              onClick={handleDissolveFolder}
             >
-              {t('common.delete')}
+              {t('actions.dissolveFolder')}
             </AlertDialogClose>
           </AlertDialogFooter>
         </AlertDialogPopup>
@@ -606,6 +751,9 @@ interface SidebarFeedItemProps {
   readonly isDragging?: boolean
   readonly onDragStart?: () => void
   readonly onDragEnd?: () => void
+  readonly isSelectionMode?: boolean
+  readonly isSelected?: boolean
+  readonly onToggleSelect?: (subscriptionId: string) => void
 }
 
 function SidebarFeedItem({
@@ -616,6 +764,9 @@ function SidebarFeedItem({
   isDragging = false,
   onDragStart,
   onDragEnd,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
 }: SidebarFeedItemProps) {
   const { t } = useTranslation('feeds')
   const deleteMutation = useDeleteSubscription()
@@ -690,27 +841,43 @@ function SidebarFeedItem({
     return 'text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.01]'
   }
 
+  const handleClick = () => {
+    if (isSelectionMode) {
+      onToggleSelect?.(subscription.id)
+      return
+    }
+    onClick()
+  }
+
   return (
     <>
       <button
         type="button"
         className={cn(
-          'group flex w-full cursor-grab items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200 active:cursor-grabbing',
+          'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+          !isSelectionMode && 'cursor-grab active:cursor-grabbing',
           getFeedItemClasses()
         )}
-        draggable
+        draggable={!isSelectionMode}
         onDragStart={(e) => {
+          if (isSelectionMode) return
           e.dataTransfer.effectAllowed = 'move'
           onDragStart?.()
         }}
         onDragEnd={onDragEnd}
         onContextMenu={handleContextMenu}
-        onClick={onClick}
+        onClick={handleClick}
       >
         <button
-          onClick={onClick}
+          onClick={handleClick}
           className="touch-target-none flex h-5 min-w-0 flex-1 items-center gap-3"
         >
+          {isSelectionMode &&
+            (isSelected ? (
+              <CheckSquare className="text-primary h-4 w-4 shrink-0" />
+            ) : (
+              <Square className="text-muted-foreground h-4 w-4 shrink-0" />
+            ))}
           {subscription.feed.icon_url ? (
             <img
               src={subscription.feed.icon_url}
@@ -731,57 +898,61 @@ function SidebarFeedItem({
           </Badge>
         )}
 
-        <Menu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-          <MenuTrigger className="touch-target-none text-muted-foreground hover:bg-accent hover:text-foreground h-5 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-            <MoreIcon className="h-3.5 w-3.5" />
-          </MenuTrigger>
-          <MenuPopup align="end">
-            <MenuItem
-              onClick={() => markAllReadMutation.mutate({ feedId: subscription.feed_id })}
-              disabled={markAllReadMutation.isPending}
-            >
-              <CheckCheck
-                className={cn('h-4 w-4', markAllReadMutation.isPending && 'animate-pulse')}
-              />
-              <span>
-                {markAllReadMutation.isPending ? t('common.marking') : t('actions.markAllAsRead')}
-              </span>
-            </MenuItem>
-            <MenuSeparator />
-            <MenuItem onClick={() => setShowEditDialog(true)}>
-              <Pencil className="h-4 w-4" />
-              <span>{t('common.edit')}</span>
-            </MenuItem>
-            <MenuItem onClick={handleRefresh} disabled={refreshMutation.isPending}>
-              <RefreshCw className={cn('h-4 w-4', refreshMutation.isPending && 'animate-spin')} />
-              <span>{t('common.refresh')}</span>
-            </MenuItem>
-            {allFolders.length > 0 && (
-              <MenuSub>
-                <MenuSubTrigger>
-                  <FolderInput className="h-4 w-4" />
-                  <span>{t('common.moveToFolder')}</span>
-                </MenuSubTrigger>
-                <MenuSubPopup>
-                  <MenuItem onClick={() => handleFolderChange(null)}>
-                    <span className="text-muted-foreground">{t('common.noFolder')}</span>
-                  </MenuItem>
-                  <MenuSeparator />
-                  {flatFolders.map((folder) => (
-                    <MenuItem key={folder.id} onClick={() => handleFolderChange(folder.id)}>
-                      <span style={{ paddingLeft: `${folder.depth * 12}px` }}>{folder.name}</span>
+        {!isSelectionMode && (
+          <Menu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+            <MenuTrigger className="touch-target-none text-muted-foreground hover:bg-accent hover:text-foreground h-5 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+              <MoreIcon className="h-3.5 w-3.5" />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem
+                onClick={() => markAllReadMutation.mutate({ feedId: subscription.feed_id })}
+                disabled={markAllReadMutation.isPending}
+              >
+                <CheckCheck
+                  className={cn('h-4 w-4', markAllReadMutation.isPending && 'animate-pulse')}
+                />
+                <span>
+                  {markAllReadMutation.isPending ? t('common.marking') : t('actions.markAllAsRead')}
+                </span>
+              </MenuItem>
+              <MenuSeparator />
+              <MenuItem onClick={() => setShowEditDialog(true)}>
+                <Pencil className="h-4 w-4" />
+                <span>{t('common.edit')}</span>
+              </MenuItem>
+              <MenuItem onClick={handleRefresh} disabled={refreshMutation.isPending}>
+                <RefreshCw
+                  className={cn('h-4 w-4', refreshMutation.isPending && 'animate-spin')}
+                />
+                <span>{t('common.refresh')}</span>
+              </MenuItem>
+              {allFolders.length > 0 && (
+                <MenuSub>
+                  <MenuSubTrigger>
+                    <FolderInput className="h-4 w-4" />
+                    <span>{t('common.moveToFolder')}</span>
+                  </MenuSubTrigger>
+                  <MenuSubPopup>
+                    <MenuItem onClick={() => handleFolderChange(null)}>
+                      <span className="text-muted-foreground">{t('common.noFolder')}</span>
                     </MenuItem>
-                  ))}
-                </MenuSubPopup>
-              </MenuSub>
-            )}
-            <MenuSeparator />
-            <MenuItem variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
-              <Trash2 className="h-4 w-4" />
-              <span>{t('actions.unsubscribe')}</span>
-            </MenuItem>
-          </MenuPopup>
-        </Menu>
+                    <MenuSeparator />
+                    {flatFolders.map((folder) => (
+                      <MenuItem key={folder.id} onClick={() => handleFolderChange(folder.id)}>
+                        <span style={{ paddingLeft: `${folder.depth * 12}px` }}>{folder.name}</span>
+                      </MenuItem>
+                    ))}
+                  </MenuSubPopup>
+                </MenuSub>
+              )}
+              <MenuSeparator />
+              <MenuItem variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
+                <Trash2 className="h-4 w-4" />
+                <span>{t('actions.unsubscribe')}</span>
+              </MenuItem>
+            </MenuPopup>
+          </Menu>
+        )}
       </button>
 
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>

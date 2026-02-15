@@ -1,9 +1,12 @@
 import type {
-  EntryWithState,
-  EntryListResponse,
-  TranslateTextsResponse,
-  TranslationResponse,
-  UpdateEntryStateRequest,
+    EntryWithState,
+    EntryListResponse,
+    FeedbackSummaryResponse,
+    TrackEntryEventRequest,
+    TrackEntryEventResponse,
+    TranslateTextsResponse,
+    TranslationResponse,
+    UpdateEntryStateRequest,
 } from '@glean/types'
 import { ApiClient } from '../client'
 
@@ -54,6 +57,25 @@ export class EntryService {
     return this.client.post<{ message: string }>('/entries/mark-all-read', {
       feed_id: feedId,
       folder_id: folderId,
+    })
+  }
+
+  /**
+   * Track implicit feedback event for an entry.
+   */
+  async trackEntryEvent(
+    entryId: string,
+    data: TrackEntryEventRequest
+  ): Promise<TrackEntryEventResponse> {
+    return this.client.post<TrackEntryEventResponse>(`/entries/${entryId}/events`, data)
+  }
+
+  /**
+   * Get recent explicit feedback summary for prompt gating.
+   */
+  async getFeedbackSummary(days: number = 7): Promise<FeedbackSummaryResponse> {
+    return this.client.get<FeedbackSummaryResponse>('/entries/feedback-summary', {
+      params: { days },
     })
   }
 

@@ -18,6 +18,8 @@ from .tag import Tag
 from .user import User
 from .user_auth_provider import UserAuthProvider
 from .user_entry import UserEntry
+from .user_entry_event import UserEntryEvent
+from .user_entry_implicit_label import UserEntryImplicitLabel
 from .user_preference_stats import UserPreferenceStats
 
 __all__ = [
@@ -43,6 +45,8 @@ __all__ = [
     "UserEntryTag",
     # M3 models
     "UserPreferenceStats",
+    "UserEntryEvent",
+    "UserEntryImplicitLabel",
     # Translation models
     "EntryTranslation",
     # MCP models

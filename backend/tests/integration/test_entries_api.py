@@ -277,3 +277,94 @@ class TestMarkAllRead:
         response = await client.post("/api/entries/mark-all-read")
 
         assert response.status_code == 401
+
+
+class TestImplicitFeedbackEvents:
+    """Test entry implicit feedback event endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_track_entry_event_success(self, client: AsyncClient, auth_headers, test_entries):
+        """Track event should accept valid payload."""
+        entry_id = test_entries[0].id
+        response = await client.post(
+            f"/api/entries/{entry_id}/events",
+            headers=auth_headers,
+            json={
+                "event_id": "evt_implicit_test_1",
+                "event_type": "entry_open",
+                "session_id": "session_test_1",
+                "occurred_at": datetime.now(UTC).isoformat(),
+                "view": "smart",
+                "device_type": "desktop",
+                "active_ms": 1200,
+                "scroll_depth_max": 0.35,
+                "est_read_time_sec": 120,
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["accepted"] is True
+        assert data["duplicate"] is False
+
+    @pytest.mark.asyncio
+    async def test_track_entry_event_duplicate(self, client: AsyncClient, auth_headers, test_entries):
+        """Repeated event_id should be treated as duplicate."""
+        entry_id = test_entries[0].id
+        payload = {
+            "event_id": "evt_implicit_dup_1",
+            "event_type": "entry_open",
+            "session_id": "session_dup_1",
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "view": "timeline",
+            "device_type": "desktop",
+        }
+
+        first = await client.post(
+            f"/api/entries/{entry_id}/events",
+            headers=auth_headers,
+            json=payload,
+        )
+        second = await client.post(
+            f"/api/entries/{entry_id}/events",
+            headers=auth_headers,
+            json=payload,
+        )
+
+        assert first.status_code == 200
+        assert second.status_code == 200
+        assert first.json()["accepted"] is True
+        assert second.json()["accepted"] is False
+        assert second.json()["duplicate"] is True
+
+    @pytest.mark.asyncio
+    async def test_track_entry_event_unauthorized(self, client: AsyncClient, test_entries):
+        """Track event should require auth."""
+        entry_id = test_entries[0].id
+        response = await client.post(
+            f"/api/entries/{entry_id}/events",
+            json={
+                "event_id": "evt_no_auth",
+                "event_type": "entry_open",
+                "session_id": "session_no_auth",
+                "occurred_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_feedback_summary(self, client: AsyncClient, auth_headers, test_entries):
+        """Feedback summary should return recent explicit count."""
+        entry_id = test_entries[0].id
+        await client.patch(
+            f"/api/entries/{entry_id}",
+            headers=auth_headers,
+            json={"is_liked": True},
+        )
+
+        response = await client.get("/api/entries/feedback-summary?days=7", headers=auth_headers)
+
+        assert response.status_code == 200
+        data = response.json()
+        assert "recent_explicit_feedback_count" in data
+        assert data["recent_explicit_feedback_count"] >= 1

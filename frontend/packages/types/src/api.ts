@@ -79,6 +79,37 @@ export interface UpdateEntryStateRequest {
   read_later?: boolean
 }
 
+export type EntryEventType =
+  | 'entry_impression'
+  | 'entry_open'
+  | 'entry_dwell'
+  | 'entry_scroll_depth'
+  | 'entry_exit'
+  | 'entry_return'
+
+export interface TrackEntryEventRequest {
+  event_id: string
+  event_type: EntryEventType
+  session_id: string
+  occurred_at: string
+  client_ts?: string
+  view?: 'timeline' | 'smart'
+  device_type?: 'desktop' | 'mobile' | 'tablet' | 'unknown'
+  active_ms?: number
+  scroll_depth_max?: number
+  est_read_time_sec?: number
+  extra?: Record<string, string | number | boolean | null>
+}
+
+export interface TrackEntryEventResponse {
+  accepted: boolean
+  duplicate: boolean
+}
+
+export interface FeedbackSummaryResponse {
+  recent_explicit_feedback_count: number
+}
+
 /** Entry list response */
 export type EntryListResponse = PaginatedResponse<EntryWithState>
 

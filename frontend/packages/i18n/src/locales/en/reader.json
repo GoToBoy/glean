@@ -67,5 +67,10 @@
     "retry": "Retry",
     "sentenceMode": "Sentence translation active",
     "hideTranslation": "Hide Translation"
+  },
+  "feedback": {
+    "title": "Help improve recommendations?",
+    "description": "If this article was useful, leave quick feedback to tune your Smart list.",
+    "later": "Later"
   }
 }
