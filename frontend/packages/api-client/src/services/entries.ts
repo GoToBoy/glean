@@ -1,12 +1,13 @@
 import type {
-    EntryWithState,
-    EntryListResponse,
-    FeedbackSummaryResponse,
-    TrackEntryEventRequest,
-    TrackEntryEventResponse,
-    TranslateTextsResponse,
-    TranslationResponse,
-    UpdateEntryStateRequest,
+  EntryWithState,
+  EntryListResponse,
+  FeedbackSummaryResponse,
+  ParagraphTranslationsResponse,
+  TrackEntryEventRequest,
+  TrackEntryEventResponse,
+  TranslateTextsResponse,
+  TranslationResponse,
+  UpdateEntryStateRequest,
 } from '@glean/types'
 import { ApiClient } from '../client'
 
@@ -140,5 +141,18 @@ export class EntryService {
       source_language: sourceLanguage,
       entry_id: entryId,
     })
+  }
+
+  /**
+   * Get persisted paragraph-level translations for an entry.
+   */
+  async getParagraphTranslations(
+    entryId: string,
+    targetLanguage: string,
+  ): Promise<ParagraphTranslationsResponse> {
+    return this.client.get<ParagraphTranslationsResponse>(
+      `/entries/${entryId}/paragraph-translations`,
+      { params: { target_language: targetLanguage } },
+    )
   }
 }

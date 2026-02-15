@@ -1495,8 +1495,8 @@ body {
   line-height: 1.6;
   color: hsl(38 70% 65%);
   opacity: 0.85;
-  border-left: 2px solid hsl(38 80% 50% / 0.3);
-  padding-left: 0.75em;
+  border-left: 0;
+  padding-left: 0;
   margin-top: 0.25em;
   margin-bottom: 1em;
 }
@@ -1520,9 +1520,9 @@ body {
 }
 
 .prose blockquote.glean-translation {
-  border-left: 2px solid hsl(38 80% 50% / 0.3);
+  border-left: 0;
   background: transparent;
-  padding: 0 0 0 0.75em;
+  padding: 0;
   margin: 0.25em 0 1em 1.5em;
   font-style: normal;
 }
@@ -1530,7 +1530,6 @@ body {
 /* Light theme overrides */
 [data-theme="light"] .prose .glean-translation {
   color: hsl(220 40% 45%);
-  border-left-color: hsl(38 80% 45% / 0.3);
 }
 
 /* ==========================================================================
@@ -1549,8 +1548,8 @@ body {
   font-size: 0.88em;
   line-height: 1.5;
   color: hsl(38 70% 65%);
-  border-left: 2px solid hsl(38 80% 50% / 0.25);
-  padding-left: 0.6em;
+  border-left: 0;
+  padding-left: 0;
   margin-top: 0.1em;
   margin-bottom: 0.5em;
   opacity: 0.85;
@@ -1573,7 +1572,6 @@ body {
 /* Light theme */
 [data-theme="light"] .prose .glean-translated-sentence {
   color: hsl(220 40% 45%);
-  border-left-color: hsl(38 80% 45% / 0.3);
 }
 
 /* ==========================================================================
