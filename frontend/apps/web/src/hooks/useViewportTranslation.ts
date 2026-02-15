@@ -95,8 +95,6 @@ export function useViewportTranslation({
   const observerRef = useRef<IntersectionObserver | null>(null)
   // Track active state in ref for use inside observer callback
   const isActiveRef = useRef(false)
-  // Previous entryId for detecting changes
-  const prevEntryIdRef = useRef(entryId)
 
   /**
    * Translate a batch of visible blocks and insert translation lines.
@@ -284,8 +282,7 @@ export function useViewportTranslation({
     // Restore original content
     removeTranslationElements()
 
-    // Clear state
-    cacheRef.current.clear()
+    // Keep cache in memory; only hide rendered translations.
     pendingBlocksRef.current.clear()
     setIsTranslating(false)
     setError(null)
@@ -339,16 +336,48 @@ export function useViewportTranslation({
     }
   }, [isActive, setupObserver])
 
-  // Reset when entry changes
+  // Load cached sentence translations from DB when entry/language changes.
+  // If cache exists, auto-enable translation display.
   useEffect(() => {
-    if (prevEntryIdRef.current !== entryId) {
-      prevEntryIdRef.current = entryId
-      if (isActiveRef.current) {
-        deactivate()
-      }
-      cacheRef.current.clear()
+    let cancelled = false
+
+    // Tear down previous entry runtime state.
+    if (observerRef.current) {
+      observerRef.current.disconnect()
+      observerRef.current = null
     }
-  }, [entryId, deactivate])
+    if (isActiveRef.current) {
+      removeTranslationElements()
+    }
+    setIsActive(false)
+    isActiveRef.current = false
+    setIsTranslating(false)
+    setError(null)
+    pendingBlocksRef.current.clear()
+    cacheRef.current.clear()
+
+    const loadPersisted = async () => {
+      try {
+        const response = await entryService.getParagraphTranslations(entryId, targetLanguage)
+        if (cancelled) return
+        const entries = Object.entries(response.translations ?? {})
+        cacheRef.current = new Map(entries)
+        if (entries.length > 0) {
+          setIsActive(true)
+          isActiveRef.current = true
+        }
+      } catch {
+        if (cancelled) return
+        // Ignore fetch errors; user can still trigger live translation.
+      }
+    }
+
+    void loadPersisted()
+
+    return () => {
+      cancelled = true
+    }
+  }, [entryId, targetLanguage, removeTranslationElements])
 
   return {
     isActive,

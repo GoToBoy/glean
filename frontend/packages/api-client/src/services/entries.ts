@@ -1,6 +1,7 @@
 import type {
   EntryWithState,
   EntryListResponse,
+  ParagraphTranslationsResponse,
   TranslateTextsResponse,
   TranslationResponse,
   UpdateEntryStateRequest,
@@ -118,5 +119,18 @@ export class EntryService {
       source_language: sourceLanguage,
       entry_id: entryId,
     })
+  }
+
+  /**
+   * Get persisted paragraph-level translations for an entry.
+   */
+  async getParagraphTranslations(
+    entryId: string,
+    targetLanguage: string,
+  ): Promise<ParagraphTranslationsResponse> {
+    return this.client.get<ParagraphTranslationsResponse>(
+      `/entries/${entryId}/paragraph-translations`,
+      { params: { target_language: targetLanguage } },
+    )
   }
 }
