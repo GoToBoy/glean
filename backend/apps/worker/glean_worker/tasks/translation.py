@@ -27,18 +27,28 @@ logger = get_logger(__name__)
 CHUNK_SIZE = 4500
 
 # Block-level elements that get bilingual treatment
-_BLOCK_TAGS = frozenset({
-    "p", "h1", "h2", "h3", "h4", "h5", "h6",
-    "li", "blockquote", "figcaption", "dt", "dd",
-})
+_BLOCK_TAGS = frozenset(
+    {
+        "p",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "li",
+        "blockquote",
+        "figcaption",
+        "dt",
+        "dd",
+    }
+)
 
 # Elements whose children should not be translated
 _SKIP_ANCESTORS = frozenset({"code", "pre", "script", "style"})
 
 
-def _translate_text(
-    text: str, source: str, target: str, provider: TranslationProvider
-) -> str:
+def _translate_text(text: str, source: str, target: str, provider: TranslationProvider) -> str:
     """Translate a single text string, handling chunking for long text."""
     if not text or not text.strip():
         return text
@@ -70,10 +80,7 @@ def _translate_text(
 
 def _has_skip_ancestor(element: Tag) -> bool:
     """Check if an element is nested inside code/pre/script/style."""
-    for parent in element.parents:
-        if parent.name in _SKIP_ANCESTORS:
-            return True
-    return False
+    return any(parent.name in _SKIP_ANCESTORS for parent in element.parents)
 
 
 def _translate_html_bilingual(

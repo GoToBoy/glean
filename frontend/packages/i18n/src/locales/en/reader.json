@@ -20,9 +20,7 @@
     "like": "Like",
     "liked": "Liked",
     "dislike": "Dislike",
-    "disliked": "Disliked",
-    "showOriginal": "Original",
-    "hideOriginal": "Original"
+    "disliked": "Disliked"
   },
   "entries": {
     "loadError": "Failed to load entries",
@@ -67,6 +65,7 @@
     "bilingualMode": "Bilingual: {{language}}",
     "failed": "Translation failed",
     "retry": "Retry",
+    "sentenceMode": "Sentence translation active",
     "hideTranslation": "Hide Translation"
   }
 }

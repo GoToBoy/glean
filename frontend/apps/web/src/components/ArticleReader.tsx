@@ -10,7 +10,6 @@ import {
   Clock,
   Archive,
   ExternalLink,
-  Globe,
   Languages,
   Loader2,
   Maximize2,
@@ -26,50 +25,6 @@ import { Button, Skeleton } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
-
-interface OriginalIframeProps {
-  src: string
-  visible: boolean
-  className?: string
-}
-
-/**
- * Persistent iframe for viewing original articles.
- * Stays in DOM once mounted (CSS hidden when inactive) to reuse
- * browser connections and HTTP cache across same-origin pages.
- */
-function OriginalIframe({ src, visible, className }: OriginalIframeProps) {
-  const [currentSrc, setCurrentSrc] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    if (visible && currentSrc !== src) {
-      setCurrentSrc(src)
-      setLoaded(false)
-    }
-  }, [visible, src, currentSrc])
-
-  if (!currentSrc) return null
-
-  return (
-    <div className={`relative flex-1 ${visible ? '' : 'hidden'} ${className ?? ''}`}>
-      {!loaded && visible && (
-        <div className="bg-muted/70 text-muted-foreground absolute inset-0 z-10 flex items-center justify-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-xs font-medium">Loading…</span>
-        </div>
-      )}
-      <iframe
-        src={currentSrc}
-        title="Original content"
-        className="h-full w-full border-0"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
-        referrerPolicy="no-referrer"
-        onLoad={() => setLoaded(true)}
-      />
-    </div>
-  )
-}
 
 /**
  * Hook to track animation state for action buttons
@@ -214,7 +169,6 @@ export function ArticleReader({
   const contentRef = useContentRenderer(displayContent)
   const [isBookmarking, setIsBookmarking] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
-  const [showOriginal, setShowOriginal] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
   // Viewport-based sentence-level translation
@@ -228,8 +182,6 @@ export function ArticleReader({
     error: translationError,
     toggle: toggleTranslation,
     activate: activateTranslation,
-    deactivate: _deactivateTranslation,
-    retry: retryTranslation,
   } = useViewportTranslation({
     contentRef,
     scrollContainerRef,
@@ -245,20 +197,15 @@ export function ArticleReader({
   const shouldShowCloseButton = showCloseButton ?? isMobile
   const shouldShowFullscreenButton = showFullscreenButton ?? !isMobile
 
-  // Reset state when entry changes
+  // Reset outline state when entry changes
   useEffect(() => {
     setHasOutline(false)
-    setShowOriginal(false)
   }, [entry.id])
 
   // Animation triggers for action buttons
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')
   const bookmarkAnimation = useAnimationTrigger(entry.is_bookmarked, 'action-btn-archive-active')
   const readAnimation = useAnimationTrigger(entry.is_read, 'action-btn-check')
-
-  const handleToggleOriginal = useCallback(() => {
-    setShowOriginal((prev) => !prev)
-  }, [])
 
   const handleToggleRead = async () => {
     await updateMutation.mutateAsync({
@@ -394,11 +341,7 @@ export function ArticleReader({
                 onClick={toggleTranslation}
                 className="action-btn text-primary"
               >
-                {isTranslating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Languages className="h-4 w-4" />
-                )}
+                <Languages className="h-4 w-4" />
                 <span>{t('translation.hideTranslation')}</span>
               </Button>
             ) : (
@@ -458,108 +401,101 @@ export function ArticleReader({
               )}
               <span>{entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}</span>
             </Button>
-
-            {entry.url && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleOriginal}
-                className={`action-btn ${showOriginal ? 'text-primary' : 'text-muted-foreground'}`}
-              >
-                <Globe className="h-4 w-4" />
-                <span>
-                  {showOriginal ? t('actions.hideOriginal') : t('actions.showOriginal')}
-                </span>
-              </Button>
-            )}
           </div>
         </div>
       )}
 
       {/* Content with Outline */}
       <div className="flex flex-1 overflow-hidden">
-        <OriginalIframe
-          src={entry.url}
-          visible={showOriginal}
-          className={isMobile ? 'pt-14 pb-16' : ''}
-        />
-
-        {/* Article view */}
-        {!showOriginal && (
-          <>
-            {/* Scrollable content area - hide scrollbar for cleaner reading */}
-            <div
-              ref={scrollContainerRef}
-              className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
-            >
-              <div
-                className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
-              >
-                {/* Mobile: Author and date at top of content */}
-                {isMobile && (entry.author || entry.published_at) && (
-                  <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
-                    {entry.author && <span className="font-medium">{entry.author}</span>}
-                    {entry.author && entry.published_at && <span>·</span>}
-                    {entry.published_at && (
-                      <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
-                    )}
-                  </div>
+        {/* Scrollable content area - hide scrollbar for cleaner reading */}
+        <div
+          ref={scrollContainerRef}
+          className={`hide-scrollbar flex-1 overflow-y-auto ${isMobile ? 'pt-14 pb-16' : ''}`}
+        >
+          <div
+            className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
+          >
+            {/* Mobile: Author and date at top of content */}
+            {isMobile && (entry.author || entry.published_at) && (
+              <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
+                {entry.author && <span className="font-medium">{entry.author}</span>}
+                {entry.author && entry.published_at && <span>·</span>}
+                {entry.published_at && (
+                  <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
                 )}
-
-                {translationError && (
-                  <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                    <span className="text-destructive text-xs">{t('translation.failed')}</span>
-                    <button
-                      onClick={retryTranslation}
-                      className="text-primary text-xs font-medium hover:underline"
-                    >
-                      {t('translation.retry')}
-                    </button>
-                  </div>
-                )}
-
-                {displayContent ? (
-                  <article
-                    ref={contentRef}
-                    className="prose prose-lg font-reading max-w-none"
-                    dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center py-16 text-center">
-                    <p className="text-muted-foreground italic">{t('article.noContent')}</p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="mt-4"
-                      render={(props) => (
-                        <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
-                      )}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      {t('article.viewOriginal')}
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Desktop Outline - Sidebar that only takes space when there are headings */}
-            {!isMobile && (entry.content || entry.summary) && (
-              <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
-                <ArticleOutline
-                  contentRef={contentRef}
-                  scrollContainerRef={scrollContainerRef}
-                  isMobile={false}
-                  onHasHeadings={setHasOutline}
-                />
               </div>
             )}
-          </>
+
+            {/* Sentence translation banner */}
+            {showTranslation && (
+              <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-muted-foreground text-xs">
+                  {t('translation.sentenceMode')}
+                  {isTranslating && (
+                    <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
+                  )}
+                </span>
+                <button
+                  onClick={toggleTranslation}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.hideTranslation')}
+                </button>
+              </div>
+            )}
+
+            {translationError && (
+              <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                <span className="text-destructive text-xs">{t('translation.failed')}</span>
+                <button
+                  onClick={activateTranslation}
+                  className="text-primary text-xs font-medium hover:underline"
+                >
+                  {t('translation.retry')}
+                </button>
+              </div>
+            )}
+
+            {displayContent ? (
+              <article
+                ref={contentRef}
+                className="prose prose-lg font-reading max-w-none"
+                dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center">
+                <p className="text-muted-foreground italic">{t('article.noContent')}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  render={(props) => (
+                    <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
+                  )}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  {t('article.viewOriginal')}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop Outline - Sidebar that only takes space when there are headings */}
+        {!isMobile && (entry.content || entry.summary) && (
+          <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
+            <ArticleOutline
+              contentRef={contentRef}
+              scrollContainerRef={scrollContainerRef}
+              isMobile={false}
+              onHasHeadings={setHasOutline}
+            />
+          </div>
         )}
       </div>
 
       {/* Mobile Outline */}
-      {isMobile && !showOriginal && (entry.content || entry.summary) && (
+      {isMobile && (entry.content || entry.summary) && (
         <ArticleOutline
           contentRef={contentRef}
           scrollContainerRef={scrollContainerRef}
@@ -585,7 +521,7 @@ export function ArticleReader({
 
             <button
               onClick={toggleTranslation}
-              disabled={isTranslating && !showTranslation}
+              disabled={isTranslating}
               className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
                 showTranslation ? 'text-primary' : 'text-muted-foreground'
               } disabled:opacity-50`}
@@ -644,20 +580,6 @@ export function ArticleReader({
                 {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
               </span>
             </button>
-
-            {entry.url && (
-              <button
-                onClick={handleToggleOriginal}
-                className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                  showOriginal ? 'text-primary' : 'text-muted-foreground'
-                }`}
-              >
-                <Globe className="h-5 w-5" />
-                <span className="text-[10px]">
-                  {showOriginal ? t('actions.hideOriginal') : t('actions.showOriginal')}
-                </span>
-              </button>
-            )}
           </div>
         </div>
       )}

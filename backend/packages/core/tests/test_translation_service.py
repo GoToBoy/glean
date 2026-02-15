@@ -32,9 +32,7 @@ class TestDetectTargetLanguage:
 
     def test_mixed_text_mostly_english(self):
         """Mixed text with mostly English should translate to Chinese."""
-        result = detect_target_language(
-            "Machine learning is great, also known as 机器学习"
-        )
+        result = detect_target_language("Machine learning is great, also known as 机器学习")
         assert result == "zh-CN"
 
     def test_numbers_only_defaults_to_chinese(self):
@@ -162,6 +160,7 @@ class TestTranslationServiceRequestTranslation:
             "translate_entry_task",
             entry_id="entry-1",
             target_language="zh-CN",
+            user_id="user-1",
         )
 
     @pytest.mark.asyncio

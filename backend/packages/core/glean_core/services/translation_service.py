@@ -156,9 +156,7 @@ class TranslationService:
             return None
         return self._to_response(existing)
 
-    async def _get_existing(
-        self, entry_id: str, target_language: str
-    ) -> EntryTranslation | None:
+    async def _get_existing(self, entry_id: str, target_language: str) -> EntryTranslation | None:
         stmt = select(EntryTranslation).where(
             EntryTranslation.entry_id == entry_id,
             EntryTranslation.target_language == target_language,

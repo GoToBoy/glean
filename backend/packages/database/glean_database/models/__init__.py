@@ -47,4 +47,6 @@ __all__ = [
     "EntryTranslation",
     # MCP models
     "APIToken",
+    # Translation models
+    "EntryTranslation",
 ]

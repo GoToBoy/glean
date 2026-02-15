@@ -269,7 +269,7 @@ async def translate_texts(
     if data.entry_id and translated_new:
         pairs = {
             text: trans
-            for text, trans in zip(to_translate, translated_new)
+            for text, trans in zip(to_translate, translated_new, strict=True)
             if trans.strip()
         }
         if pairs:
@@ -497,7 +497,5 @@ async def get_translation(
     """
     result = await translation_service.get_translation(entry_id, target_language)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Translation not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Translation not found")
     return result
