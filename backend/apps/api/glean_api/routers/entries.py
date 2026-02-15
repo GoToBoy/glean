@@ -275,11 +275,27 @@ async def translate_texts(
 
     # Translate uncached sentences using user's configured provider
     translated_new: list[str] = []
+    provider_failed = False
     if to_translate:
         provider = create_translation_provider(current_user.settings)
-        translated_new = await asyncio.to_thread(
-            provider.translate_batch, to_translate, data.source_language, data.target_language
-        )
+        try:
+            translated_new = await asyncio.to_thread(
+                provider.translate_batch, to_translate, data.source_language, data.target_language
+            )
+        except Exception:
+            provider_failed = True
+            logger.exception(
+                "Translation provider failed in translate-texts",
+                extra={
+                    "target_language": data.target_language,
+                    "source_language": data.source_language,
+                    "entry_id": data.entry_id,
+                    "user_id": current_user.id,
+                    "count": len(to_translate),
+                },
+            )
+            # Graceful fallback: keep original text instead of surfacing a 500.
+            translated_new = to_translate
 
     # Merge cached + newly translated results
     merged: list[str] = [""] * len(non_empty_texts)
@@ -294,7 +310,7 @@ async def translate_texts(
         all_results[idx] = merged[i]
 
     # Persist new translations when entry_id is provided
-    if data.entry_id and translated_new:
+    if data.entry_id and translated_new and not provider_failed:
         pairs = {
             text: trans
             for text, trans in zip(to_translate, translated_new, strict=True)

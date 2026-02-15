@@ -11,6 +11,7 @@ export interface UserSettings {
   show_read_later_remaining?: boolean // Show remaining time in read later list
   translation_provider?: 'google' | 'deepl' | 'openai' | 'mtran'
   list_translation_auto_enabled?: boolean // Auto-enable list viewport translation
+  list_translation_english_only?: boolean // Translate only English content in list
   translation_api_key?: string
   translation_model?: string
   translation_base_url?: string

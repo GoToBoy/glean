@@ -160,7 +160,11 @@
     "model": "Model",
     "modelPlaceholder": "Optional model name",
     "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
-    "settingsSaved": "Translation settings saved"
+    "settingsSaved": "Translation settings saved",
+    "listAutoEnable": "Enable list translation by default",
+    "listAutoEnableDesc": "Automatically turn on viewport-based translation in the reader list",
+    "listEnglishOnly": "Translate English text only",
+    "listEnglishOnlyDesc": "Only translate list items that are primarily English"
   },
   "apiTokens": {
     "title": "API Tokens",
@@ -229,7 +233,11 @@
     "model": "Model",
     "modelPlaceholder": "Optional model name",
     "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
-    "settingsSaved": "Translation settings saved"
+    "settingsSaved": "Translation settings saved",
+    "listAutoEnable": "Enable list translation by default",
+    "listAutoEnableDesc": "Automatically turn on viewport-based translation in the reader list",
+    "listEnglishOnly": "Translate English text only",
+    "listEnglishOnlyDesc": "Only translate list items that are primarily English"
   },
   "version": "Glean v{{version}}"
 }
