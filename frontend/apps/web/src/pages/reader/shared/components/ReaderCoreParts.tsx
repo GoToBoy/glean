@@ -4,12 +4,10 @@ import type { EntryWithState } from '@glean/types'
 import { useMarkAllRead } from '../../../../hooks/useEntries'
 import { format, formatDistanceToNow, isPast } from 'date-fns'
 import {
-  Heart,
   CheckCheck,
   Clock,
   Loader2,
   Inbox,
-  ThumbsDown,
   Timer,
   Sparkles,
   ChevronDown,
@@ -230,12 +228,6 @@ export function EntryListItem({
                       {entry.preference_score.toFixed(0)}%
                     </span>
                   )}
-                {entry.is_liked === true && (
-                  <Heart className="h-3.5 w-3.5 fill-current text-red-500" />
-                )}
-                {entry.is_liked === false && (
-                  <ThumbsDown className="text-muted-foreground h-3.5 w-3.5 fill-current" />
-                )}
                 {!hideReadLaterIndicator && entry.read_later && !showReadLaterRemaining && (
                   <Clock className="text-primary h-3.5 w-3.5" />
                 )}

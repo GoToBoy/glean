@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Rss, ChevronLeft, Menu as MenuIcon, X } from 'lucide-react'
+import { Rss, ChevronLeft, Menu as MenuIcon, X, Languages } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import {
   buttonVariants,
@@ -139,8 +139,23 @@ export function Layout() {
   const currentFeedId = searchParams.get('feed') || undefined
   const currentFolderId = searchParams.get('folder') || undefined
   const currentView = searchParams.get('view') || undefined
+  const currentTab = searchParams.get('tab') || undefined
+  const currentEntryId = searchParams.get('entry') || undefined
   const isReaderPage = location.pathname === '/reader'
   const isSmartView = isReaderPage && currentView === 'smart'
+  const isMobileListMode = isReaderPage && !currentEntryId
+  const currentFilter: 'all' | 'unread' | 'smart' | 'read-later' =
+    currentTab === 'all' || currentTab === 'smart' || currentTab === 'read-later'
+      ? currentTab
+      : 'unread'
+  const currentFilterLabel =
+    currentFilter === 'unread'
+      ? '未读'
+      : currentFilter === 'all'
+        ? '全部'
+        : currentFilter === 'smart'
+          ? '智能'
+          : '稍后'
   const isBookmarksPage = location.pathname === '/bookmarks'
   const currentBookmarkFolderId = isBookmarksPage ? searchParams.get('folder') : undefined
   const currentBookmarkTagId = isBookmarksPage ? searchParams.get('tag') : undefined
@@ -403,6 +418,15 @@ export function Layout() {
     }
   }, [])
 
+  useEffect(() => {
+    // Fallback sync for gesture/back navigation:
+    // if there's no selected entry in URL, the mobile list header must be visible.
+    const hasEntryParam = new URLSearchParams(searchParamsString).has('entry')
+    if (!isReaderPage || !hasEntryParam) {
+      setIsReadingArticle(false)
+    }
+  }, [isReaderPage, searchParamsString])
+
   return (
     <div className="bg-background flex h-screen flex-col md:flex-row">
       {/* Mobile Header - animate visibility when entering/leaving article reader */}
@@ -428,7 +452,32 @@ export function Layout() {
             {mobileHeaderTitle}
           </span>
         </Link>
-        <div className="w-10" />
+        {isMobileListMode ? (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() =>
+                window.dispatchEvent(new CustomEvent('readerMobileListActions:toggleTranslation'))
+              }
+              className="text-muted-foreground hover:bg-accent flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+              aria-label="Toggle translation"
+              title="Translation"
+            >
+              <Languages className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new CustomEvent('readerMobileListActions:cycleFilter'))}
+              className="text-primary hover:bg-accent rounded-md px-2 py-1 text-xs font-medium transition-colors"
+              aria-label="Cycle filters"
+              title="Cycle filters"
+            >
+              {currentFilterLabel}
+            </button>
+          </div>
+        ) : (
+          <div className="w-10" />
+        )}
       </header>
 
       {/* Mobile Sidebar Overlay */}
