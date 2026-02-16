@@ -9,6 +9,7 @@ from . import (
     api_tokens,
     auth,
     bookmarks,
+    discover,
     entries,
     feeds,
     folders,
@@ -26,6 +27,7 @@ __all__ = [
     "folders",
     "tags",
     "bookmarks",
+    "discover",
     # M3 routers
     "preference",
     "system",

@@ -2,6 +2,7 @@
   "sidebar": {
     "feeds": "订阅",
     "smart": "智能列表",
+    "discover": "发现",
     "allFeeds": "全部订阅",
     "bookmarks": "书签",
     "tags": "标签",
@@ -219,5 +220,23 @@
     "feedUrlDescription": "输入订阅地址或网站地址 — 我们将尝试自动发现订阅",
     "folderOptional": "文件夹（可选）",
     "adding": "添加中..."
+  },
+  "discover": {
+    "title": "发现信源",
+    "subtitle": "弱个性化信源建议，提供明确控制项。",
+    "refresh": "刷新",
+    "reload": "重新加载",
+    "loading": "正在加载发现候选...",
+    "empty": "暂无候选，尝试刷新以基于种子源重新生成。",
+    "topic": "主题",
+    "score": "得分",
+    "quality": "质量",
+    "topics": {
+      "engineering": "工程",
+      "design": "设计",
+      "product": "产品"
+    },
+    "subscribe": "订阅",
+    "dismiss": "忽略"
   }
 }

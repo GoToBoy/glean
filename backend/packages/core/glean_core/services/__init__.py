@@ -8,6 +8,7 @@ from .admin_service import AdminService
 from .api_token_service import APITokenService
 from .auth_service import AuthService
 from .bookmark_service import BookmarkService
+from .discovery_service import DiscoveryService
 from .entry_service import EntryService
 from .feed_service import FeedService
 from .folder_service import FolderService
@@ -30,6 +31,7 @@ __all__ = [
     "ImplicitFeedbackService",
     # M2 services
     "BookmarkService",
+    "DiscoveryService",
     "FolderService",
     "TagService",
     # M3 services

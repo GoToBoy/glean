@@ -17,6 +17,7 @@ const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
 // M3 pages
 const PreferencePage = lazy(() => import('./pages/PreferencePage'))
+const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
 // Auth callback
 const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
 
@@ -84,6 +85,7 @@ function App() {
           <Route path="subscriptions" element={<SubscriptionsPage />} />
           <Route path="bookmarks" element={<BookmarksPage />} />
           <Route path="preference" element={<PreferencePage />} />
+          <Route path="discover" element={<DiscoverPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 

@@ -92,3 +92,7 @@ class User(Base, TimestampMixin):
     auth_providers = relationship(
         "UserAuthProvider", back_populates="user", cascade="all, delete-orphan"
     )
+    discovery_candidates = relationship(
+        "DiscoveryCandidate", cascade="all, delete-orphan"
+    )
+    discovery_feedback = relationship("DiscoveryFeedback", cascade="all, delete-orphan")

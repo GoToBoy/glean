@@ -8,6 +8,8 @@ from .admin import AdminRole, AdminUser, SystemConfig
 from .api_token import APIToken
 from .base import Base, TimestampMixin
 from .bookmark import Bookmark
+from .discovery_candidate import DiscoveryCandidate
+from .discovery_feedback import DiscoveryFeedback
 from .entry import Entry
 from .entry_translation import EntryTranslation
 from .feed import Feed, FeedStatus
@@ -40,6 +42,8 @@ __all__ = [
     "FolderType",
     "Tag",
     "Bookmark",
+    "DiscoveryCandidate",
+    "DiscoveryFeedback",
     "BookmarkFolder",
     "BookmarkTag",
     "UserEntryTag",
@@ -47,8 +51,6 @@ __all__ = [
     "UserPreferenceStats",
     "UserEntryEvent",
     "UserEntryImplicitLabel",
-    # Translation models
-    "EntryTranslation",
     # MCP models
     "APIToken",
     # Translation models

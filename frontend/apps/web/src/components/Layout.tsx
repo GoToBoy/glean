@@ -738,6 +738,7 @@ export function Layout() {
           isSidebarOpen={isSidebarOpen}
           isMobileSidebarOpen={isMobileSidebarOpen}
           isSettingsActive={location.pathname === '/settings'}
+          isDiscoverActive={location.pathname === '/discover'}
           onLogoutClick={() => setShowLogoutConfirm(true)}
         />
       </aside>

@@ -2,6 +2,7 @@
   "sidebar": {
     "feeds": "Feeds",
     "smart": "Smart",
+    "discover": "Discover",
     "allFeeds": "All Feeds",
     "bookmarks": "Bookmarks",
     "tags": "Tags",
@@ -219,5 +220,23 @@
     "feedUrlDescription": "Enter a feed URL or website URL — we'll try to discover the feed automatically",
     "folderOptional": "Folder (optional)",
     "adding": "Adding..."
+  },
+  "discover": {
+    "title": "Discover Sources",
+    "subtitle": "Weakly personalized source suggestions with explicit controls.",
+    "refresh": "Refresh",
+    "reload": "Reload",
+    "loading": "Loading discovery candidates...",
+    "empty": "No candidates yet. Try refresh to regenerate from curated seeds.",
+    "topic": "topic",
+    "score": "score",
+    "quality": "quality",
+    "topics": {
+      "engineering": "Engineering",
+      "design": "Design",
+      "product": "Product"
+    },
+    "subscribe": "Subscribe",
+    "dismiss": "Dismiss"
   }
 }

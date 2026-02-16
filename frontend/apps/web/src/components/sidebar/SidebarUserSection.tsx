@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useTranslation } from '@glean/i18n'
 import { Button } from '@glean/ui'
-import { Settings, LogOut } from 'lucide-react'
+import { Compass, LogOut, Settings } from 'lucide-react'
 import type { User } from '@glean/types'
 
 interface SidebarUserSectionProps {
@@ -9,6 +9,7 @@ interface SidebarUserSectionProps {
   isSidebarOpen: boolean
   isMobileSidebarOpen: boolean
   isSettingsActive: boolean
+  isDiscoverActive: boolean
   onLogoutClick: () => void
 }
 
@@ -17,6 +18,7 @@ export function SidebarUserSection({
   isSidebarOpen,
   isMobileSidebarOpen,
   isSettingsActive,
+  isDiscoverActive,
   onLogoutClick,
 }: SidebarUserSectionProps) {
   const { t } = useTranslation('feeds')
@@ -37,6 +39,13 @@ export function SidebarUserSection({
   return (
     <div className="border-border border-t p-2 md:p-3">
       <div className="mb-2 space-y-0.5 md:mb-3">
+        <NavLink
+          to="/discover"
+          icon={<Compass className="h-5 w-5" />}
+          label={t('sidebar.discover')}
+          isOpen={isSidebarOpen || isMobileSidebarOpen}
+          isActive={isDiscoverActive}
+        />
         <NavLink
           to="/settings"
           icon={<Settings className="h-5 w-5" />}

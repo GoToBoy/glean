@@ -5,7 +5,7 @@
  * for consistent handling across the application.
  */
 
-import type { User, Subscription, EntryWithState } from './models'
+import type { DiscoveryCandidate, EntryWithState, Subscription, User } from './models'
 
 /** Authentication token response */
 export interface TokenResponse {
@@ -77,6 +77,12 @@ export interface UpdateEntryStateRequest {
   is_read?: boolean
   is_liked?: boolean | null // null to clear like/dislike
   read_later?: boolean
+  read_later_days?: number
+  triage_state?: 'now' | 'later' | 'archive' | 'trial'
+  defer_until?: string | null
+  expires_at?: string | null
+  estimated_read_time_sec?: number
+  content_temporality?: 'timely' | 'evergreen' | 'mixed'
 }
 
 export type EntryEventType =
@@ -112,6 +118,25 @@ export interface FeedbackSummaryResponse {
 
 /** Entry list response */
 export type EntryListResponse = PaginatedResponse<EntryWithState>
+
+export interface DiscoveryListResponse {
+  items: DiscoveryCandidate[]
+  total: number
+}
+
+export interface DiscoveryTrialRequest {
+  days?: number
+}
+
+export interface DiscoveryFeedbackRequest {
+  feedback_type: 'dismiss_source' | 'reduce_topic' | 'trial_start' | 'trial_end' | 'subscribed'
+  topic?: string
+}
+
+export interface DiscoveryActionResponse {
+  ok: boolean
+  message: string
+}
 
 /** Subscription list response (paginated) */
 export interface SubscriptionListResponse {
