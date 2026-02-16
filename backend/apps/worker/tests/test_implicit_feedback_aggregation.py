@@ -1,10 +1,12 @@
 """Tests for implicit feedback aggregation worker tasks."""
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from glean_worker.tasks.implicit_feedback_aggregation import (
+    _is_list_surface_event,
     _normalized_dwell,
     scheduled_aggregate_implicit_feedback,
 )
@@ -16,6 +18,13 @@ def test_normalized_dwell_clamps_value() -> None:
     assert _normalized_dwell(30_000, 60) == 0.5
     assert _normalized_dwell(300_000, 60) == 1.5
     assert _normalized_dwell(10_000, 0) == 0.0
+
+
+def test_is_list_surface_event() -> None:
+    """List-surface events should be filtered from aggregation."""
+    assert _is_list_surface_event(SimpleNamespace(extra={"surface": "list"})) is True
+    assert _is_list_surface_event(SimpleNamespace(extra={"surface": "reader"})) is False
+    assert _is_list_surface_event(SimpleNamespace(extra=None)) is False
 
 
 @pytest.mark.asyncio

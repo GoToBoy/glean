@@ -13,7 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_core.schemas import EmbeddingConfigUpdateRequest, ImplicitFeedbackConfigUpdateRequest
+from glean_core.schemas import (
+    EmbeddingConfigUpdateRequest,
+    ImplicitFeedbackConfigUpdateRequest,
+    RecencyDecayConfigUpdateRequest,
+)
 from glean_core.schemas.admin import (
     AdminBatchEntryRequest,
     AdminBatchFeedRequest,
@@ -1107,4 +1111,30 @@ async def update_implicit_feedback_settings(
 
     updates = request.model_dump(exclude_unset=True)
     updated = await config_service.update(ImplicitFeedbackConfig, **updates)
+    return updated.model_dump(exclude={"NAMESPACE"})
+
+
+@router.get("/settings/recency-decay")
+async def get_recency_decay_settings(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Get recency decay configuration."""
+    from glean_core.schemas.config import RecencyDecayConfig
+
+    config = await config_service.get(RecencyDecayConfig)
+    return config.model_dump(exclude={"NAMESPACE"})
+
+
+@router.post("/settings/recency-decay")
+async def update_recency_decay_settings(
+    request: RecencyDecayConfigUpdateRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Update recency decay configuration."""
+    from glean_core.schemas.config import RecencyDecayConfig
+
+    updates = request.model_dump(exclude_unset=True)
+    updated = await config_service.update(RecencyDecayConfig, **updates)
     return updated.model_dump(exclude={"NAMESPACE"})

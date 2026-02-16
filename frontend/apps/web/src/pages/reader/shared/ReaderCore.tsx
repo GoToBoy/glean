@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useInfiniteEntries, useEntry, useUpdateEntryState } from '../../../hooks/useEntries'
+import { useEntryListEngagementTracking } from '../../../hooks/useEntryListEngagementTracking'
+import { useReaderBehaviorConfig } from '../../../hooks/useReaderBehaviorConfig'
 import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
@@ -61,6 +63,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
+  const { data: readerBehaviorConfig } = useReaderBehaviorConfig()
   const isVectorizationEnabled =
     vectorizationStatus?.enabled && vectorizationStatus?.status === 'idle'
 
@@ -141,6 +144,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
+  const listTrackingScopeKey = `${selectedFeedId || 'all'}:${selectedFolderId || 'none'}:${filterType}:${viewParam || 'timeline'}`
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -565,6 +569,18 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   // Keep entry list visible during exit/enter animation
   const showEntryList = !isMobile || !selectedEntryId || isExitingEntryList || isEnteringEntryList
   const showReader = !isMobile || !!selectedEntryId
+  const trackedEntryIds = useMemo(() => entries.map((entry) => entry.id), [entries])
+
+  useEntryListEngagementTracking({
+    entryIds: trackedEntryIds,
+    scrollContainerRef: entryListRef,
+    scopeKey: listTrackingScopeKey,
+    minVisibleRatio: readerBehaviorConfig?.list_min_visible_ratio ?? 0.5,
+    exposedMs: readerBehaviorConfig?.list_exposed_ms ?? 300,
+    skimmedMs: readerBehaviorConfig?.list_skimmed_ms ?? 600,
+    enabled: entries.length > 0 && !isLoading,
+  })
+
   useEffect(() => {
     const onToggleTranslation = () => {
       if (!isMobile || !showEntryList) return

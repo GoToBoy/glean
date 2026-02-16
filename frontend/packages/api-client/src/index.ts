@@ -13,7 +13,11 @@ export { TagService } from './services/tags'
 export { BookmarkService, type BookmarkListParams } from './services/bookmarks'
 // M3 services
 export { PreferenceService } from './services/preference'
-export { SystemService, type VectorizationStatus } from './services/system'
+export {
+  SystemService,
+  type ReaderBehaviorConfig,
+  type VectorizationStatus,
+} from './services/system'
 // MCP services
 export { APITokenService } from './services/apiTokens'
 export { tokenStorage } from './tokenStorage'
