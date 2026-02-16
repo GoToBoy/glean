@@ -9,12 +9,18 @@
 export interface UserSettings {
   read_later_days?: number // Days until read later items expire (0 = never)
   show_read_later_remaining?: boolean // Show remaining time in read later list
+  reader_mode?: 'legacy' | 'new'
+  ranking_mode?: 'time' | 'value' | 'mixed'
+  recommendation_strength?: 'off' | 'weak'
+  explore_ratio?: number
+  manual_only?: boolean
   translation_provider?: 'google' | 'deepl' | 'openai' | 'mtran'
   list_translation_auto_enabled?: boolean // Auto-enable list viewport translation
   list_translation_english_only?: boolean // Translate only English content in list
   translation_api_key?: string
   translation_model?: string
   translation_base_url?: string
+  discovery_tavily_api_key?: string
 }
 
 /** User account information */
@@ -96,7 +102,13 @@ export interface EntryWithState extends Entry {
   is_liked: boolean | null // true = liked, false = disliked, null = no feedback
   read_later: boolean
   read_later_until: string | null // ISO date string when read later expires
+  triage_state?: 'now' | 'later' | 'archive' | 'trial'
+  defer_until?: string | null
+  expires_at?: string | null
+  estimated_read_time_sec?: number | null
+  content_temporality?: 'timely' | 'evergreen' | 'mixed'
   read_at: string | null
+  ingested_at?: string | null
   is_bookmarked: boolean
   bookmark_id: string | null
   // Feed info for display in aggregated views
@@ -105,6 +117,30 @@ export interface EntryWithState extends Entry {
   // M3: Preference score
   preference_score: number | null // 0-100 preference score
   debug_info: ScoreDebugInfo | null // Debug information (if debug mode enabled)
+}
+
+export interface DiscoveryCandidate {
+  id: string
+  feed_url: string
+  site_url: string | null
+  title: string | null
+  language: string | null
+  topic: string
+  source_kind: string
+  reason: string
+  quality_score: number
+  relevance_score: number
+  novelty_score: number
+  diversity_score: number
+  discovery_score: number
+  fetch_success_rate: number
+  update_stability_score: number
+  dedup_ratio: number
+  is_blocked: boolean
+  trial_started_at: string | null
+  trial_ends_at: string | null
+  subscribed_at: string | null
+  refreshed_at: string
 }
 
 // M2: Folder types

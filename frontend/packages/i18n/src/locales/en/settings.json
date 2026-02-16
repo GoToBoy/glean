@@ -5,6 +5,7 @@
     "profile": "Profile",
     "readLater": "Read Later",
     "appearance": "Appearance",
+    "reader": "Reader",
     "manageFeeds": "Manage Feeds",
     "preferences": "Preferences",
     "apiTokens": "API Tokens",
@@ -54,6 +55,33 @@
       "auto": "Auto",
       "autoDesc": "Follow your system preference"
     }
+  },
+  "readerMode": {
+    "title": "Reader Mode",
+    "desc": "Configure Legacy/New mode and recommendation controls.",
+    "modeLabel": "Reader Mode",
+    "modeOptions": {
+      "legacy": "Legacy",
+      "new": "New (Unified)"
+    },
+    "rankingLabel": "Ranking Mode",
+    "rankingOptions": {
+      "time": "Time",
+      "value": "Value per minute",
+      "mixed": "Mixed"
+    },
+    "recommendationLabel": "Recommendation Strength",
+    "recommendationOptions": {
+      "off": "Off",
+      "weak": "Weak"
+    },
+    "exploreRatioLabel": "Explore Ratio",
+    "manualOnlyLabel": "Only Manual Subscriptions",
+    "manualOnlyDesc": "Disable discovery/recommendation and keep pure manual RSS.",
+    "discoveryApiKeyLabel": "Discovery Search API Key (Tavily)",
+    "discoveryApiKeyDesc": "Optional per-account key used by Discover Sources. Leave empty to use server default.",
+    "discoveryApiKeyPlaceholder": "tvly-...",
+    "discoveryApiKeySaved": "Discovery search key saved"
   },
   "manageFeeds": {
     "title": "Manage Feeds",
@@ -156,7 +184,7 @@
     "apiKey": "API Key",
     "apiKeyPlaceholder": "Enter your API key",
     "baseUrl": "MTran Base URL",
-    "baseUrlPlaceholder": "http://mtranserver:5001",
+    "baseUrlPlaceholder": "http://mtranserver:8989",
     "model": "Model",
     "modelPlaceholder": "Optional model name",
     "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
@@ -204,40 +232,6 @@
       "toolList": "List articles by date range",
       "toolSubs": "List your subscriptions"
     }
-  },
-  "translation": {
-    "title": "Translation",
-    "desc": "Configure your translation provider and API keys",
-    "provider": "Translation Provider",
-    "providerDesc": "Choose your preferred translation service",
-    "google": {
-      "name": "Google Translate",
-      "desc": "Free translation service, no API key required"
-    },
-    "deepl": {
-      "name": "DeepL",
-      "desc": "High-quality translation with natural phrasing"
-    },
-    "openai": {
-      "name": "OpenAI",
-      "desc": "AI-powered translation using GPT models"
-    },
-    "mtran": {
-      "name": "MTranServer",
-      "desc": "Self-hosted local translation service"
-    },
-    "apiKey": "API Key",
-    "apiKeyPlaceholder": "Enter your API key",
-    "baseUrl": "MTran Base URL",
-    "baseUrlPlaceholder": "http://mtranserver:5001",
-    "model": "Model",
-    "modelPlaceholder": "Optional model name",
-    "noKeyWarning": "An API key is required for {{provider}}. Google Translate will be used as fallback.",
-    "settingsSaved": "Translation settings saved",
-    "listAutoEnable": "Enable list translation by default",
-    "listAutoEnableDesc": "Automatically turn on viewport-based translation in the reader list",
-    "listEnglishOnly": "Translate English text only",
-    "listEnglishOnlyDesc": "Only translate list items that are primarily English"
   },
   "version": "Glean v{{version}}"
 }
