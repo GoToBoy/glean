@@ -7,6 +7,7 @@ export { hashPassword } from './crypto'
 export { AuthService } from './services/auth'
 export { FeedService } from './services/feeds'
 export { EntryService } from './services/entries'
+export { DiscoverService } from './services/discover'
 // M2 services
 export { FolderService } from './services/folders'
 export { TagService } from './services/tags'
@@ -23,6 +24,7 @@ import { apiClient } from './client'
 import { AuthService } from './services/auth'
 import { FeedService } from './services/feeds'
 import { EntryService } from './services/entries'
+import { DiscoverService } from './services/discover'
 import { FolderService } from './services/folders'
 import { TagService } from './services/tags'
 import { BookmarkService } from './services/bookmarks'
@@ -33,6 +35,7 @@ import { APITokenService } from './services/apiTokens'
 export const authService = new AuthService(apiClient)
 export const feedService = new FeedService(apiClient)
 export const entryService = new EntryService(apiClient)
+export const discoverService = new DiscoverService(apiClient)
 // M2 service instances
 export const folderService = new FolderService(apiClient)
 export const tagService = new TagService(apiClient)

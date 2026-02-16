@@ -17,6 +17,13 @@ from .bookmark import (
     BookmarkTagRequest,
     BookmarkUpdate,
 )
+from .discovery import (
+    DiscoveryActionResponse,
+    DiscoveryCandidateResponse,
+    DiscoveryFeedbackRequest,
+    DiscoveryListResponse,
+    DiscoveryTrialRequest,
+)
 from .config import (
     EmbeddingConfig,
     EmbeddingConfigResponse,
@@ -113,6 +120,12 @@ __all__ = [
     "BookmarkListResponse",
     "BookmarkFolderRequest",
     "BookmarkTagRequest",
+    # Discovery
+    "DiscoveryCandidateResponse",
+    "DiscoveryListResponse",
+    "DiscoveryTrialRequest",
+    "DiscoveryFeedbackRequest",
+    "DiscoveryActionResponse",
     # M2: Folder
     "FolderCreate",
     "FolderUpdate",

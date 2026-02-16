@@ -19,6 +19,7 @@ from glean_core.services import (
     APITokenService,
     AuthService,
     BookmarkService,
+    DiscoveryService,
     EntryService,
     FeedService,
     FolderService,
@@ -157,6 +158,13 @@ def get_user_service(session: Annotated[AsyncSession, Depends(get_session)]) -> 
 def get_feed_service(session: Annotated[AsyncSession, Depends(get_session)]) -> FeedService:
     """Get feed service instance."""
     return FeedService(session)
+
+
+def get_discovery_service(
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> DiscoveryService:
+    """Get discovery service instance."""
+    return DiscoveryService(session)
 
 
 async def get_entry_service(
