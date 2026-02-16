@@ -113,6 +113,9 @@ class ImplicitFeedbackConfig(BaseModel):
     weight: float = Field(default=1.0, ge=0.0, le=5.0)
     sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
     min_events: int = Field(default=3, ge=1, le=1000)
+    list_min_visible_ratio: float = Field(default=0.5, ge=0.1, le=1.0)
+    list_exposed_ms: int = Field(default=300, ge=50, le=5000)
+    list_skimmed_ms: int = Field(default=600, ge=100, le=10000)
 
 
 class ImplicitFeedbackConfigUpdateRequest(BaseModel):
@@ -122,6 +125,33 @@ class ImplicitFeedbackConfigUpdateRequest(BaseModel):
     weight: float | None = Field(default=None, ge=0.0, le=5.0)
     sample_rate: float | None = Field(default=None, ge=0.0, le=1.0)
     min_events: int | None = Field(default=None, ge=1, le=1000)
+    list_min_visible_ratio: float | None = Field(default=None, ge=0.1, le=1.0)
+    list_exposed_ms: int | None = Field(default=None, ge=50, le=5000)
+    list_skimmed_ms: int | None = Field(default=None, ge=100, le=10000)
+
+
+class RecencyDecayConfig(BaseModel):
+    """
+    Recency decay configuration for smart ranking.
+
+    Stored in system_configs table with key = NAMESPACE.
+    """
+
+    NAMESPACE: ClassVar[str] = "recency_decay"
+
+    enabled: bool = True
+    start_day: float = Field(default=3.0, ge=0.0, le=30.0)
+    half_life_days: float = Field(default=2.0, gt=0.0, le=365.0)
+    floor_factor: float = Field(default=0.05, ge=0.0, le=1.0)
+
+
+class RecencyDecayConfigUpdateRequest(BaseModel):
+    """Partial update request for recency decay configuration."""
+
+    enabled: bool | None = None
+    start_day: float | None = Field(default=None, ge=0.0, le=30.0)
+    half_life_days: float | None = Field(default=None, gt=0.0, le=365.0)
+    floor_factor: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class EmbeddingRebuildProgress(BaseModel):
@@ -142,6 +172,14 @@ class VectorizationStatusResponse(BaseModel):
     has_error: bool
     error_message: str | None = None
     rebuild_progress: EmbeddingRebuildProgress | None = None
+
+
+class ReaderBehaviorConfigResponse(BaseModel):
+    """Public reader behavior config for client-side engagement tracking."""
+
+    list_min_visible_ratio: float
+    list_exposed_ms: int
+    list_skimmed_ms: int
 
 
 class EmbeddingConfigResponse(BaseModel):

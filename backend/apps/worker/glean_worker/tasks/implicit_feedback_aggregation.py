@@ -21,6 +21,13 @@ def _normalized_dwell(active_ms: int, est_read_time_sec: int) -> float:
     return max(0.0, min(1.5, value))
 
 
+def _is_list_surface_event(event: Any) -> bool:
+    extra = event.extra
+    if not isinstance(extra, dict):
+        return False
+    return extra.get("surface") == "list"
+
+
 async def aggregate_implicit_feedback_labels(
     ctx: dict[str, Any],
     target_date: str | None = None,
@@ -44,6 +51,7 @@ async def aggregate_implicit_feedback_labels(
             )
         )
         events = result.scalars().all()
+        used_event_count = 0
 
         grouped: dict[tuple[str, str], dict[str, Any]] = defaultdict(
             lambda: {
@@ -53,6 +61,10 @@ async def aggregate_implicit_feedback_labels(
         )
 
         for event in events:
+            if _is_list_surface_event(event):
+                continue
+
+            used_event_count += 1
             key = (str(event.user_id), str(event.entry_id))
             group = grouped[key]
 
@@ -141,13 +153,19 @@ async def aggregate_implicit_feedback_labels(
 
     logger.info(
         "Implicit feedback aggregation completed",
-        extra={"target_date": day.isoformat(), "groups": len(rows), "events": len(events)},
+        extra={
+            "target_date": day.isoformat(),
+            "groups": len(rows),
+            "events": len(events),
+            "used_events": used_event_count,
+        },
     )
 
     return {
         "success": True,
         "target_date": day.isoformat(),
         "events": len(events),
+        "used_events": used_event_count,
         "groups": len(rows),
     }
 

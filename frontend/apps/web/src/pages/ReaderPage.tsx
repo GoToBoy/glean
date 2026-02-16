@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {
   useInfiniteEntries,
@@ -6,6 +6,8 @@ import {
   useUpdateEntryState,
   useMarkAllRead,
 } from '../hooks/useEntries'
+import { useEntryListEngagementTracking } from '../hooks/useEntryListEngagementTracking'
+import { useReaderBehaviorConfig } from '../hooks/useReaderBehaviorConfig'
 import { useVectorizationStatus } from '../hooks/useVectorizationStatus'
 import { ArticleReader, ArticleReaderSkeleton } from '../components/ArticleReader'
 import { useAuthStore } from '../stores/authStore'
@@ -89,6 +91,7 @@ export default function ReaderPage() {
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
+  const { data: readerBehaviorConfig } = useReaderBehaviorConfig()
   const isVectorizationEnabled =
     vectorizationStatus?.enabled && vectorizationStatus?.status === 'idle'
 
@@ -168,6 +171,7 @@ export default function ReaderPage() {
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
+  const listTrackingScopeKey = `${selectedFeedId || 'all'}:${selectedFolderId || 'none'}:${filterType}:${viewParam || 'timeline'}`
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -448,6 +452,17 @@ export default function ReaderPage() {
   // Keep entry list visible during exit/enter animation
   const showEntryList = !isMobile || !selectedEntryId || isExitingEntryList || isEnteringEntryList
   const showReader = !isMobile || !!selectedEntryId
+  const trackedEntryIds = useMemo(() => entries.map((entry) => entry.id), [entries])
+
+  useEntryListEngagementTracking({
+    entryIds: trackedEntryIds,
+    scrollContainerRef: entryListRef,
+    scopeKey: listTrackingScopeKey,
+    minVisibleRatio: readerBehaviorConfig?.list_min_visible_ratio ?? 0.5,
+    exposedMs: readerBehaviorConfig?.list_exposed_ms ?? 300,
+    skimmedMs: readerBehaviorConfig?.list_skimmed_ms ?? 600,
+    enabled: entries.length > 0 && !isLoading,
+  })
 
   return (
     <div className={`flex h-full ${isMobile ? 'relative' : ''}`}>

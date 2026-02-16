@@ -18,6 +18,12 @@ export interface VectorizationStatus {
   } | null
 }
 
+export interface ReaderBehaviorConfig {
+  list_min_visible_ratio: number
+  list_exposed_ms: number
+  list_skimmed_ms: number
+}
+
 export class SystemService {
   constructor(private readonly client: ApiClient) {}
 
@@ -26,5 +32,12 @@ export class SystemService {
    */
   async getVectorizationStatus(): Promise<VectorizationStatus> {
     return this.client.get<VectorizationStatus>('/system/vectorization-status')
+  }
+
+  /**
+   * Get reader behavior config for list engagement tracking.
+   */
+  async getReaderBehaviorConfig(): Promise<ReaderBehaviorConfig> {
+    return this.client.get<ReaderBehaviorConfig>('/system/reader-behavior-config')
   }
 }
