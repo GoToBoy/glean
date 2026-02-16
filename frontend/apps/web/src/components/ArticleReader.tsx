@@ -10,6 +10,7 @@ import {
   Clock,
   Archive,
   ExternalLink,
+  Globe,
   Languages,
   Loader2,
   Maximize2,
@@ -277,6 +278,9 @@ export function ArticleReader({
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
+  const [showOriginalInline, setShowOriginalInline] = useState(false)
+  const [iframeStatus, setIframeStatus] = useState<'idle' | 'loading' | 'loaded' | 'blocked'>('idle')
+  const iframeTimeoutRef = useRef<number | null>(null)
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
@@ -319,7 +323,23 @@ export function ArticleReader({
   // Reset outline state when entry changes
   useEffect(() => {
     setHasOutline(false)
+    setShowOriginalInline(false)
+    setIframeStatus('idle')
   }, [entry.id])
+
+  const clearIframeTimeout = useCallback(() => {
+    if (iframeTimeoutRef.current !== null) {
+      window.clearTimeout(iframeTimeoutRef.current)
+      iframeTimeoutRef.current = null
+    }
+  }, [])
+
+  useEffect(
+    () => () => {
+      clearIframeTimeout()
+    },
+    [clearIframeTimeout]
+  )
 
   // Animation triggers for action buttons
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')
@@ -374,6 +394,36 @@ export function ArticleReader({
     } finally {
       setIsSubmittingFeedback(false)
     }
+  }
+
+  const handleOpenOriginalInline = () => {
+    if (showOriginalInline) {
+      clearIframeTimeout()
+      setShowOriginalInline(false)
+      setIframeStatus('idle')
+      return
+    }
+
+    setShowOriginalInline(true)
+    setIframeStatus('loading')
+    clearIframeTimeout()
+    iframeTimeoutRef.current = window.setTimeout(() => {
+      setIframeStatus((prev) => (prev === 'loading' ? 'blocked' : prev))
+    }, 4500)
+  }
+
+  const handleIframeLoaded = () => {
+    clearIframeTimeout()
+    setIframeStatus('loaded')
+  }
+
+  const handleIframeError = () => {
+    clearIframeTimeout()
+    setIframeStatus('blocked')
+  }
+
+  const handleOpenExternal = () => {
+    window.open(entry.url, '_blank', 'noopener,noreferrer')
   }
 
   return (
@@ -458,13 +508,13 @@ export function ArticleReader({
             <Button
               variant="outline"
               size="sm"
-              render={(props) => (
-                <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
-              )}
+              onClick={handleOpenOriginalInline}
               className="action-btn action-btn-external text-muted-foreground"
             >
-              <ExternalLink className="h-4 w-4" />
-              <span>{t('actions.openOriginal')}</span>
+              <Globe className="h-4 w-4" />
+              <span>
+                {showOriginalInline ? t('actions.backToArticle') : t('actions.openOriginal')}
+              </span>
             </Button>
 
             {showTranslation ? (
@@ -594,7 +644,54 @@ export function ArticleReader({
               </div>
             )}
 
-            {displayContent ? (
+            {showOriginalInline ? (
+              <div className="relative space-y-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleOpenExternal}
+                  aria-label={t('actions.openExternally')}
+                  title={t('actions.openExternally')}
+                  className="group bg-background/90 border-border absolute top-2 right-2 z-10 h-8 w-8 px-0 backdrop-blur-sm transition-all hover:w-auto hover:px-2"
+                >
+                  <ExternalLink className="h-4 w-4" />
+                  <span className="max-w-0 overflow-hidden opacity-0 transition-all group-hover:ml-1 group-hover:max-w-40 group-hover:opacity-100">
+                    {t('actions.openExternally')}
+                  </span>
+                </Button>
+                {(iframeStatus === 'loading' || iframeStatus === 'blocked') && (
+                  <div
+                    className={`rounded-lg border px-4 py-2 text-sm ${
+                      iframeStatus === 'blocked'
+                        ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                        : 'border-primary/20 bg-primary/5 text-muted-foreground'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        {iframeStatus === 'blocked'
+                          ? t('actions.openOriginalBlocked')
+                          : t('actions.openOriginalLoading')}
+                      </span>
+                      {iframeStatus === 'blocked' && (
+                        <Button variant="outline" size="sm" onClick={handleOpenExternal}>
+                          <ExternalLink className="h-4 w-4" />
+                          <span>{t('actions.openExternally')}</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+                <iframe
+                  title={entry.title || 'Original article'}
+                  src={entry.url}
+                  className="border-border h-[70vh] w-full rounded-xl border"
+                  loading="lazy"
+                  onLoad={handleIframeLoaded}
+                  onError={handleIframeError}
+                />
+              </div>
+            ) : displayContent ? (
               <article
                 ref={contentRef}
                 className="prose prose-lg font-reading max-w-none"
@@ -685,11 +782,13 @@ export function ArticleReader({
         >
           <div className="flex h-14 items-center justify-around px-2">
             <button
-              onClick={() => window.open(entry.url, '_blank', 'noopener,noreferrer')}
+              onClick={handleOpenOriginalInline}
               className="action-btn action-btn-mobile action-btn-external text-muted-foreground hover:text-foreground flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors"
             >
-              <ExternalLink className="h-5 w-5" />
-              <span className="text-[10px]">{t('actions.open')}</span>
+              <Globe className="h-5 w-5" />
+              <span className="text-[10px]">
+                {showOriginalInline ? t('actions.backShort') : t('actions.open')}
+              </span>
             </button>
 
             {!hideReadStatus && (
