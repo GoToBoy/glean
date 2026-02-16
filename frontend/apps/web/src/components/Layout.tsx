@@ -1,7 +1,18 @@
 import { Link, Outlet, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef, useMemo } from 'react'
-import { Rss, ChevronLeft, Menu as MenuIcon, X, Languages } from 'lucide-react'
+import {
+  Rss,
+  ChevronLeft,
+  Menu as MenuIcon,
+  X,
+  Languages,
+  ChevronDown,
+  Inbox,
+  Sparkles,
+  Clock,
+  Circle,
+} from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import {
   buttonVariants,
@@ -12,6 +23,10 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogClose,
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
 } from '@glean/ui'
 import type { Subscription, TagWithCounts, FolderTreeNode } from '@glean/types'
 import { useAuthStore } from '../stores/authStore'
@@ -156,6 +171,16 @@ export function Layout() {
         : currentFilter === 'smart'
           ? '智能'
           : '稍后'
+  const filterIcon =
+    currentFilter === 'unread' ? (
+      <Circle className="h-2.5 w-2.5 fill-current" />
+    ) : currentFilter === 'all' ? (
+      <Inbox className="h-3 w-3" />
+    ) : currentFilter === 'smart' ? (
+      <Sparkles className="h-3 w-3" />
+    ) : (
+      <Clock className="h-3 w-3" />
+    )
   const isBookmarksPage = location.pathname === '/bookmarks'
   const currentBookmarkFolderId = isBookmarksPage ? searchParams.get('folder') : undefined
   const currentBookmarkTagId = isBookmarksPage ? searchParams.get('tag') : undefined
@@ -465,15 +490,81 @@ export function Layout() {
             >
               <Languages className="h-4 w-4" />
             </button>
-            <button
-              type="button"
-              onClick={() => window.dispatchEvent(new CustomEvent('readerMobileListActions:cycleFilter'))}
-              className="text-primary hover:bg-accent rounded-md px-2 py-1 text-xs font-medium transition-colors"
-              aria-label="Cycle filters"
-              title="Cycle filters"
-            >
-              {currentFilterLabel}
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className="text-primary hover:bg-accent flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors"
+                aria-label="Select filter"
+              >
+                <span className="opacity-90">{filterIcon}</span>
+                <span>{currentFilterLabel}</span>
+                <ChevronDown className="h-3 w-3 opacity-70" />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="[&_[data-slot='menu-item']]:!gap-1.5 [&_[data-slot='menu-item']]:!py-1 [&_[data-slot='menu-item']]:!text-sm"
+              >
+                <DropdownMenuItem
+                  className={currentFilter === 'unread' ? 'bg-accent' : ''}
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('readerMobileListActions:setFilter', {
+                        detail: { filter: 'unread' },
+                      })
+                    )
+                  }
+                >
+                  <span className="mr-2 inline-flex items-center">
+                    <Circle className="h-2.5 w-2.5 fill-current" />
+                  </span>
+                  未读
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={currentFilter === 'all' ? 'bg-accent' : ''}
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('readerMobileListActions:setFilter', {
+                        detail: { filter: 'all' },
+                      })
+                    )
+                  }
+                >
+                  <span className="mr-2 inline-flex items-center">
+                    <Inbox className="h-3.5 w-3.5" />
+                  </span>
+                  全部
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={currentFilter === 'smart' ? 'bg-accent' : ''}
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('readerMobileListActions:setFilter', {
+                        detail: { filter: 'smart' },
+                      })
+                    )
+                  }
+                >
+                  <span className="mr-2 inline-flex items-center">
+                    <Sparkles className="h-3.5 w-3.5" />
+                  </span>
+                  智能
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className={currentFilter === 'read-later' ? 'bg-accent' : ''}
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('readerMobileListActions:setFilter', {
+                        detail: { filter: 'read-later' },
+                      })
+                    )
+                  }
+                >
+                  <span className="mr-2 inline-flex items-center">
+                    <Clock className="h-3.5 w-3.5" />
+                  </span>
+                  稍后
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         ) : (
           <div className="w-10" />

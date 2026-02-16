@@ -570,18 +570,19 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       if (!isMobile || !showEntryList) return
       setIsListTranslationActive((v) => !v)
     }
-    const onCycleFilter = () => {
+    const onSetFilter = (event: Event) => {
       if (!isMobile || !showEntryList) return
-      const currentIndex = FILTER_ORDER.indexOf(filterType)
-      const nextFilter = FILTER_ORDER[(currentIndex + 1) % FILTER_ORDER.length]
+      const detail = (event as CustomEvent).detail as { filter?: FilterType } | undefined
+      const nextFilter = detail?.filter
+      if (!nextFilter || !FILTER_ORDER.includes(nextFilter)) return
       handleFilterChange(nextFilter)
     }
 
     window.addEventListener('readerMobileListActions:toggleTranslation', onToggleTranslation)
-    window.addEventListener('readerMobileListActions:cycleFilter', onCycleFilter)
+    window.addEventListener('readerMobileListActions:setFilter', onSetFilter)
     return () => {
       window.removeEventListener('readerMobileListActions:toggleTranslation', onToggleTranslation)
-      window.removeEventListener('readerMobileListActions:cycleFilter', onCycleFilter)
+      window.removeEventListener('readerMobileListActions:setFilter', onSetFilter)
     }
   }, [isMobile, showEntryList, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 

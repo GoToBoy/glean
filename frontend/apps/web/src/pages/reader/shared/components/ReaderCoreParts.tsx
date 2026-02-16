@@ -185,7 +185,7 @@ export function EntryListItem({
             )}
 
             <h3
-              className={`mb-1 line-clamp-2 text-[15px] leading-snug transition-colors duration-200 ${
+              className={`mb-1 line-clamp-2 text-sm leading-snug transition-colors duration-200 sm:text-[15px] ${
                 entry.is_read
                   ? 'text-muted-foreground group-hover:text-foreground/80'
                   : 'text-foreground font-medium'
@@ -194,15 +194,15 @@ export function EntryListItem({
               {translatedTitle || entry.title}
             </h3>
 
-            <div className="mb-1.5 h-10">
+            <div className="mb-1.5 h-9 sm:h-10">
               {(translatedSummary || entry.summary) && (
-                <p className="text-muted-foreground/70 line-clamp-2 text-sm leading-relaxed">
+                <p className="text-muted-foreground/70 line-clamp-2 text-xs leading-relaxed sm:text-sm">
                   {translatedSummary || stripHtmlTags(entry.summary || '')}
                 </p>
               )}
             </div>
 
-            <div className="text-muted-foreground/80 flex items-center gap-2 text-xs">
+            <div className="text-muted-foreground/80 flex items-center gap-2 text-[11px] sm:text-xs">
               {entry.author && <span className="max-w-[120px] truncate">{entry.author}</span>}
               {entry.author && entry.published_at && (
                 <span className="text-muted-foreground/40">·</span>
