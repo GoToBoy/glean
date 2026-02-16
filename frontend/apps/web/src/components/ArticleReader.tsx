@@ -104,7 +104,10 @@ function useIsMobile(breakpoint = 640) {
 /**
  * Hook for auto-hiding bars on scroll
  */
-function useScrollHide(scrollContainerRef: React.RefObject<HTMLDivElement | null>) {
+function useScrollHide(
+  scrollContainerRef: React.RefObject<HTMLDivElement | null>,
+  resetKey?: string
+) {
   const [isVisible, setIsVisible] = useState(true)
   const lastScrollY = useRef(0)
   const ticking = useRef(false)
@@ -149,6 +152,23 @@ function useScrollHide(scrollContainerRef: React.RefObject<HTMLDivElement | null
     scrollContainer.addEventListener('scroll', onScroll, { passive: true })
     return () => scrollContainer.removeEventListener('scroll', onScroll)
   }, [handleScroll, scrollContainerRef])
+
+  useEffect(() => {
+    // Reset bars visibility for each newly opened article.
+    setIsVisible(true)
+    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
+    lastScrollY.current = scrollTop
+  }, [resetKey, scrollContainerRef])
+
+  useEffect(() => {
+    const scrollContainer = scrollContainerRef.current
+    if (!scrollContainer) return
+
+    // Keep controls discoverable on first touch/drag.
+    const onTouchStart = () => setIsVisible(true)
+    scrollContainer.addEventListener('touchstart', onTouchStart, { passive: true })
+    return () => scrollContainer.removeEventListener('touchstart', onTouchStart)
+  }, [scrollContainerRef])
 
   return isVisible
 }
@@ -276,7 +296,7 @@ export function ArticleReader({
     entryId: entry.id,
   })
   const isMobile = useIsMobile()
-  const barsVisible = useScrollHide(scrollContainerRef)
+  const barsVisible = useScrollHide(scrollContainerRef, entry.id)
   const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
   useEntryEngagementTracking({
     entryId: entry.id,

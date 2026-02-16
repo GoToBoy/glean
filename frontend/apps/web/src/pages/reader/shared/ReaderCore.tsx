@@ -15,7 +15,6 @@ import {
   BookOpenIcon,
   ResizeHandle,
   EntryListItem,
-  FilterDropdownMenu,
   MarkAllReadButton,
   EntryListItemSkeleton,
   ReaderSmartTabs,
@@ -271,8 +270,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       },
       {
         root: container,
-        rootMargin: '100px', // Trigger 100px before reaching the element
-        threshold: 0.1,
+        // Trigger prefetch earlier to avoid "must scroll to absolute bottom" on mobile.
+        rootMargin: '500px 0px',
+        threshold: 0,
       }
     )
 
@@ -284,6 +284,23 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     // Refs (loadMoreRef, entryListRef) are stable and don't need to be in dependencies
     // Filter params (filterType, feedId, folderId, viewParam) are handled by React Query
     // fetchNextPage is stable and always uses current query parameters
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
+
+  // Mobile fallback: proactively fetch when scroll is close to bottom.
+  useEffect(() => {
+    const container = entryListRef.current
+    if (!container || isLoading) return
+
+    const onScroll = () => {
+      if (!hasNextPage || isFetchingNextPage) return
+      const remaining = container.scrollHeight - container.scrollTop - container.clientHeight
+      if (remaining < 480) {
+        fetchNextPage()
+      }
+    }
+
+    container.addEventListener('scroll', onScroll, { passive: true })
+    return () => container.removeEventListener('scroll', onScroll)
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
 
   // Initialize list translation toggle from persisted setting
@@ -548,6 +565,26 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   // Keep entry list visible during exit/enter animation
   const showEntryList = !isMobile || !selectedEntryId || isExitingEntryList || isEnteringEntryList
   const showReader = !isMobile || !!selectedEntryId
+  useEffect(() => {
+    const onToggleTranslation = () => {
+      if (!isMobile || !showEntryList) return
+      setIsListTranslationActive((v) => !v)
+    }
+    const onSetFilter = (event: Event) => {
+      if (!isMobile || !showEntryList) return
+      const detail = (event as CustomEvent).detail as { filter?: FilterType } | undefined
+      const nextFilter = detail?.filter
+      if (!nextFilter || !FILTER_ORDER.includes(nextFilter)) return
+      handleFilterChange(nextFilter)
+    }
+
+    window.addEventListener('readerMobileListActions:toggleTranslation', onToggleTranslation)
+    window.addEventListener('readerMobileListActions:setFilter', onSetFilter)
+    return () => {
+      window.removeEventListener('readerMobileListActions:toggleTranslation', onToggleTranslation)
+      window.removeEventListener('readerMobileListActions:setFilter', onSetFilter)
+    }
+  }, [isMobile, showEntryList, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`flex h-full ${isMobile ? 'relative' : ''}`}>
@@ -584,47 +621,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             }}
           >
             {/* Filters */}
-            <div className="border-border bg-card border-b px-3 py-2">
-              {/*
-                UI Behavior:
-                - Global Smart View (no feed/folder selected): Shows dedicated smart view header + limited filters (unread, all)
-                - Feed/Folder View: Shows all 4 filter tabs including "smart" filter
-
-                Mobile: Uses dropdown menu for filter selection with Mark All Read button
-                Desktop: Shows all filter tabs inline
-              */}
-              {isMobile ? (
-                /* Mobile: Dropdown menu + Mark All Read button */
-                <div className="flex items-center gap-2">
-                  {isSmartView && !selectedFeedId && !selectedFolderId && (
-                    /* Smart view indicator for mobile */
-                    <div className="bg-primary/5 flex items-center gap-1.5 rounded-lg px-2 py-0.5">
-                      <Sparkles className="text-primary h-3.5 w-3.5" />
-                      <span className="text-primary text-xs font-medium">{t('smart.title')}</span>
-                    </div>
-                  )}
-                  <FilterDropdownMenu
-                    filterType={filterType}
-                    onFilterChange={handleFilterChange}
-                    isSmartView={isSmartView && !selectedFeedId && !selectedFolderId}
-                  />
-                  <button
-                    onClick={() => setIsListTranslationActive((v) => !v)}
-                    title={
-                      isListTranslationActive
-                        ? t('translation.hideTranslation')
-                        : t('translation.translate')
-                    }
-                    className={`hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                      isListTranslationActive ? 'text-primary' : 'text-muted-foreground'
-                    }`}
-                  >
-                    <Languages className="h-4 w-4" />
-                  </button>
-                  <MarkAllReadButton feedId={selectedFeedId} folderId={selectedFolderId} />
-                </div>
-              ) : (
-                /* Desktop: Original filter tabs */
+            {!isMobile && (
+              <div className="border-border bg-card border-b px-3 py-2">
                 <>
                   {isSmartView && !selectedFeedId && !selectedFolderId ? (
                     /* Smart view header + filters */
@@ -675,8 +673,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                     </div>
                   )}
                 </>
-              )}
-            </div>
+              </div>
+            )}
 
             {/* Smart view banner when vectorization is disabled */}
             {isSmartView && !isVectorizationEnabled && (
