@@ -63,8 +63,11 @@ export function CreateFolderDialog({
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               placeholder={t('dialogs.createFolder.namePlaceholder')}
+              disabled={isSubmitting}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
+                  e.preventDefault()
+                  if (isSubmitting || !name.trim()) return
                   onSubmit()
                 }
               }}
@@ -72,7 +75,7 @@ export function CreateFolderDialog({
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
             {t('common.cancel')}
           </Button>
           <Button onClick={onSubmit} disabled={!name.trim() || isSubmitting}>

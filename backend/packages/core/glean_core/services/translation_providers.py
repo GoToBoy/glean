@@ -19,6 +19,7 @@ logger = get_logger(__name__)
 # Google Translate has a ~5000 character limit per request
 _CHUNK_SIZE = 4500
 _SEPARATOR = " ||| "
+DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:5001"
 
 
 class TranslationProvider(ABC):
@@ -255,8 +256,8 @@ class MTranProvider(TranslationProvider):
         model: str = "",
         timeout: float = 20.0,
     ) -> None:
-        self.base_url = (
-            (base_url or os.getenv("MTRAN_SERVER_URL", "http://mtranserver:5001")).rstrip("/")
+        self.base_url = (base_url or os.getenv("MTRAN_SERVER_URL", DEFAULT_MTRAN_SERVER_URL)).rstrip(
+            "/"
         )
         self.api_key = api_key
         self.model = model
@@ -421,7 +422,7 @@ def create_translation_provider(settings: dict[str, Any] | None) -> TranslationP
         return OpenAIProvider(api_key, openai_model)
 
     if provider == "mtran":
-        resolved_base_url = base_url or os.getenv("MTRAN_SERVER_URL", "http://mtranserver:5001")
+        resolved_base_url = base_url or os.getenv("MTRAN_SERVER_URL", DEFAULT_MTRAN_SERVER_URL)
         logger.info(
             "Using MTran translation provider",
             extra={"base_url": resolved_base_url},

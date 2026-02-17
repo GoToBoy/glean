@@ -2,19 +2,14 @@ import { useState } from 'react'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
-  buttonVariants,
   Menu,
   MenuTrigger,
   MenuPopup,
   MenuItem,
   MenuSeparator,
-  AlertDialog,
-  AlertDialogPopup,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogClose,
+  MenuSub,
+  MenuSubTrigger,
+  MenuSubPopup,
   Dialog,
   DialogPopup,
   DialogHeader,
@@ -168,7 +163,7 @@ function SidebarBookmarkFolderItem({
   onDelete,
 }: SidebarBookmarkFolderItemProps) {
   const { t } = useTranslation('bookmarks')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isMenuOpen, setIsMenuOpen] = useState(false)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [renameFolderName, setRenameFolderName] = useState(folder.name)
   const [isRenaming, setIsRenaming] = useState(false)
@@ -177,7 +172,7 @@ function SidebarBookmarkFolderItem({
 
   const handleDeleteFolder = async () => {
     await onDelete(folder.id)
-    setShowDeleteConfirm(false)
+    setIsMenuOpen(false)
   }
 
   const handleRenameFolder = async () => {
@@ -237,7 +232,7 @@ function SidebarBookmarkFolderItem({
           {folder.name}
         </button>
 
-        <Menu>
+        <Menu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
           <MenuTrigger className="touch-target-none text-muted-foreground hover:bg-accent hover:text-foreground h-5 rounded p-0.5 opacity-0 transition-opacity group-hover:opacity-100">
             <MoreHorizontal className="h-3.5 w-3.5" />
           </MenuTrigger>
@@ -251,10 +246,25 @@ function SidebarBookmarkFolderItem({
               <span>{t('common.rename')}</span>
             </MenuItem>
             <MenuSeparator />
-            <MenuItem variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
-              <Trash2 className="h-4 w-4" />
-              <span>{t('common.delete')}</span>
-            </MenuItem>
+            <MenuSub>
+              <MenuSubTrigger className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive">
+                <Trash2 className="h-4 w-4" />
+                <span>{t('common.delete')}</span>
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <p className="text-muted-foreground px-2 py-1 text-xs">
+                  {t('dialogs.deleteFolder.description', { name: folder.name })}
+                </p>
+                <MenuSeparator />
+                <MenuItem onClick={() => setIsMenuOpen(false)}>
+                  <span>{t('common.cancel')}</span>
+                </MenuItem>
+                <MenuItem variant="destructive" onClick={() => void handleDeleteFolder()}>
+                  <Trash2 className="h-4 w-4" />
+                  <span>{t('common.delete')}</span>
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
           </MenuPopup>
         </Menu>
       </div>
@@ -279,28 +289,6 @@ function SidebarBookmarkFolderItem({
           ))}
         </div>
       )}
-
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('dialogs.deleteFolder.title')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('dialogs.deleteFolder.description', { name: folder.name })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
-              {t('common.cancel')}
-            </AlertDialogClose>
-            <AlertDialogClose
-              className={buttonVariants({ variant: 'destructive' })}
-              onClick={handleDeleteFolder}
-            >
-              {t('common.delete')}
-            </AlertDialogClose>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
 
       <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
         <DialogPopup>

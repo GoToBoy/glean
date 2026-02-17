@@ -786,6 +786,8 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
   const [isFolderDropdownOpen, setIsFolderDropdownOpen] = useState(false)
   const [folderSearchQuery, setFolderSearchQuery] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [isCreatingFolderPending, setIsCreatingFolderPending] = useState(false)
+  const isCreatingFolderRef = useRef(false)
   const [newFolderName, setNewFolderName] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -848,18 +850,25 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return
+    if (!newFolderName.trim() || isCreatingFolderRef.current) return
 
-    const folder = await createFolder({
-      name: newFolderName.trim(),
-      type: 'feed',
-    })
+    isCreatingFolderRef.current = true
+    setIsCreatingFolderPending(true)
+    try {
+      const folder = await createFolder({
+        name: newFolderName.trim(),
+        type: 'feed',
+      })
 
-    if (folder) {
-      setSelectedFolderId(folder.id)
-      setIsCreatingFolder(false)
-      setNewFolderName('')
-      setIsFolderDropdownOpen(false)
+      if (folder) {
+        setSelectedFolderId(folder.id)
+        setIsCreatingFolder(false)
+        setNewFolderName('')
+        setIsFolderDropdownOpen(false)
+      }
+    } finally {
+      isCreatingFolderRef.current = false
+      setIsCreatingFolderPending(false)
     }
   }
 
@@ -992,7 +1001,12 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
                           value={newFolderName}
                           onChange={(e) => setNewFolderName(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') handleCreateFolder()
+                            if (e.key === 'Enter') {
+                              e.preventDefault()
+                              if (!isCreatingFolderPending) {
+                                void handleCreateFolder()
+                              }
+                            }
                             if (e.key === 'Escape') {
                               setIsCreatingFolder(false)
                               setNewFolderName('')
@@ -1004,7 +1018,7 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
                         <button
                           type="button"
                           onClick={handleCreateFolder}
-                          disabled={!newFolderName.trim()}
+                          disabled={!newFolderName.trim() || isCreatingFolderPending}
                           className="text-primary hover:bg-primary/10 rounded-md p-1.5 transition-colors disabled:opacity-50"
                         >
                           <Check className="h-4 w-4" />
@@ -1075,6 +1089,8 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
   const [isFolderDropdownOpen, setIsFolderDropdownOpen] = useState(false)
   const [folderSearchQuery, setFolderSearchQuery] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const [isCreatingFolderPending, setIsCreatingFolderPending] = useState(false)
+  const isCreatingFolderRef = useRef(false)
   const [newFolderName, setNewFolderName] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
 
@@ -1134,18 +1150,25 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return
+    if (!newFolderName.trim() || isCreatingFolderRef.current) return
 
-    const folder = await createFolder({
-      name: newFolderName.trim(),
-      type: 'feed',
-    })
+    isCreatingFolderRef.current = true
+    setIsCreatingFolderPending(true)
+    try {
+      const folder = await createFolder({
+        name: newFolderName.trim(),
+        type: 'feed',
+      })
 
-    if (folder) {
-      setSelectedFolderId(folder.id)
-      setIsCreatingFolder(false)
-      setNewFolderName('')
-      setIsFolderDropdownOpen(false)
+      if (folder) {
+        setSelectedFolderId(folder.id)
+        setIsCreatingFolder(false)
+        setNewFolderName('')
+        setIsFolderDropdownOpen(false)
+      }
+    } finally {
+      isCreatingFolderRef.current = false
+      setIsCreatingFolderPending(false)
     }
   }
 
@@ -1293,7 +1316,9 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault()
-                              handleCreateFolder()
+                              if (!isCreatingFolderPending) {
+                                void handleCreateFolder()
+                              }
                             }
                             if (e.key === 'Escape') {
                               setIsCreatingFolder(false)
@@ -1306,7 +1331,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
                         <button
                           type="button"
                           onClick={handleCreateFolder}
-                          disabled={!newFolderName.trim()}
+                          disabled={!newFolderName.trim() || isCreatingFolderPending}
                           className="text-primary hover:bg-primary/10 rounded-md p-1.5 transition-colors disabled:opacity-50"
                         >
                           <Check className="h-4 w-4" />

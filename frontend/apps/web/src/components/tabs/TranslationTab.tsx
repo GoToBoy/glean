@@ -14,6 +14,7 @@ import { CheckCircle, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 
 type Provider = 'google' | 'deepl' | 'openai' | 'mtran'
+const DEFAULT_MTRAN_BASE_URL = 'http://mtranserver:5001'
 
 const PROVIDERS: { value: Provider; nameKey: string; descKey: string }[] = [
   { value: 'google', nameKey: 'translation.google.name', descKey: 'translation.google.desc' },
@@ -40,7 +41,11 @@ export function TranslationTab() {
   const currentProvider = (user?.settings?.translation_provider ?? 'google') as Provider
   const currentApiKey = user?.settings?.translation_api_key ?? ''
   const currentModel = user?.settings?.translation_model ?? 'gpt-4o-mini'
-  const currentBaseUrl = user?.settings?.translation_base_url ?? ''
+  const savedBaseUrl = user?.settings?.translation_base_url
+  const currentBaseUrl =
+    typeof savedBaseUrl === 'string' && savedBaseUrl.trim()
+      ? savedBaseUrl.trim()
+      : DEFAULT_MTRAN_BASE_URL
   const currentListTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
   const currentListTranslationEnglishOnly = user?.settings?.list_translation_english_only ?? true
 

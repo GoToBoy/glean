@@ -230,6 +230,50 @@ describe('useDeleteSubscription', () => {
 
     expect(feedService.deleteSubscription).toHaveBeenCalledWith('s1')
   })
+
+  it('should optimistically remove deleted subscription from caches', async () => {
+    let resolveDelete: (() => void) | undefined
+    vi.mocked(feedService.deleteSubscription).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDelete = resolve
+        })
+    )
+    const { wrapper, queryClient } = createQueryWrapper()
+    const s1 = createMockSubscription({ id: 's1' })
+    const s2 = createMockSubscription({ id: 's2' })
+
+    queryClient.setQueryData(subscriptionKeys.list({ page: 1, per_page: 20 }), {
+      items: [s1, s2],
+      total: 2,
+      page: 1,
+      per_page: 20,
+      total_pages: 1,
+    })
+    queryClient.setQueryData(subscriptionKeys.sync(), [s1, s2])
+
+    const { result } = renderHook(() => useDeleteSubscription(), { wrapper })
+
+    act(() => {
+      result.current.mutate('s1')
+    })
+
+    expect(
+      queryClient
+        .getQueryData<{ items: Array<{ id: string }> }>(subscriptionKeys.list({ page: 1, per_page: 20 }))
+        ?.items.map((item) => item.id)
+    ).toEqual(['s2'])
+    expect(
+      queryClient
+        .getQueryData<Array<{ id: string }>>(subscriptionKeys.sync())
+        ?.map((item) => item.id)
+    ).toEqual(['s2'])
+
+    await act(async () => {
+      resolveDelete?.()
+      await Promise.resolve()
+    })
+  })
 })
 
 describe('useBatchDeleteSubscriptions', () => {

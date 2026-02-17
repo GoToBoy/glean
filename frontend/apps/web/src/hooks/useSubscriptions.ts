@@ -6,11 +6,43 @@ import type {
   BatchDeleteSubscriptionsRequest,
   SubscriptionListParams,
   Subscription,
+  SubscriptionListResponse,
 } from '@glean/types'
 import { useCallback, useRef } from 'react'
 
 const SUBSCRIPTIONS_CACHE_KEY = 'glean_subscriptions_cache'
 const SUBSCRIPTIONS_ETAG_KEY = 'glean_subscriptions_etag'
+
+function removeSubscriptionFromList(
+  data: SubscriptionListResponse | undefined,
+  subscriptionIds: Set<string>
+): SubscriptionListResponse | undefined {
+  if (!data) return data
+
+  const items = data.items.filter((item) => !subscriptionIds.has(item.id))
+  const removed = data.items.length - items.length
+  if (removed === 0) return data
+
+  const total = Math.max(0, data.total - removed)
+  const totalPages = Math.max(1, Math.ceil(total / Math.max(1, data.per_page)))
+
+  return {
+    ...data,
+    items,
+    total,
+    total_pages: totalPages,
+    page: Math.min(data.page, totalPages),
+  }
+}
+
+function removeSubscriptionFromSync(
+  data: Subscription[] | undefined,
+  subscriptionIds: Set<string>
+): Subscription[] | undefined {
+  if (!data) return data
+  const items = data.filter((item) => !subscriptionIds.has(item.id))
+  return items.length === data.length ? data : items
+}
 
 /**
  * Query key factory for subscriptions.
@@ -178,6 +210,40 @@ export function useDeleteSubscription() {
 
   return useMutation({
     mutationFn: (subscriptionId: string) => feedService.deleteSubscription(subscriptionId),
+    onMutate: async (subscriptionId: string) => {
+      const deletedIds = new Set([subscriptionId])
+      await queryClient.cancelQueries({ queryKey: subscriptionKeys.all })
+
+      const previousLists = queryClient.getQueriesData<SubscriptionListResponse>({
+        queryKey: subscriptionKeys.lists(),
+      })
+      const previousSync = queryClient.getQueryData<Subscription[]>(subscriptionKeys.sync())
+
+      queryClient.setQueriesData<SubscriptionListResponse>(
+        { queryKey: subscriptionKeys.lists() },
+        (old) => removeSubscriptionFromList(old, deletedIds)
+      )
+      queryClient.setQueryData<Subscription[] | undefined>(subscriptionKeys.sync(), (old) => {
+        const next = removeSubscriptionFromSync(old, deletedIds)
+        if (next) {
+          localStorage.setItem(SUBSCRIPTIONS_CACHE_KEY, JSON.stringify(next))
+        }
+        return next
+      })
+
+      return { previousLists, previousSync }
+    },
+    onError: (_error, _subscriptionId, context) => {
+      if (!context) return
+
+      context.previousLists.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value)
+      })
+      queryClient.setQueryData(subscriptionKeys.sync(), context.previousSync)
+      if (context.previousSync) {
+        localStorage.setItem(SUBSCRIPTIONS_CACHE_KEY, JSON.stringify(context.previousSync))
+      }
+    },
     onSuccess: () => {
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
@@ -194,6 +260,40 @@ export function useBatchDeleteSubscriptions() {
   return useMutation({
     mutationFn: (data: BatchDeleteSubscriptionsRequest) =>
       feedService.batchDeleteSubscriptions(data),
+    onMutate: async (data: BatchDeleteSubscriptionsRequest) => {
+      const deletedIds = new Set(data.subscription_ids)
+      await queryClient.cancelQueries({ queryKey: subscriptionKeys.all })
+
+      const previousLists = queryClient.getQueriesData<SubscriptionListResponse>({
+        queryKey: subscriptionKeys.lists(),
+      })
+      const previousSync = queryClient.getQueryData<Subscription[]>(subscriptionKeys.sync())
+
+      queryClient.setQueriesData<SubscriptionListResponse>(
+        { queryKey: subscriptionKeys.lists() },
+        (old) => removeSubscriptionFromList(old, deletedIds)
+      )
+      queryClient.setQueryData<Subscription[] | undefined>(subscriptionKeys.sync(), (old) => {
+        const next = removeSubscriptionFromSync(old, deletedIds)
+        if (next) {
+          localStorage.setItem(SUBSCRIPTIONS_CACHE_KEY, JSON.stringify(next))
+        }
+        return next
+      })
+
+      return { previousLists, previousSync }
+    },
+    onError: (_error, _data, context) => {
+      if (!context) return
+
+      context.previousLists.forEach(([key, value]) => {
+        queryClient.setQueryData(key, value)
+      })
+      queryClient.setQueryData(subscriptionKeys.sync(), context.previousSync)
+      if (context.previousSync) {
+        localStorage.setItem(SUBSCRIPTIONS_CACHE_KEY, JSON.stringify(context.previousSync))
+      }
+    },
     onSuccess: () => {
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })

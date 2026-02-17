@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
-  buttonVariants,
   Badge,
   Menu,
   MenuTrigger,
@@ -12,13 +11,6 @@ import {
   MenuSub,
   MenuSubTrigger,
   MenuSubPopup,
-  AlertDialog,
-  AlertDialogPopup,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogClose,
   Dialog,
   DialogPopup,
   DialogHeader,
@@ -483,7 +475,6 @@ function SidebarFolderItem({
   const updateMutation = useUpdateSubscription()
   const markAllReadMutation = useMarkAllRead()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [showDissolveConfirm, setShowDissolveConfirm] = useState(false)
   const [showRenameDialog, setShowRenameDialog] = useState(false)
   const [renameFolderName, setRenameFolderName] = useState(folder.name)
   const [isRenaming, setIsRenaming] = useState(false)
@@ -519,7 +510,7 @@ function SidebarFolderItem({
 
   const handleDissolveFolder = async () => {
     await deleteFolder(folder.id)
-    setShowDissolveConfirm(false)
+    setIsMenuOpen(false)
   }
 
   const handleRenameFolder = async () => {
@@ -625,10 +616,25 @@ function SidebarFolderItem({
               <span>{t('common.rename')}</span>
             </MenuItem>
             <MenuSeparator />
-            <MenuItem variant="destructive" onClick={() => setShowDissolveConfirm(true)}>
-              <Trash2 className="h-4 w-4" />
-              <span>{t('actions.dissolveFolder')}</span>
-            </MenuItem>
+            <MenuSub>
+              <MenuSubTrigger className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive">
+                <Trash2 className="h-4 w-4" />
+                <span>{t('actions.dissolveFolder')}</span>
+              </MenuSubTrigger>
+              <MenuSubPopup>
+                <p className="text-muted-foreground px-2 py-1 text-xs">
+                  {t('dialogs.dissolveFolder.description', { name: folder.name })}
+                </p>
+                <MenuSeparator />
+                <MenuItem onClick={() => setIsMenuOpen(false)}>
+                  <span>{t('common.cancel')}</span>
+                </MenuItem>
+                <MenuItem variant="destructive" onClick={() => void handleDissolveFolder()}>
+                  <Trash2 className="h-4 w-4" />
+                  <span>{t('actions.dissolveFolder')}</span>
+                </MenuItem>
+              </MenuSubPopup>
+            </MenuSub>
           </MenuPopup>
         </Menu>
       </button>
@@ -686,28 +692,6 @@ function SidebarFolderItem({
           )}
         </div>
       )}
-
-      <AlertDialog open={showDissolveConfirm} onOpenChange={setShowDissolveConfirm}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('dialogs.dissolveFolder.title')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('dialogs.dissolveFolder.description', { name: folder.name })}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
-              {t('common.cancel')}
-            </AlertDialogClose>
-            <AlertDialogClose
-              className={buttonVariants({ variant: 'destructive' })}
-              onClick={handleDissolveFolder}
-            >
-              {t('actions.dissolveFolder')}
-            </AlertDialogClose>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
 
       <Dialog open={showRenameDialog} onOpenChange={setShowRenameDialog}>
         <DialogPopup>
@@ -774,7 +758,6 @@ function SidebarFeedItem({
   const updateMutation = useUpdateSubscription()
   const markAllReadMutation = useMarkAllRead()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editTitle, setEditTitle] = useState(subscription.custom_title || '')
   const [editUrl, setEditUrl] = useState(subscription.feed.url || '')
@@ -787,7 +770,7 @@ function SidebarFeedItem({
 
   const handleDelete = async () => {
     await deleteMutation.mutateAsync(subscription.id)
-    setShowDeleteConfirm(false)
+    setIsMenuOpen(false)
   }
 
   const handleRefresh = async () => {
@@ -946,35 +929,33 @@ function SidebarFeedItem({
                 </MenuSub>
               )}
               <MenuSeparator />
-              <MenuItem variant="destructive" onClick={() => setShowDeleteConfirm(true)}>
-                <Trash2 className="h-4 w-4" />
-                <span>{t('actions.unsubscribe')}</span>
-              </MenuItem>
+              <MenuSub>
+                <MenuSubTrigger className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive">
+                  <Trash2 className="h-4 w-4" />
+                  <span>{t('actions.unsubscribe')}</span>
+                </MenuSubTrigger>
+                <MenuSubPopup>
+                  <p className="text-muted-foreground px-2 py-1 text-xs">
+                    {t('dialogs.unsubscribe.message')}
+                  </p>
+                  <MenuSeparator />
+                  <MenuItem onClick={() => setIsMenuOpen(false)}>
+                    <span>{t('common.cancel')}</span>
+                  </MenuItem>
+                  <MenuItem
+                    variant="destructive"
+                    onClick={() => void handleDelete()}
+                    disabled={deleteMutation.isPending}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>{t('dialogs.unsubscribe.unsubscribe')}</span>
+                  </MenuItem>
+                </MenuSubPopup>
+              </MenuSub>
             </MenuPopup>
           </Menu>
         )}
       </button>
-
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('dialogs.unsubscribe.title')}</AlertDialogTitle>
-            <AlertDialogDescription>{t('dialogs.unsubscribe.message')}</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
-              {t('common.cancel')}
-            </AlertDialogClose>
-            <AlertDialogClose
-              className={buttonVariants({ variant: 'destructive' })}
-              onClick={handleDelete}
-              disabled={deleteMutation.isPending}
-            >
-              {t('dialogs.unsubscribe.unsubscribe')}
-            </AlertDialogClose>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
 
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogPopup>

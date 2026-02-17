@@ -18,6 +18,7 @@
     "backToArticle": "返回文章",
     "openOriginalLoading": "正在应用内加载原网页...",
     "openOriginalBlocked": "该网站禁止嵌入显示，请改为外链打开。",
+    "openOriginalAutoOpened": "该网站禁止嵌入显示，已为你自动外链打开。",
     "openExternally": "外链打开",
     "more": "更多",
     "moreDescription": "翻译、归档和偏好操作",

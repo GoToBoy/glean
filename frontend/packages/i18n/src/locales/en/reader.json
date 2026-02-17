@@ -18,6 +18,7 @@
     "backToArticle": "Back to Article",
     "openOriginalLoading": "Loading original page in app...",
     "openOriginalBlocked": "This site blocks in-app embedding. Open externally.",
+    "openOriginalAutoOpened": "This site blocks in-app embedding. Opened in a new tab.",
     "openExternally": "Open Externally",
     "more": "More",
     "moreDescription": "Translation, archive, and preference actions",

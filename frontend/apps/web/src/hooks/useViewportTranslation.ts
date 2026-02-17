@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { entryService } from '@glean/api-client'
 import { splitIntoSentences } from '../lib/sentenceSplitter'
 
@@ -29,6 +29,11 @@ const ORIGINAL_HTML_ATTR = 'data-original-html'
 
 // Class added to blocks that have been replaced with bilingual content
 const BILINGUAL_ACTIVE_CLASS = 'glean-bilingual-active'
+const SESSION_TRANSLATION_CACHE = new Map<string, Map<string, string>>()
+
+function getSessionCacheKey(entryId: string, targetLanguage: string): string {
+  return `${entryId}::${targetLanguage}`
+}
 
 interface UseViewportTranslationOptions {
   contentRef: React.RefObject<HTMLElement | null>
@@ -70,6 +75,19 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;')
 }
 
+function collectTranslatableBlocks(root: HTMLElement): Element[] {
+  const blocks: Element[] = []
+  for (const tagName of TRANSLATABLE_BLOCKS) {
+    const elements = root.querySelectorAll(tagName.toLowerCase())
+    elements.forEach((el) => {
+      if (!hasSkipAncestor(el) && el.textContent?.trim()) {
+        blocks.push(el)
+      }
+    })
+  }
+  return blocks
+}
+
 /**
  * Hook for viewport-based sentence-level translation.
  *
@@ -95,6 +113,7 @@ export function useViewportTranslation({
   const observerRef = useRef<IntersectionObserver | null>(null)
   // Track active state in ref for use inside observer callback
   const isActiveRef = useRef(false)
+  const sessionCacheKey = getSessionCacheKey(entryId, targetLanguage)
 
   /**
    * Translate a batch of visible blocks and insert translation lines.
@@ -146,6 +165,7 @@ export function useViewportTranslation({
           uncached.forEach((text, i) => {
             cacheRef.current.set(text, response.translations[i])
           })
+          SESSION_TRANSLATION_CACHE.set(sessionCacheKey, new Map(cacheRef.current))
         } catch (err) {
           const msg = err instanceof Error ? err.message : 'Translation failed'
           setError(msg)
@@ -183,7 +203,7 @@ export function useViewportTranslation({
 
       setIsTranslating(false)
     },
-    [targetLanguage, entryId],
+    [targetLanguage, entryId, sessionCacheKey],
   )
 
   /**
@@ -193,15 +213,7 @@ export function useViewportTranslation({
     if (!contentRef.current || !scrollContainerRef.current) return
 
     // Find all translatable block elements
-    const blocks: Element[] = []
-    for (const tagName of TRANSLATABLE_BLOCKS) {
-      const elements = contentRef.current.querySelectorAll(tagName.toLowerCase())
-      elements.forEach((el) => {
-        if (!hasSkipAncestor(el) && el.textContent?.trim()) {
-          blocks.push(el)
-        }
-      })
-    }
+    const blocks = collectTranslatableBlocks(contentRef.current)
 
     if (blocks.length === 0) return
 
@@ -238,6 +250,48 @@ export function useViewportTranslation({
     observerRef.current = observer
     blocks.forEach((block) => observer.observe(block))
   }, [contentRef, scrollContainerRef, translateBlocks])
+
+  /**
+   * Apply fully-cached translations immediately to avoid original-text flash.
+   * Returns number of blocks updated.
+   */
+  const applyCachedTranslationsImmediately = useCallback((): number => {
+    if (!contentRef.current || cacheRef.current.size === 0) return 0
+
+    const blocks = collectTranslatableBlocks(contentRef.current)
+    let applied = 0
+
+    for (const block of blocks) {
+      if (block.hasAttribute(PROCESSED_ATTR) || pendingBlocksRef.current.has(block)) continue
+      if (hasSkipAncestor(block)) continue
+
+      const text = block.textContent?.trim()
+      if (!text) continue
+      const sentences = splitIntoSentences(text)
+      if (sentences.length === 0) continue
+
+      const translations = sentences.map((sentence) => cacheRef.current.get(sentence)?.trim() ?? '')
+      const allCached = translations.every((translated) => translated.length > 0)
+      if (!allCached) continue
+
+      if (!block.hasAttribute(ORIGINAL_HTML_ATTR)) {
+        block.setAttribute(ORIGINAL_HTML_ATTR, block.innerHTML)
+      }
+
+      let html = ''
+      for (let i = 0; i < sentences.length; i += 1) {
+        html += `<span class="glean-original-sentence">${escapeHtml(sentences[i])}</span>`
+        html += `<span class="glean-translated-sentence">${escapeHtml(translations[i])}</span>`
+      }
+
+      block.innerHTML = html
+      block.classList.add(BILINGUAL_ACTIVE_CLASS)
+      block.setAttribute(PROCESSED_ATTR, 'true')
+      applied += 1
+    }
+
+    return applied
+  }, [contentRef])
 
   /**
    * Restore all translated blocks to their original HTML.
@@ -318,23 +372,48 @@ export function useViewportTranslation({
     }
   }, [activate, deactivate])
 
-  // Set up observer when activated (with delay for useContentRenderer)
-  useEffect(() => {
+  // Set up observer when activated.
+  // If persisted cache exists, apply cached translations first to avoid flash.
+  useLayoutEffect(() => {
     if (!isActive) return
 
-    // Wait for useContentRenderer to finish (syntax highlighting, gallery)
-    const timer = setTimeout(() => {
-      setupObserver()
-    }, 150)
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    const hasPersistedCache = cacheRef.current.size > 0
+
+    const initialize = () => {
+      if (hasPersistedCache) {
+        let attempts = 0
+        const tryApply = () => {
+          const applied = applyCachedTranslationsImmediately()
+          if (applied === 0 && attempts < 8) {
+            attempts += 1
+            retryTimer = setTimeout(tryApply, 30)
+            return
+          }
+          setupObserver()
+        }
+        tryApply()
+        return
+      }
+
+      // Wait for useContentRenderer to finish (syntax highlighting, gallery)
+      retryTimer = setTimeout(() => {
+        setupObserver()
+      }, 150)
+    }
+
+    initialize()
 
     return () => {
-      clearTimeout(timer)
+      if (retryTimer) {
+        clearTimeout(retryTimer)
+      }
       if (observerRef.current) {
         observerRef.current.disconnect()
         observerRef.current = null
       }
     }
-  }, [isActive, setupObserver])
+  }, [isActive, setupObserver, applyCachedTranslationsImmediately])
 
   // Load cached sentence translations from DB when entry/language changes.
   // If cache exists, auto-enable translation display.
@@ -356,13 +435,21 @@ export function useViewportTranslation({
     pendingBlocksRef.current.clear()
     cacheRef.current.clear()
 
+    const sessionCached = SESSION_TRANSLATION_CACHE.get(sessionCacheKey)
+    if (sessionCached && sessionCached.size > 0) {
+      cacheRef.current = new Map(sessionCached)
+      setIsActive(true)
+      isActiveRef.current = true
+    }
+
     const loadPersisted = async () => {
       try {
         const response = await entryService.getParagraphTranslations(entryId, targetLanguage)
         if (cancelled) return
         const entries = Object.entries(response.translations ?? {})
-        cacheRef.current = new Map(entries)
         if (entries.length > 0) {
+          cacheRef.current = new Map(entries)
+          SESSION_TRANSLATION_CACHE.set(sessionCacheKey, new Map(cacheRef.current))
           setIsActive(true)
           isActiveRef.current = true
         }
@@ -377,7 +464,7 @@ export function useViewportTranslation({
     return () => {
       cancelled = true
     }
-  }, [entryId, targetLanguage, removeTranslationElements])
+  }, [entryId, targetLanguage, removeTranslationElements, sessionCacheKey])
 
   return {
     isActive,

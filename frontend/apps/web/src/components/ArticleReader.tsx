@@ -281,6 +281,9 @@ export function ArticleReader({
   const [showOriginalInline, setShowOriginalInline] = useState(false)
   const [iframeStatus, setIframeStatus] = useState<'idle' | 'loading' | 'loaded' | 'blocked'>('idle')
   const iframeTimeoutRef = useRef<number | null>(null)
+  const iframeStatusRef = useRef<'idle' | 'loading' | 'loaded' | 'blocked'>('idle')
+  const iframeFallbackOpenedRef = useRef(false)
+  const [iframeAutoOpened, setIframeAutoOpened] = useState(false)
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
@@ -325,6 +328,9 @@ export function ArticleReader({
     setHasOutline(false)
     setShowOriginalInline(false)
     setIframeStatus('idle')
+    iframeStatusRef.current = 'idle'
+    iframeFallbackOpenedRef.current = false
+    setIframeAutoOpened(false)
   }, [entry.id])
 
   const clearIframeTimeout = useCallback(() => {
@@ -340,6 +346,10 @@ export function ArticleReader({
     },
     [clearIframeTimeout]
   )
+
+  useEffect(() => {
+    iframeStatusRef.current = iframeStatus
+  }, [iframeStatus])
 
   // Animation triggers for action buttons
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')
@@ -396,34 +406,54 @@ export function ArticleReader({
     }
   }
 
+  const handleOpenExternal = useCallback(() => {
+    window.open(entry.url, '_blank', 'noopener,noreferrer')
+  }, [entry.url])
+
+  const tryOpenExternalFallback = useCallback(() => {
+    if (iframeFallbackOpenedRef.current) return
+    iframeFallbackOpenedRef.current = true
+    const opened = window.open(entry.url, '_blank', 'noopener,noreferrer')
+    setIframeAutoOpened(Boolean(opened))
+  }, [entry.url])
+
   const handleOpenOriginalInline = () => {
     if (showOriginalInline) {
       clearIframeTimeout()
       setShowOriginalInline(false)
       setIframeStatus('idle')
+      iframeStatusRef.current = 'idle'
+      iframeFallbackOpenedRef.current = false
+      setIframeAutoOpened(false)
       return
     }
 
     setShowOriginalInline(true)
     setIframeStatus('loading')
+    iframeStatusRef.current = 'loading'
+    iframeFallbackOpenedRef.current = false
+    setIframeAutoOpened(false)
     clearIframeTimeout()
     iframeTimeoutRef.current = window.setTimeout(() => {
-      setIframeStatus((prev) => (prev === 'loading' ? 'blocked' : prev))
+      if (iframeStatusRef.current === 'loading') {
+        setIframeStatus('blocked')
+        iframeStatusRef.current = 'blocked'
+        tryOpenExternalFallback()
+      }
     }, 4500)
   }
 
   const handleIframeLoaded = () => {
     clearIframeTimeout()
     setIframeStatus('loaded')
+    iframeStatusRef.current = 'loaded'
   }
 
   const handleIframeError = () => {
     clearIframeTimeout()
     setIframeStatus('blocked')
-  }
-
-  const handleOpenExternal = () => {
-    window.open(entry.url, '_blank', 'noopener,noreferrer')
+    iframeStatusRef.current = 'blocked'
+    tryOpenExternalFallback()
   }
 
   return (
@@ -670,7 +700,9 @@ export function ArticleReader({
                     <div className="flex items-center justify-between gap-2">
                       <span>
                         {iframeStatus === 'blocked'
-                          ? t('actions.openOriginalBlocked')
+                          ? iframeAutoOpened
+                            ? t('actions.openOriginalAutoOpened')
+                            : t('actions.openOriginalBlocked')
                           : t('actions.openOriginalLoading')}
                       </span>
                       {iframeStatus === 'blocked' && (
@@ -685,7 +717,11 @@ export function ArticleReader({
                 <iframe
                   title={entry.title || 'Original article'}
                   src={entry.url}
-                  className="border-border h-[70vh] w-full rounded-xl border"
+                  className={`border-border w-full rounded-xl border ${
+                    isMobile
+                      ? 'h-[calc(100dvh-11rem)] min-h-[26rem]'
+                      : 'h-[calc(100dvh-14rem)] min-h-[32rem]'
+                  }`}
                   loading="lazy"
                   onLoad={handleIframeLoaded}
                   onError={handleIframeError}

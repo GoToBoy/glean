@@ -120,6 +120,7 @@ export function Layout() {
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
+  const isCreatingFolderRef = useRef(false)
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
   const [createFolderType, setCreateFolderType] = useState<'feed' | 'bookmark'>('feed')
 
@@ -278,8 +279,9 @@ export function Layout() {
   }
 
   const handleCreateFolder = async () => {
-    if (!newFolderName.trim()) return
+    if (!newFolderName.trim() || isCreatingFolderRef.current) return
 
+    isCreatingFolderRef.current = true
     setIsCreatingFolder(true)
     try {
       await createFolder({
@@ -291,6 +293,7 @@ export function Layout() {
       setIsCreateFolderOpen(false)
       setCreateFolderParentId(null)
     } finally {
+      isCreatingFolderRef.current = false
       setIsCreatingFolder(false)
     }
   }
