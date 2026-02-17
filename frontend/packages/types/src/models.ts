@@ -47,9 +47,9 @@ export interface UserUpdateRequest {
 
 /** RSS feed status */
 export enum FeedStatus {
-  ACTIVE = 'ACTIVE',
-  ERROR = 'ERROR',
-  PAUSED = 'PAUSED',
+  ACTIVE = 'active',
+  ERROR = 'error',
+  DISABLED = 'disabled',
 }
 
 /** RSS feed */

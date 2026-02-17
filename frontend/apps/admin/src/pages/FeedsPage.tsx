@@ -37,7 +37,7 @@ import {
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
 
-type FeedStatus = 'all' | 'active' | 'inactive' | 'error'
+type FeedStatus = 'all' | 'active' | 'disabled' | 'error'
 
 /**
  * Feed management page.
@@ -84,8 +84,11 @@ export default function FeedsPage() {
     await resetErrorMutation.mutateAsync(feedId)
   }
 
-  const handleToggleStatus = async (feedId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
+  const handleToggleStatus = async (
+    feedId: string,
+    currentStatus: 'active' | 'error' | 'disabled'
+  ) => {
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active'
     setPendingFeedId(feedId)
     try {
       await updateFeedMutation.mutateAsync({ feedId, data: { status: newStatus } })
@@ -157,7 +160,7 @@ export default function FeedsPage() {
   const statusFilters: { value: FeedStatus; label: string }[] = [
     { value: 'all', label: t('admin:feeds.status.all') },
     { value: 'active', label: t('admin:feeds.status.active') },
-    { value: 'inactive', label: t('admin:feeds.status.inactive') },
+    { value: 'disabled', label: t('admin:feeds.status.inactive') },
     { value: 'error', label: t('admin:feeds.status.error') },
   ]
 

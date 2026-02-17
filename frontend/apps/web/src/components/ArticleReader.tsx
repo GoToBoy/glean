@@ -605,183 +605,185 @@ export function ArticleReader({
 
       {/* Content with Outline */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Scrollable content area - hide scrollbar for cleaner reading */}
-        <div
-          ref={scrollContainerRef}
-          className={`hide-scrollbar reader-pan-y no-horizontal-overscroll flex-1 overflow-y-auto ${
-            isMobile ? 'pt-14 pb-16' : ''
-          }`}
-          onTouchStart={closeGestureHandlers.onTouchStart}
-          onTouchMove={closeGestureHandlers.onTouchMove}
-          onTouchEnd={closeGestureHandlers.onTouchEnd}
-        >
-          <div
-            className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
-          >
-            {/* Mobile: Author and date at top of content */}
-            {isMobile && (entry.author || entry.published_at) && (
-              <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
-                {entry.author && <span className="font-medium">{entry.author}</span>}
-                {entry.author && entry.published_at && <span>·</span>}
-                {entry.published_at && (
-                  <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
-                )}
-              </div>
-            )}
+        {showOriginalInline ? (
+          <div className={`relative flex-1 ${isMobile ? 'pt-14 pb-14' : ''}`}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenExternal}
+              aria-label={t('actions.openExternally')}
+              title={t('actions.openExternally')}
+              className="group bg-background/90 border-border absolute top-3 right-3 z-20 h-8 w-8 px-0 backdrop-blur-sm transition-all hover:w-auto hover:px-2"
+            >
+              <ExternalLink className="h-4 w-4" />
+              <span className="max-w-0 overflow-hidden opacity-0 transition-all group-hover:ml-1 group-hover:max-w-40 group-hover:opacity-100">
+                {t('actions.openExternally')}
+              </span>
+            </Button>
 
-            {/* Sentence translation banner */}
-            {showTranslation && (
-              <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                <span className="text-muted-foreground text-xs">
-                  {t('translation.sentenceMode')}
-                  {isTranslating && (
-                    <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
-                  )}
-                </span>
-                <button
-                  onClick={toggleTranslation}
-                  className="text-primary text-xs font-medium hover:underline"
-                >
-                  {t('translation.hideTranslation')}
-                </button>
-              </div>
-            )}
-
-            {translationError && (
-              <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                <span className="text-destructive text-xs">{t('translation.failed')}</span>
-                <button
-                  onClick={activateTranslation}
-                  className="text-primary text-xs font-medium hover:underline"
-                >
-                  {t('translation.retry')}
-                </button>
-              </div>
-            )}
-
-            {showOriginalInline ? (
-              <div className="relative space-y-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenExternal}
-                  aria-label={t('actions.openExternally')}
-                  title={t('actions.openExternally')}
-                  className="group bg-background/90 border-border absolute top-2 right-2 z-10 h-8 w-8 px-0 backdrop-blur-sm transition-all hover:w-auto hover:px-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  <span className="max-w-0 overflow-hidden opacity-0 transition-all group-hover:ml-1 group-hover:max-w-40 group-hover:opacity-100">
-                    {t('actions.openExternally')}
+            {(iframeStatus === 'loading' || iframeStatus === 'blocked') && (
+              <div
+                className={`absolute top-3 left-3 right-14 z-20 rounded-lg border px-4 py-2 text-sm ${
+                  iframeStatus === 'blocked'
+                    ? 'border-destructive/30 bg-destructive/5 text-destructive'
+                    : 'border-primary/20 bg-primary/5 text-muted-foreground'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span>
+                    {iframeStatus === 'blocked'
+                      ? iframeAutoOpened
+                        ? t('actions.openOriginalAutoOpened')
+                        : t('actions.openOriginalBlocked')
+                      : t('actions.openOriginalLoading')}
                   </span>
-                </Button>
-                {(iframeStatus === 'loading' || iframeStatus === 'blocked') && (
-                  <div
-                    className={`rounded-lg border px-4 py-2 text-sm ${
-                      iframeStatus === 'blocked'
-                        ? 'border-destructive/30 bg-destructive/5 text-destructive'
-                        : 'border-primary/20 bg-primary/5 text-muted-foreground'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span>
-                        {iframeStatus === 'blocked'
-                          ? iframeAutoOpened
-                            ? t('actions.openOriginalAutoOpened')
-                            : t('actions.openOriginalBlocked')
-                          : t('actions.openOriginalLoading')}
-                      </span>
-                      {iframeStatus === 'blocked' && (
-                        <Button variant="outline" size="sm" onClick={handleOpenExternal}>
-                          <ExternalLink className="h-4 w-4" />
-                          <span>{t('actions.openExternally')}</span>
-                        </Button>
+                  {iframeStatus === 'blocked' && (
+                    <Button variant="outline" size="sm" onClick={handleOpenExternal}>
+                      <ExternalLink className="h-4 w-4" />
+                      <span>{t('actions.openExternally')}</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <iframe
+              title={entry.title || 'Original article'}
+              src={entry.url}
+              className="h-full w-full border-0"
+              loading="lazy"
+              onLoad={handleIframeLoaded}
+              onError={handleIframeError}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Scrollable content area - hide scrollbar for cleaner reading */}
+            <div
+              ref={scrollContainerRef}
+              className={`hide-scrollbar reader-pan-y no-horizontal-overscroll flex-1 overflow-y-auto ${
+                isMobile ? 'pt-14 pb-16' : ''
+              }`}
+              onTouchStart={closeGestureHandlers.onTouchStart}
+              onTouchMove={closeGestureHandlers.onTouchMove}
+              onTouchEnd={closeGestureHandlers.onTouchEnd}
+            >
+              <div
+                className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
+              >
+                {/* Mobile: Author and date at top of content */}
+                {isMobile && (entry.author || entry.published_at) && (
+                  <div className="text-muted-foreground mb-4 flex items-center gap-2 text-xs">
+                    {entry.author && <span className="font-medium">{entry.author}</span>}
+                    {entry.author && entry.published_at && <span>·</span>}
+                    {entry.published_at && (
+                      <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
+                    )}
+                  </div>
+                )}
+
+                {/* Sentence translation banner */}
+                {showTranslation && (
+                  <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                    <span className="text-muted-foreground text-xs">
+                      {t('translation.sentenceMode')}
+                      {isTranslating && (
+                        <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
                       )}
+                    </span>
+                    <button
+                      onClick={toggleTranslation}
+                      className="text-primary text-xs font-medium hover:underline"
+                    >
+                      {t('translation.hideTranslation')}
+                    </button>
+                  </div>
+                )}
+
+                {translationError && (
+                  <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
+                    <span className="text-destructive text-xs">{t('translation.failed')}</span>
+                    <button
+                      onClick={activateTranslation}
+                      className="text-primary text-xs font-medium hover:underline"
+                    >
+                      {t('translation.retry')}
+                    </button>
+                  </div>
+                )}
+
+                {displayContent ? (
+                  <article
+                    ref={contentRef}
+                    className="prose prose-lg font-reading max-w-none"
+                    dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <p className="text-muted-foreground italic">{t('article.noContent')}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-4"
+                      render={(props) => (
+                        <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
+                      )}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                      {t('article.viewOriginal')}
+                    </Button>
+                  </div>
+                )}
+
+                {showPrompt && (
+                  <div className="border-border bg-card mt-6 rounded-xl border p-4">
+                    <div className="mb-3 flex items-start justify-between gap-3">
+                      <p className="text-foreground text-sm font-medium">{t('feedback.title')}</p>
+                      <button
+                        onClick={dismissPrompt}
+                        className="text-muted-foreground hover:text-foreground text-xs"
+                      >
+                        {t('feedback.later')}
+                      </button>
+                    </div>
+                    <p className="text-muted-foreground mb-3 text-xs">{t('feedback.description')}</p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePromptFeedback(true)}
+                        disabled={isSubmittingFeedback}
+                      >
+                        <ThumbsUp className="h-4 w-4" />
+                        {t('actions.like')}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handlePromptFeedback(false)}
+                        disabled={isSubmittingFeedback}
+                      >
+                        <ThumbsDown className="h-4 w-4" />
+                        {t('actions.dislike')}
+                      </Button>
                     </div>
                   </div>
                 )}
-                <iframe
-                  title={entry.title || 'Original article'}
-                  src={entry.url}
-                  className={`border-border w-full rounded-xl border ${
-                    isMobile
-                      ? 'h-[calc(100dvh-11rem)] min-h-[26rem]'
-                      : 'h-[calc(100dvh-14rem)] min-h-[32rem]'
-                  }`}
-                  loading="lazy"
-                  onLoad={handleIframeLoaded}
-                  onError={handleIframeError}
+              </div>
+            </div>
+
+            {/* Desktop Outline - Sidebar that only takes space when there are headings */}
+            {!isMobile && (entry.content || entry.summary) && (
+              <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
+                <ArticleOutline
+                  contentRef={contentRef}
+                  scrollContainerRef={scrollContainerRef}
+                  isMobile={false}
+                  onHasHeadings={setHasOutline}
                 />
               </div>
-            ) : displayContent ? (
-              <article
-                ref={contentRef}
-                className="prose prose-lg font-reading max-w-none"
-                dangerouslySetInnerHTML={{ __html: processHtmlContent(displayContent) }}
-              />
-            ) : (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-muted-foreground italic">{t('article.noContent')}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  render={(props) => (
-                    <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
-                  )}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  {t('article.viewOriginal')}
-                </Button>
-              </div>
             )}
-
-            {showPrompt && (
-              <div className="border-border bg-card mt-6 rounded-xl border p-4">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <p className="text-foreground text-sm font-medium">{t('feedback.title')}</p>
-                  <button
-                    onClick={dismissPrompt}
-                    className="text-muted-foreground hover:text-foreground text-xs"
-                  >
-                    {t('feedback.later')}
-                  </button>
-                </div>
-                <p className="text-muted-foreground mb-3 text-xs">{t('feedback.description')}</p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePromptFeedback(true)}
-                    disabled={isSubmittingFeedback}
-                  >
-                    <ThumbsUp className="h-4 w-4" />
-                    {t('actions.like')}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handlePromptFeedback(false)}
-                    disabled={isSubmittingFeedback}
-                  >
-                    <ThumbsDown className="h-4 w-4" />
-                    {t('actions.dislike')}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Desktop Outline - Sidebar that only takes space when there are headings */}
-        {!isMobile && (entry.content || entry.summary) && (
-          <div className={`hidden flex-col xl:flex ${hasOutline ? 'w-52 shrink-0' : 'w-0'}`}>
-            <ArticleOutline
-              contentRef={contentRef}
-              scrollContainerRef={scrollContainerRef}
-              isMobile={false}
-              onHasHeadings={setHasOutline}
-            />
-          </div>
+          </>
         )}
       </div>
 

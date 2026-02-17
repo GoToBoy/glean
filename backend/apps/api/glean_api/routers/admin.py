@@ -6,7 +6,7 @@ Provides endpoints for administrative operations.
 
 from datetime import UTC, datetime, timedelta
 from math import ceil
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -410,7 +410,9 @@ async def list_feeds(
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
-    status_filter: str | None = Query(None, alias="status", description="Filter by status"),
+    status_filter: Literal["active", "error", "disabled", "inactive"] | None = Query(
+        None, alias="status", description="Filter by status"
+    ),
     search: str | None = Query(None, description="Search in title or URL"),
     sort: str = Query("created_at", description="Sort field"),
     order: str = Query("desc", description="Sort order"),
@@ -431,14 +433,17 @@ async def list_feeds(
     Returns:
         Paginated feed list.
     """
-    feeds, total = await admin_service.list_feeds(
-        page=page,
-        per_page=per_page,
-        status=status_filter,
-        search=search,
-        sort=sort,
-        order=order,
-    )
+    try:
+        feeds, total = await admin_service.list_feeds(
+            page=page,
+            per_page=per_page,
+            status=status_filter,
+            search=search,
+            sort=sort,
+            order=order,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     return AdminFeedListResponse(
         items=[AdminFeedListItem(**feed) for feed in feeds],
@@ -499,9 +504,12 @@ async def update_feed(
     Raises:
         HTTPException: If feed not found.
     """
-    feed = await admin_service.update_feed(
-        feed_id, url=request.url, title=request.title, status=request.status
-    )
+    try:
+        feed = await admin_service.update_feed(
+            feed_id, url=request.url, title=request.title, status=request.status
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
     if not feed:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")

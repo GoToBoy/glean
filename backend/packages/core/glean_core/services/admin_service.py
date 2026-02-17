@@ -34,6 +34,18 @@ class AdminService:
         self.session = session
         self.system_config = SystemConfigService(session)
 
+    @staticmethod
+    def _normalize_feed_status(status: str) -> FeedStatus:
+        """
+        Normalize admin-provided feed status to FeedStatus enum.
+
+        Accepts legacy alias "inactive" and case-insensitive values.
+        """
+        normalized = status.strip().lower()
+        if normalized == "inactive":
+            normalized = FeedStatus.DISABLED.value
+        return FeedStatus(normalized)
+
     async def authenticate_admin(self, username: str, password: str) -> AdminUser | None:
         """
         Authenticate admin user.
@@ -300,8 +312,9 @@ class AdminService:
 
         # Apply filters
         if status:
-            query = query.where(Feed.status == status)
-            count_query = count_query.where(Feed.status == status)
+            normalized_status = self._normalize_feed_status(status)
+            query = query.where(Feed.status == normalized_status)
+            count_query = count_query.where(Feed.status == normalized_status)
 
         if search:
             search_filter = Feed.title.ilike(f"%{search}%") | Feed.url.ilike(f"%{search}%")
@@ -417,7 +430,7 @@ class AdminService:
         if title is not None:
             feed.title = title
         if status is not None:
-            feed.status = FeedStatus(status)
+            feed.status = self._normalize_feed_status(status)
 
         await self.session.commit()
         await self.session.refresh(feed)

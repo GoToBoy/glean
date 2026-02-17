@@ -603,7 +603,7 @@ function SubscriptionRow({
   const updateMutation = useUpdateSubscription()
 
   const title = subscription.custom_title || subscription.feed.title || subscription.feed.url
-  const hasError = subscription.feed.status === 'ERROR'
+  const hasError = subscription.feed.status === 'error'
 
   // Flatten folders for move submenu
   const flattenFolders = (

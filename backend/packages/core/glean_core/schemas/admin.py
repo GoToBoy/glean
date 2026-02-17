@@ -5,6 +5,7 @@ Pydantic models for admin API requests and responses.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -139,7 +140,7 @@ class AdminFeedUpdateRequest(BaseModel):
 
     url: str | None = None
     title: str | None = None
-    status: str | None = None
+    status: Literal["active", "error", "disabled", "inactive"] | None = None
 
 
 class AdminBatchFeedRequest(BaseModel):

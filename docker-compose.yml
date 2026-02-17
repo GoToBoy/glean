@@ -83,13 +83,14 @@ services:
       MILVUS_PORT: ${MILVUS_PORT:-19530}
       # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_FILE: ${LOG_FILE:-/app/logs/glean-api.log}
+      LOG_FILE: ${API_LOG_FILE:-/app/logs/glean-api.log}
+      LOG_ERROR_FILE: ${API_LOG_ERROR_FILE:-/app/logs/glean-api.error.log}
       LOG_ROTATION: ${LOG_ROTATION:-100 MB}
       LOG_RETENTION: ${LOG_RETENTION:-30 days}
       LOG_COMPRESSION: ${LOG_COMPRESSION:-gz}
       LOG_SERIALIZE: ${LOG_SERIALIZE:-false}
     volumes:
-      - glean_logs:/app/logs
+      - ${LOGS_DIR:-./logs}:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -121,13 +122,14 @@ services:
       MILVUS_PORT: ${MILVUS_PORT:-19530}
       # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_FILE: ${LOG_FILE:-/app/logs/glean-worker.log}
+      LOG_FILE: ${WORKER_LOG_FILE:-/app/logs/glean-worker.log}
+      LOG_ERROR_FILE: ${WORKER_LOG_ERROR_FILE:-/app/logs/glean-worker.error.log}
       LOG_ROTATION: ${LOG_ROTATION:-100 MB}
       LOG_RETENTION: ${LOG_RETENTION:-30 days}
       LOG_COMPRESSION: ${LOG_COMPRESSION:-gz}
       LOG_SERIALIZE: ${LOG_SERIALIZE:-false}
     volumes:
-      - glean_logs:/app/logs
+      - ${LOGS_DIR:-./logs}:/app/logs
     depends_on:
       postgres:
         condition: service_healthy
@@ -232,7 +234,6 @@ services:
 volumes:
   postgres_data:
   redis_data:
-  glean_logs:
   milvus_etcd_data:
   milvus_minio_data:
   milvus_data:

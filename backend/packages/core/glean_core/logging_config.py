@@ -15,6 +15,7 @@ from loguru import logger
 def setup_logging(
     log_level: str = "INFO",
     log_file: str | None = None,
+    error_log_file: str | None = None,
     log_format: str | None = None,
     rotation: str = "100 MB",
     retention: str = "30 days",
@@ -27,6 +28,7 @@ def setup_logging(
     Args:
         log_level: Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_file: Log file path, if None only output to console
+        error_log_file: Explicit error log file path, if None auto-derived from log_file
         log_format: Log format, if None use default format
         rotation: Log rotation strategy
         retention: Log retention time
@@ -99,10 +101,15 @@ def setup_logging(
             )
 
         # Error log separate file
-        error_log_file = log_path.parent / f"{log_path.stem}_error{log_path.suffix}"
+        resolved_error_log_file = (
+            Path(error_log_file)
+            if error_log_file
+            else log_path.parent / f"{log_path.stem}_error{log_path.suffix}"
+        )
+        resolved_error_log_file.parent.mkdir(parents=True, exist_ok=True)
         if log_format is not None:
             logger.add(
-                str(error_log_file),
+                str(resolved_error_log_file),
                 format=log_format,
                 level="ERROR",
                 rotation=rotation,
@@ -114,7 +121,7 @@ def setup_logging(
             )
         else:
             logger.add(
-                str(error_log_file),
+                str(resolved_error_log_file),
                 level="ERROR",
                 rotation=rotation,
                 retention=retention,
@@ -132,6 +139,7 @@ def setup_logging_from_env() -> None:
     Environment Variables:
     - LOG_LEVEL: Log level (default: INFO)
     - LOG_FILE: Log file path (default: None)
+    - LOG_ERROR_FILE: Error log file path (default: derived from LOG_FILE)
     - LOG_FORMAT: Log format (default: use built-in format)
     - LOG_ROTATION: Log rotation strategy (default: 100 MB)
     - LOG_RETENTION: Log retention time (default: 30 days)
@@ -140,6 +148,7 @@ def setup_logging_from_env() -> None:
     """
     log_level = os.getenv("LOG_LEVEL", "INFO").upper()
     log_file = os.getenv("LOG_FILE")
+    error_log_file = os.getenv("LOG_ERROR_FILE")
     log_format = os.getenv("LOG_FORMAT")
     log_rotation = os.getenv("LOG_ROTATION", "100 MB")
     log_retention = os.getenv("LOG_RETENTION", "30 days")
@@ -149,6 +158,7 @@ def setup_logging_from_env() -> None:
     setup_logging(
         log_level=log_level,
         log_file=log_file,
+        error_log_file=error_log_file,
         log_format=log_format,
         rotation=log_rotation,
         retention=log_retention,

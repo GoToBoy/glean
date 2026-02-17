@@ -12,6 +12,19 @@ import { useCallback, useRef } from 'react'
 
 const SUBSCRIPTIONS_CACHE_KEY = 'glean_subscriptions_cache'
 const SUBSCRIPTIONS_ETAG_KEY = 'glean_subscriptions_etag'
+const ENTRIES_QUERY_KEY = ['entries'] as const
+
+function invalidateEntriesCache(queryClient: ReturnType<typeof useQueryClient>) {
+  // Feed refresh runs asynchronously in the worker queue.
+  // Invalidate now and again shortly after to pick up late-arriving entries.
+  queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY })
+  window.setTimeout(() => {
+    queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY })
+  }, 3000)
+  window.setTimeout(() => {
+    queryClient.invalidateQueries({ queryKey: ENTRIES_QUERY_KEY })
+  }, 10000)
+}
 
 function removeSubscriptionFromList(
   data: SubscriptionListResponse | undefined,
@@ -174,6 +187,7 @@ export function useDiscoverFeed() {
       // Clear cache and invalidate all subscription queries
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }
@@ -247,6 +261,7 @@ export function useDeleteSubscription() {
     onSuccess: () => {
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }
@@ -297,6 +312,7 @@ export function useBatchDeleteSubscriptions() {
     onSuccess: () => {
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }
@@ -310,8 +326,8 @@ export function useRefreshFeed() {
   return useMutation({
     mutationFn: (subscriptionId: string) => feedService.refreshFeed(subscriptionId),
     onSuccess: () => {
-      // Optionally invalidate queries to show updated feed data
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }
@@ -326,6 +342,7 @@ export function useRefreshAllFeeds() {
     mutationFn: () => feedService.refreshAllFeeds(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }
@@ -341,6 +358,7 @@ export function useImportOPML() {
     onSuccess: () => {
       clearSubscriptionCache()
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+      invalidateEntriesCache(queryClient)
     },
   })
 }

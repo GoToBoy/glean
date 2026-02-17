@@ -5,7 +5,7 @@ interface Feed {
   id: string
   url: string
   title: string
-  status: string
+  status: 'active' | 'error' | 'disabled'
   subscriber_count: number
   last_fetched_at: string | null
   error_count: number
@@ -30,7 +30,7 @@ interface FeedListResponse {
 interface FeedListParams {
   page?: number
   per_page?: number
-  status?: string
+  status?: 'active' | 'error' | 'disabled'
   search?: string
   sort?: string
   order?: string
@@ -81,7 +81,7 @@ export function useUpdateFeed() {
       data,
     }: {
       feedId: string
-      data: { url?: string; title?: string; status?: string }
+      data: { url?: string; title?: string; status?: 'active' | 'error' | 'disabled' }
     }) => {
       const response = await api.patch(`/feeds/${feedId}`, data)
       return response.data
