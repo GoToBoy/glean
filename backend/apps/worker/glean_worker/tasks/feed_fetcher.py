@@ -217,6 +217,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 "Failed to fetch feed",
                 extra={"feed_id": feed_id},
             )
+            await session.rollback()
             # Update feed error status
             stmt = select(Feed).where(Feed.id == feed_id)
             result = await session.execute(stmt)

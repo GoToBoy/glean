@@ -4,7 +4,7 @@ Entry model definition.
 This module defines the Entry model for storing feed entries (articles).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -54,6 +54,12 @@ class Entry(Base, TimestampMixin):
     # Metadata
     guid: Mapped[str | None] = mapped_column(String(500), index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    ingested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        index=True,
+        default=lambda: datetime.now(UTC),
+    )
 
     # M3: Embedding status
     embedding_status: Mapped[str] = mapped_column(
