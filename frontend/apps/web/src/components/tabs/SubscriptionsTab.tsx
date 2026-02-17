@@ -3,11 +3,13 @@ import {
   useSubscriptions,
   useDeleteSubscription,
   useRefreshFeed,
+  useRefreshAllFeeds,
+  useRefreshStatus,
   useImportOPML,
   useExportOPML,
 } from '../../hooks/useSubscriptions'
 import { useFolderStore } from '../../stores/folderStore'
-import type { Subscription, SubscriptionListResponse } from '@glean/types'
+import type { RefreshStatusItem, Subscription, SubscriptionListResponse } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
@@ -32,7 +34,19 @@ import {
   Download,
   ChevronLeft,
   ChevronRight,
+  Loader2,
 } from 'lucide-react'
+
+type FeedRefreshState = {
+  jobId: string
+  status: string
+  newEntries: number | null
+  message: string | null
+  lastFetchedAt: string | null
+  errorCount: number
+  fetchErrorMessage: string | null
+  updatedAt: string
+}
 
 /**
  * Simple Manage Feeds tab component for Settings.
@@ -44,12 +58,15 @@ export function SubscriptionsTab() {
   const { fetchFolders } = useFolderStore()
   const deleteMutation = useDeleteSubscription()
   const refreshMutation = useRefreshFeed()
+  const refreshAllMutation = useRefreshAllFeeds()
+  const refreshStatusMutation = useRefreshStatus()
   const importMutation = useImportOPML()
   const exportMutation = useExportOPML()
 
   // State
   const [searchQuery, setSearchQuery] = useState('')
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
+  const [feedRefreshState, setFeedRefreshState] = useState<Record<string, FeedRefreshState>>({})
   const [page, setPage] = useState(1)
   const [perPage] = useState(10)
 
@@ -80,10 +97,44 @@ export function SubscriptionsTab() {
   const handleRefresh = async (id: string) => {
     setRefreshingId(id)
     try {
-      await refreshMutation.mutateAsync(id)
+      const result = await refreshMutation.mutateAsync(id)
+      setFeedRefreshState((prev) => ({
+        ...prev,
+        [result.feed_id]: {
+          jobId: result.job_id,
+          status: 'queued',
+          newEntries: null,
+          message: null,
+          lastFetchedAt: null,
+          errorCount: 0,
+          fetchErrorMessage: null,
+          updatedAt: new Date().toISOString(),
+        },
+      }))
     } finally {
       setRefreshingId(null)
     }
+  }
+
+  const handleRefreshAll = async () => {
+    const result = await refreshAllMutation.mutateAsync()
+    const now = new Date().toISOString()
+    setFeedRefreshState((prev) => {
+      const next = { ...prev }
+      for (const job of result.jobs) {
+        next[job.feed_id] = {
+          jobId: job.job_id,
+          status: 'queued',
+          newEntries: null,
+          message: null,
+          lastFetchedAt: null,
+          errorCount: 0,
+          fetchErrorMessage: null,
+          updatedAt: now,
+        }
+      }
+      return next
+    })
   }
 
   const handleImport = () => {
@@ -106,11 +157,78 @@ export function SubscriptionsTab() {
     exportMutation.mutate()
   }
 
+  const upsertRefreshStates = (items: RefreshStatusItem[]) => {
+    const now = new Date().toISOString()
+    setFeedRefreshState((prev) => {
+      const next = { ...prev }
+      for (const item of items) {
+        next[item.feed_id] = {
+          jobId: item.job_id,
+          status: item.status,
+          newEntries: item.new_entries,
+          message: item.message,
+          lastFetchedAt: item.last_fetched_at,
+          errorCount: item.error_count,
+          fetchErrorMessage: item.fetch_error_message,
+          updatedAt: now,
+        }
+      }
+      return next
+    })
+  }
+
+  const isPendingRefreshStatus = (statusValue: string) =>
+    statusValue === 'queued' || statusValue === 'deferred' || statusValue === 'in_progress'
+
+  useEffect(() => {
+    const pendingItems = Object.entries(feedRefreshState)
+      .filter(([, state]) => isPendingRefreshStatus(state.status))
+      .map(([feedId, state]) => ({ feed_id: feedId, job_id: state.jobId }))
+
+    if (pendingItems.length === 0) {
+      return
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const statusResult = await refreshStatusMutation.mutateAsync({ items: pendingItems })
+        upsertRefreshStates(statusResult.items)
+      } catch {
+        // Keep current state if poll fails
+      }
+    }, 2000)
+
+    return () => window.clearInterval(timer)
+  }, [feedRefreshState, refreshStatusMutation])
+
   // Pagination calculations
   const totalItems = data?.total || 0
-  const totalPages = Math.ceil(totalItems / perPage)
+  const totalPages = Math.max(1, Math.ceil(totalItems / perPage))
   const hasNextPage = page < totalPages
   const hasPrevPage = page > 1
+
+  const pageItems: Array<number | 'ellipsis'> = (() => {
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+
+    const items: Array<number | 'ellipsis'> = [1]
+    const start = Math.max(2, page - 1)
+    const end = Math.min(totalPages - 1, page + 1)
+
+    if (start > 2) {
+      items.push('ellipsis')
+    }
+    for (let p = start; p <= end; p += 1) {
+      items.push(p)
+    }
+    if (end < totalPages - 1) {
+      items.push('ellipsis')
+    }
+
+    items.push(totalPages)
+    return items
+  })()
 
   const handlePrevPage = () => {
     if (hasPrevPage) {
@@ -125,9 +243,9 @@ export function SubscriptionsTab() {
   }
 
   return (
-    <div className="stagger-children w-full space-y-4 pb-6">
+    <div className="stagger-children flex h-full min-h-0 w-full flex-col gap-4">
       {/* Actions Bar */}
-      <div className="animate-fade-in flex w-full items-center justify-between gap-4">
+      <div className="animate-fade-in flex w-full shrink-0 items-center justify-between gap-4">
         <div className="relative flex-1 sm:max-w-48">
           <Search className="text-muted-foreground/50 pointer-events-none absolute top-1/2 left-2.5 z-10 h-4 w-4 -translate-y-1/2" />
           <input
@@ -140,6 +258,20 @@ export function SubscriptionsTab() {
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRefreshAll}
+            disabled={refreshAllMutation.isPending}
+            className="gap-1.5"
+          >
+            {refreshAllMutation.isPending ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4 shrink-0" />
+            )}
+            <span className="hidden sm:inline">Refresh All</span>
+          </Button>
           <Button
             variant="outline"
             size="sm"
@@ -173,9 +305,9 @@ export function SubscriptionsTab() {
       />
 
       {/* Subscriptions List */}
-      <div className="animate-fade-in border-border w-full overflow-hidden rounded-lg border">
+      <div className="animate-fade-in border-border flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border">
         {/* Header */}
-        <div className="bg-muted/50 border-border border-b px-4 py-3">
+        <div className="bg-muted/50 border-border shrink-0 border-b px-4 py-3">
           <span className="text-muted-foreground text-sm font-medium">
             {data
               ? t('manageFeeds.subscriptionCount', {
@@ -186,7 +318,7 @@ export function SubscriptionsTab() {
         </div>
 
         {/* List */}
-        <div className="divide-border divide-y">
+        <div className="divide-border min-h-0 flex-1 overflow-y-auto divide-y">
           {(() => {
             if (isLoading) {
               return Array.from({ length: 5 }, (_, i) => `skeleton-${i}`).map((key) => (
@@ -207,7 +339,34 @@ export function SubscriptionsTab() {
             }
 
             if (data?.items && data.items.length > 0) {
-              return data.items.map((subscription: Subscription) => (
+              return data.items.map((subscription: Subscription) => {
+                const refreshState = feedRefreshState[subscription.feed_id]
+                const isRefreshingRow =
+                  refreshState && isPendingRefreshStatus(refreshState.status)
+                const progressMap: Record<string, number> = {
+                  queued: 20,
+                  deferred: 40,
+                  in_progress: 65,
+                  complete: 100,
+                  not_found: 100,
+                }
+                const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
+                const statusLabelMap: Record<string, string> = {
+                  queued: 'Queued',
+                  deferred: 'Deferred',
+                  in_progress: 'Refreshing',
+                  complete: 'Completed',
+                  not_found: 'Not Found',
+                }
+                const statusLabel = refreshState
+                  ? statusLabelMap[refreshState.status] || refreshState.status
+                  : null
+                const rowLogMessage =
+                  refreshState?.message ||
+                  refreshState?.fetchErrorMessage ||
+                  subscription.feed.fetch_error_message
+
+                return (
                 <div
                   key={subscription.id}
                   className="hover:bg-muted/30 w-full p-4 transition-colors"
@@ -233,6 +392,34 @@ export function SubscriptionsTab() {
                         <p className="text-muted-foreground truncate text-sm">
                           {subscription.feed.url}
                         </p>
+                        {refreshState && (
+                          <div className="mt-2 space-y-1">
+                            <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                              <span>
+                                {statusLabel}
+                                {refreshState.newEntries !== null
+                                  ? ` · +${refreshState.newEntries} entries`
+                                  : ''}
+                              </span>
+                              <span>
+                                {new Date(
+                                  refreshState.lastFetchedAt || refreshState.updatedAt
+                                ).toLocaleString()}
+                              </span>
+                            </div>
+                            <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                              <div
+                                className="bg-primary h-full transition-all duration-300"
+                                style={{ width: `${progress}%` }}
+                              />
+                            </div>
+                            {rowLogMessage && (
+                              <p className="text-muted-foreground line-clamp-2 text-xs">
+                                Log: {rowLogMessage}
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
 
@@ -250,11 +437,11 @@ export function SubscriptionsTab() {
                         variant="ghost"
                         size="icon-sm"
                         onClick={() => handleRefresh(subscription.id)}
-                        disabled={refreshingId === subscription.id}
+                        disabled={refreshingId === subscription.id || isRefreshingRow}
                         title={t('manageFeeds.refreshFeed')}
                       >
                         <RefreshCw
-                          className={`h-4 w-4 ${refreshingId === subscription.id ? 'animate-spin' : ''}`}
+                          className={`h-4 w-4 ${refreshingId === subscription.id || isRefreshingRow ? 'animate-spin' : ''}`}
                         />
                       </Button>
 
@@ -286,7 +473,8 @@ export function SubscriptionsTab() {
                     </div>
                   </div>
                 </div>
-              ))
+                )
+              })
             }
 
             return (
@@ -318,7 +506,7 @@ export function SubscriptionsTab() {
 
         {/* Pagination */}
         {totalPages > 1 && (
-          <div className="border-border bg-muted/30 flex items-center justify-between border-t px-4 py-3">
+          <div className="border-border bg-muted/30 flex shrink-0 items-center justify-between border-t px-4 py-3">
             <div className="text-muted-foreground text-sm">
               {t('manageFeeds.pageInfo', {
                 page,
@@ -337,6 +525,24 @@ export function SubscriptionsTab() {
                 <ChevronLeft className="h-4 w-4" />
                 {t('manageFeeds.previous')}
               </Button>
+              {pageItems.map((item, index) =>
+                item === 'ellipsis' ? (
+                  <span key={`ellipsis-${index}`} className="text-muted-foreground px-1 text-sm">
+                    ...
+                  </span>
+                ) : (
+                  <Button
+                    key={item}
+                    variant={item === page ? 'default' : 'ghost'}
+                    size="sm"
+                    onClick={() => setPage(item)}
+                    disabled={isLoading}
+                    className="min-w-9 px-2"
+                  >
+                    {item}
+                  </Button>
+                )
+              )}
               <Button
                 variant="ghost"
                 size="sm"

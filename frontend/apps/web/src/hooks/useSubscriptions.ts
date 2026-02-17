@@ -7,6 +7,7 @@ import type {
   SubscriptionListParams,
   Subscription,
   SubscriptionListResponse,
+  RefreshStatusRequest,
 } from '@glean/types'
 import { useCallback, useRef } from 'react'
 
@@ -344,6 +345,15 @@ export function useRefreshAllFeeds() {
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
       invalidateEntriesCache(queryClient)
     },
+  })
+}
+
+/**
+ * Hook to query per-feed refresh job statuses.
+ */
+export function useRefreshStatus() {
+  return useMutation({
+    mutationFn: (data: RefreshStatusRequest) => feedService.getRefreshStatus(data),
   })
 }
 

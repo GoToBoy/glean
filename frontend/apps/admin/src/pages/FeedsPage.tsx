@@ -1,5 +1,13 @@
-import { useState } from 'react'
-import { useFeeds, useResetFeedError, useUpdateFeed, useDeleteFeed } from '../hooks/useFeeds'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  useFeeds,
+  useResetFeedError,
+  useUpdateFeed,
+  useDeleteFeed,
+  useRefreshFeedNow,
+  useRefreshAllFeedsNow,
+  useRefreshFeedStatus,
+} from '../hooks/useFeeds'
 import {
   Button,
   buttonVariants,
@@ -26,6 +34,7 @@ import {
   Play,
   Pause,
   RotateCcw,
+  RefreshCw,
   Trash2,
   Loader2,
   AlertCircle,
@@ -38,6 +47,17 @@ import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
 
 type FeedStatus = 'all' | 'active' | 'disabled' | 'error'
+
+type FeedRefreshState = {
+  jobId: string
+  status: string
+  newEntries: number | null
+  message: string | null
+  lastFetchedAt: string | null
+  errorCount: number
+  fetchErrorMessage: string | null
+  updatedAt: string
+}
 
 /**
  * Feed management page.
@@ -60,6 +80,7 @@ export default function FeedsPage() {
   const [sortOrder] = useState<'asc' | 'desc'>('desc')
   const [pendingFeedId, setPendingFeedId] = useState<string | null>(null)
   const [deleteConfirmFeedId, setDeleteConfirmFeedId] = useState<string | null>(null)
+  const [feedRefreshState, setFeedRefreshState] = useState<Record<string, FeedRefreshState>>({})
 
   const { data, isLoading, refetch } = useFeeds({
     page,
@@ -73,6 +94,9 @@ export default function FeedsPage() {
   const resetErrorMutation = useResetFeedError()
   const updateFeedMutation = useUpdateFeed()
   const deleteFeedMutation = useDeleteFeed()
+  const refreshFeedNowMutation = useRefreshFeedNow()
+  const refreshAllFeedsNowMutation = useRefreshAllFeedsNow()
+  const refreshFeedStatusMutation = useRefreshFeedStatus()
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -109,6 +133,114 @@ export default function FeedsPage() {
       setDeleteConfirmFeedId(null)
     }
   }
+
+  const isPendingRefreshStatus = (statusValue: string) =>
+    statusValue === 'queued' || statusValue === 'deferred' || statusValue === 'in_progress'
+
+  const upsertFeedRefreshStatus = (
+    items: Array<{
+      feed_id: string
+      job_id: string
+      status: string
+      new_entries: number | null
+      message: string | null
+      last_fetched_at: string | null
+      error_count: number
+      fetch_error_message: string | null
+    }>
+  ) => {
+    const nowIso = new Date().toISOString()
+    setFeedRefreshState((prev) => {
+      const next = { ...prev }
+      for (const item of items) {
+        next[item.feed_id] = {
+          jobId: item.job_id,
+          status: item.status,
+          newEntries: item.new_entries,
+          message: item.message,
+          lastFetchedAt: item.last_fetched_at,
+          errorCount: item.error_count,
+          fetchErrorMessage: item.fetch_error_message,
+          updatedAt: nowIso,
+        }
+      }
+      return next
+    })
+  }
+
+  const handleRefreshFeed = async (feedId: string) => {
+    const result = await refreshFeedNowMutation.mutateAsync(feedId)
+    setFeedRefreshState((prev) => ({
+      ...prev,
+      [result.feed_id]: {
+        jobId: result.job_id,
+        status: 'queued',
+        newEntries: null,
+        message: null,
+        lastFetchedAt: null,
+        errorCount: 0,
+        fetchErrorMessage: null,
+        updatedAt: new Date().toISOString(),
+      },
+    }))
+  }
+
+  const handleRefreshAllFeeds = async () => {
+    const result = await refreshAllFeedsNowMutation.mutateAsync()
+    const nowIso = new Date().toISOString()
+    setFeedRefreshState((prev) => {
+      const next = { ...prev }
+      for (const job of result.jobs) {
+        next[job.feed_id] = {
+          jobId: job.job_id,
+          status: 'queued',
+          newEntries: null,
+          message: null,
+          lastFetchedAt: null,
+          errorCount: 0,
+          fetchErrorMessage: null,
+          updatedAt: nowIso,
+        }
+      }
+      return next
+    })
+  }
+
+  useEffect(() => {
+    const pendingItems = Object.entries(feedRefreshState)
+      .filter(([, state]) => isPendingRefreshStatus(state.status))
+      .map(([feedId, state]) => ({ feed_id: feedId, job_id: state.jobId }))
+
+    if (pendingItems.length === 0) {
+      return
+    }
+
+    const timer = window.setInterval(async () => {
+      try {
+        const result = await refreshFeedStatusMutation.mutateAsync(pendingItems)
+        upsertFeedRefreshStatus(result.items)
+      } catch {
+        // Keep previous status on polling failures
+      }
+    }, 2000)
+
+    return () => window.clearInterval(timer)
+  }, [feedRefreshState, refreshFeedStatusMutation])
+
+  const pageItems: Array<number | 'ellipsis'> = useMemo(() => {
+    const totalPages = data?.total_pages ?? 1
+    if (totalPages <= 7) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1)
+    }
+    const items: Array<number | 'ellipsis'> = [1]
+    const start = Math.max(2, page - 1)
+    const end = Math.min(totalPages - 1, page + 1)
+    if (start > 2) items.push('ellipsis')
+    for (let p = start; p <= end; p += 1) items.push(p)
+    if (end < totalPages - 1) items.push('ellipsis')
+    items.push(totalPages)
+    return items
+  }, [data?.total_pages, page])
 
   const getStatusBadge = (status: string, errorCount: number, errorMessage?: string | null) => {
     if (errorCount > 0) {
@@ -177,9 +309,9 @@ export default function FeedsPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-8">
         {/* Filters */}
-        <div className="mb-6 flex flex-wrap items-center gap-4">
+        <div className="mb-6 flex shrink-0 flex-wrap items-center gap-4">
           {/* Search */}
           <form onSubmit={handleSearch} className="flex gap-2">
             <div className="relative">
@@ -227,11 +359,24 @@ export default function FeedsPage() {
               ))}
             </div>
           </div>
+
+          <Button
+            variant="outline"
+            onClick={handleRefreshAllFeeds}
+            disabled={refreshAllFeedsNowMutation.isPending}
+          >
+            {refreshAllFeedsNowMutation.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            {t('admin:feeds.refreshAll')}
+          </Button>
         </div>
 
         {/* Feeds table */}
-        <div className="border-border bg-card rounded-xl border shadow-sm">
-          <div className="overflow-x-auto">
+        <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm">
+          <div className="min-h-0 flex-1 overflow-auto">
             <table className="w-full">
               <thead>
                 <tr className="border-border bg-muted/50 border-b">
@@ -285,7 +430,31 @@ export default function FeedsPage() {
                     </tr>
                   ))
                 ) : data && data.items.length > 0 ? (
-                  data.items.map((feed) => (
+                  data.items.map((feed) => {
+                    const refreshState = feedRefreshState[feed.id]
+                    const isRefreshing = !!refreshState && isPendingRefreshStatus(refreshState.status)
+                    const progressMap: Record<string, number> = {
+                      queued: 20,
+                      deferred: 40,
+                      in_progress: 65,
+                      complete: 100,
+                      not_found: 100,
+                    }
+                    const statusLabelMap: Record<string, string> = {
+                      queued: t('admin:feeds.refreshStatus.queued'),
+                      deferred: t('admin:feeds.refreshStatus.deferred'),
+                      in_progress: t('admin:feeds.refreshStatus.refreshing'),
+                      complete: t('admin:feeds.refreshStatus.completed'),
+                      not_found: t('admin:feeds.refreshStatus.notFound'),
+                    }
+                    const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
+                    const rowLogMessage =
+                      refreshState?.message || refreshState?.fetchErrorMessage || feed.fetch_error_message
+                    const statusText = refreshState
+                      ? `${statusLabelMap[refreshState.status] ?? refreshState.status}${refreshState.newEntries !== null ? ` · +${refreshState.newEntries}` : ''}`
+                      : null
+
+                    return (
                     <tr key={feed.id} className="hover:bg-muted/50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-start gap-2">
@@ -302,6 +471,30 @@ export default function FeedsPage() {
                               {feed.url}
                               <ExternalLink className="h-3 w-3 flex-shrink-0" />
                             </a>
+                            {refreshState && (
+                              <div className="mt-2 space-y-1">
+                                <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                                  <span>{statusText}</span>
+                                  <span>
+                                    {format(
+                                      new Date(refreshState.lastFetchedAt || refreshState.updatedAt),
+                                      'MMM d, yyyy HH:mm:ss'
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
+                                  <div
+                                    className="bg-primary h-full transition-all duration-300"
+                                    style={{ width: `${progress}%` }}
+                                  />
+                                </div>
+                                {rowLogMessage && (
+                                  <p className="text-muted-foreground line-clamp-2 text-xs">
+                                    {t('admin:feeds.logLabel')}: {rowLogMessage}
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -341,6 +534,16 @@ export default function FeedsPage() {
                               )}
                             </Button>
                           )}
+                          {/* Refresh now */}
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => handleRefreshFeed(feed.id)}
+                            disabled={isRefreshing || refreshFeedNowMutation.isPending}
+                            title={t('admin:feeds.refreshNowTooltip')}
+                          >
+                            <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                          </Button>
                           {/* Toggle status button */}
                           <Button
                             size="icon"
@@ -374,7 +577,8 @@ export default function FeedsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 ) : (
                   <tr>
                     <td colSpan={6} className="px-6 py-12 text-center">
@@ -392,7 +596,7 @@ export default function FeedsPage() {
 
           {/* Pagination */}
           {data && data.total_pages > 1 && (
-            <div className="border-border flex items-center justify-between border-t px-6 py-4">
+            <div className="border-border flex shrink-0 items-center justify-between border-t px-6 py-4">
               <p className="text-muted-foreground text-sm">
                 {t('admin:feeds.pagination.page', {
                   page: data.page,
@@ -400,7 +604,7 @@ export default function FeedsPage() {
                   total: data.total,
                 })}
               </p>
-              <div className="flex gap-2">
+              <div className="flex items-center gap-2">
                 <Button
                   size="sm"
                   variant="outline"
@@ -409,6 +613,22 @@ export default function FeedsPage() {
                 >
                   {t('admin:feeds.pagination.previous')}
                 </Button>
+                {pageItems.map((item, index) =>
+                  item === 'ellipsis' ? (
+                    <span key={`ellipsis-${index}`} className="text-muted-foreground px-1 text-sm">
+                      ...
+                    </span>
+                  ) : (
+                    <Button
+                      key={item}
+                      size="sm"
+                      variant={item === page ? 'default' : 'outline'}
+                      onClick={() => setPage(item)}
+                    >
+                      {item}
+                    </Button>
+                  )
+                )}
                 <Button
                   size="sm"
                   variant="outline"

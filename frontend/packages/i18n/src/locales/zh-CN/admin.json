@@ -151,6 +151,16 @@
       "actions": "操作"
     },
     "resetTooltip": "重置错误计数",
+    "refreshAll": "全部刷新",
+    "refreshNowTooltip": "立即刷新",
+    "refreshStatus": {
+      "queued": "已排队",
+      "deferred": "延后执行",
+      "refreshing": "刷新中",
+      "completed": "已完成",
+      "notFound": "未找到任务"
+    },
+    "logLabel": "日志",
     "disableTooltip": "禁用订阅",
     "enableTooltip": "启用订阅",
     "deleteTitle": "删除订阅？",

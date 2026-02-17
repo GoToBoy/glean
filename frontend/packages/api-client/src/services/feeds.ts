@@ -8,6 +8,10 @@ import type {
   OPMLImportResponse,
   BatchDeleteSubscriptionsRequest,
   BatchDeleteSubscriptionsResponse,
+  RefreshAllFeedsResponse,
+  RefreshFeedResponse,
+  RefreshStatusRequest,
+  RefreshStatusResponse,
 } from '@glean/types'
 import { ApiClient } from '../client'
 
@@ -105,19 +109,22 @@ export class FeedService {
   /**
    * Manually refresh a feed.
    */
-  async refreshFeed(
-    subscriptionId: string
-  ): Promise<{ status: string; job_id: string; feed_id: string }> {
-    return this.client.post<{ status: string; job_id: string; feed_id: string }>(
-      `/feeds/${subscriptionId}/refresh`
-    )
+  async refreshFeed(subscriptionId: string): Promise<RefreshFeedResponse> {
+    return this.client.post<RefreshFeedResponse>(`/feeds/${subscriptionId}/refresh`)
   }
 
   /**
    * Manually refresh all user's subscribed feeds.
    */
-  async refreshAllFeeds(): Promise<{ status: string; queued_count: number }> {
-    return this.client.post<{ status: string; queued_count: number }>('/feeds/refresh-all')
+  async refreshAllFeeds(): Promise<RefreshAllFeedsResponse> {
+    return this.client.post<RefreshAllFeedsResponse>('/feeds/refresh-all')
+  }
+
+  /**
+   * Query per-feed refresh job statuses.
+   */
+  async getRefreshStatus(data: RefreshStatusRequest): Promise<RefreshStatusResponse> {
+    return this.client.post<RefreshStatusResponse>('/feeds/refresh-status', data)
   }
 
   /**

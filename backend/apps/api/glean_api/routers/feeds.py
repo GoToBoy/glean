@@ -7,8 +7,11 @@ Provides endpoints for feed discovery, subscription management, and OPML import/
 import logging
 from typing import Annotated
 
+from arq.jobs import Job
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 
 from glean_core.schemas import (
     BatchDeleteSubscriptionsRequest,
@@ -24,12 +27,26 @@ from glean_core.schemas import (
 )
 from glean_core.services import FeedService, FolderService
 from glean_core.services.feed_service import UNSET
+from glean_database.models import Feed
 from glean_rss import discover_feed, generate_opml, parse_opml_with_folders
 
 from ..dependencies import get_current_user, get_feed_service, get_folder_service, get_redis_pool
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class RefreshJobItem(BaseModel):
+    """Single queued refresh job payload."""
+
+    feed_id: str
+    job_id: str = Field(min_length=1)
+
+
+class RefreshStatusRequest(BaseModel):
+    """Refresh status query payload."""
+
+    items: list[RefreshJobItem]
 
 
 @router.get("")
@@ -308,7 +325,7 @@ async def refresh_feed(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> dict[str, str]:
+) -> dict[str, str | int]:
     """
     Manually trigger a feed refresh.
 
@@ -329,7 +346,12 @@ async def refresh_feed(
         # Enqueue feed fetch task
         job = await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
         job_id = job.job_id if job else "unknown"
-        return {"status": "queued", "job_id": job_id, "feed_id": subscription.feed.id}
+        return {
+            "status": "queued",
+            "job_id": job_id,
+            "feed_id": subscription.feed.id,
+            "feed_title": subscription.custom_title or subscription.feed.title or subscription.feed.url,
+        }
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
@@ -339,7 +361,7 @@ async def refresh_all_feeds(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> dict[str, int | str]:
+) -> dict[str, int | str | list[dict[str, str]]]:
     """
     Manually trigger a refresh for all user's subscribed feeds.
 
@@ -353,12 +375,100 @@ async def refresh_all_feeds(
     """
     subscriptions = await feed_service.get_user_subscriptions(current_user.id)
     queued_count = 0
+    jobs: list[dict[str, str]] = []
 
     for subscription in subscriptions:
-        await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+        job = await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+        job_id = job.job_id if job else "unknown"
+        jobs.append(
+            {
+                "subscription_id": subscription.id,
+                "feed_id": subscription.feed.id,
+                "job_id": job_id,
+                "feed_title": subscription.custom_title or subscription.feed.title or subscription.feed.url,
+            }
+        )
         queued_count += 1
 
-    return {"status": "queued", "queued_count": queued_count}
+    return {"status": "queued", "queued_count": queued_count, "jobs": jobs}
+
+
+@router.post("/refresh-status")
+async def get_refresh_status(
+    data: RefreshStatusRequest,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    feed_service: Annotated[FeedService, Depends(get_feed_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, list[dict[str, str | int | None]]]:
+    """
+    Query refresh job statuses for feeds.
+
+    Args:
+        data: Job/feed pairs returned by refresh endpoints.
+        current_user: Current authenticated user.
+        feed_service: Feed service.
+        redis: Redis connection pool for task queue.
+
+    Returns:
+        Per-feed refresh status list.
+    """
+    if not data.items:
+        return {"items": []}
+
+    # Ensure requested feed IDs belong to current user subscriptions.
+    subscriptions = await feed_service.get_user_subscriptions(current_user.id)
+    allowed_feed_ids = {sub.feed.id for sub in subscriptions}
+
+    request_items = [item for item in data.items if item.feed_id in allowed_feed_ids]
+    if not request_items:
+        return {"items": []}
+
+    feed_ids = {item.feed_id for item in request_items}
+    stmt = select(Feed).where(Feed.id.in_(feed_ids))
+    result = await feed_service.session.execute(stmt)
+    feeds = {feed.id: feed for feed in result.scalars().all()}
+
+    status_items: list[dict[str, str | int | None]] = []
+    for item in request_items:
+        job = Job(item.job_id, redis)
+        status_value = "unknown"
+        result_message: str | None = None
+        result_new_entries: int | None = None
+
+        try:
+            job_status = await job.status()
+            status_value = job_status.value
+        except Exception:
+            logger.exception(
+                "Failed to read refresh job status",
+                extra={"job_id": item.job_id, "feed_id": item.feed_id},
+            )
+
+        if status_value in {"complete", "not_found"}:
+            try:
+                job_result = await job.result(timeout=0)
+                if isinstance(job_result, dict):
+                    result_message = str(job_result.get("message")) if job_result.get("message") else None
+                    if isinstance(job_result.get("new_entries"), int):
+                        result_new_entries = job_result["new_entries"]
+            except Exception as e:
+                result_message = str(e)
+
+        feed = feeds.get(item.feed_id)
+        status_items.append(
+            {
+                "feed_id": item.feed_id,
+                "job_id": item.job_id,
+                "status": status_value,
+                "new_entries": result_new_entries,
+                "message": result_message,
+                "last_fetched_at": feed.last_fetched_at.isoformat() if feed and feed.last_fetched_at else None,
+                "error_count": int(feed.error_count) if feed else 0,
+                "fetch_error_message": feed.fetch_error_message if feed else None,
+            }
+        )
+
+    return {"items": status_items}
 
 
 @router.post("/import")

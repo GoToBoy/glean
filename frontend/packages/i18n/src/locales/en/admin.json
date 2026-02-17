@@ -151,6 +151,16 @@
       "actions": "Actions"
     },
     "resetTooltip": "Reset error count",
+    "refreshAll": "Refresh All",
+    "refreshNowTooltip": "Refresh now",
+    "refreshStatus": {
+      "queued": "Queued",
+      "deferred": "Deferred",
+      "refreshing": "Refreshing",
+      "completed": "Completed",
+      "notFound": "Not Found"
+    },
+    "logLabel": "Log",
     "disableTooltip": "Disable feed",
     "enableTooltip": "Enable feed",
     "deleteTitle": "Delete Feed?",

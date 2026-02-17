@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models.admin import AdminRole, AdminUser
@@ -313,8 +313,19 @@ class AdminService:
         # Apply filters
         if status:
             normalized_status = self._normalize_feed_status(status)
-            query = query.where(Feed.status == normalized_status)
-            count_query = count_query.where(Feed.status == normalized_status)
+            if normalized_status == FeedStatus.ERROR:
+                # Align filter semantics with UI badge logic:
+                # any feed with recent fetch errors should appear in "error".
+                error_filter = or_(Feed.error_count > 0, Feed.status == FeedStatus.ERROR)
+                query = query.where(error_filter)
+                count_query = count_query.where(error_filter)
+            elif normalized_status == FeedStatus.ACTIVE:
+                # Keep active list clean by excluding feeds with current errors.
+                query = query.where(Feed.status == FeedStatus.ACTIVE, Feed.error_count == 0)
+                count_query = count_query.where(Feed.status == FeedStatus.ACTIVE, Feed.error_count == 0)
+            else:
+                query = query.where(Feed.status == normalized_status)
+                count_query = count_query.where(Feed.status == normalized_status)
 
         if search:
             search_filter = Feed.title.ilike(f"%{search}%") | Feed.url.ilike(f"%{search}%")

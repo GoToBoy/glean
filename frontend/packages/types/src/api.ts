@@ -179,3 +179,45 @@ export interface BatchDeleteSubscriptionsResponse {
   deleted_count: number
   failed_count: number
 }
+
+export interface FeedRefreshJob {
+  subscription_id?: string
+  feed_id: string
+  job_id: string
+  feed_title?: string
+}
+
+export interface RefreshFeedResponse {
+  status: string
+  job_id: string
+  feed_id: string
+  feed_title?: string
+}
+
+export interface RefreshAllFeedsResponse {
+  status: string
+  queued_count: number
+  jobs: FeedRefreshJob[]
+}
+
+export interface RefreshStatusRequest {
+  items: Array<{
+    feed_id: string
+    job_id: string
+  }>
+}
+
+export interface RefreshStatusItem {
+  feed_id: string
+  job_id: string
+  status: string
+  new_entries: number | null
+  message: string | null
+  last_fetched_at: string | null
+  error_count: number
+  fetch_error_message: string | null
+}
+
+export interface RefreshStatusResponse {
+  items: RefreshStatusItem[]
+}

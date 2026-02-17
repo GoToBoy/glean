@@ -36,6 +36,23 @@ interface FeedListParams {
   order?: string
 }
 
+export interface AdminFeedRefreshJob {
+  feed_id: string
+  job_id: string
+  feed_title?: string
+}
+
+export interface AdminFeedRefreshStatusItem {
+  feed_id: string
+  job_id: string
+  status: string
+  new_entries: number | null
+  message: string | null
+  last_fetched_at: string | null
+  error_count: number
+  fetch_error_message: string | null
+}
+
 export function useFeeds(params: FeedListParams = {}) {
   return useQuery<FeedListResponse>({
     queryKey: ['admin', 'feeds', params],
@@ -116,6 +133,42 @@ export function useBatchFeedOperation() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
+    },
+  })
+}
+
+export function useRefreshFeedNow() {
+  return useMutation({
+    mutationFn: async (feedId: string) => {
+      const response = await api.post(`/feeds/${feedId}/refresh`)
+      return response.data as {
+        status: string
+        feed_id: string
+        job_id: string
+        feed_title?: string
+      }
+    },
+  })
+}
+
+export function useRefreshAllFeedsNow() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/feeds/refresh/all')
+      return response.data as {
+        status: string
+        queued_count: number
+        jobs: AdminFeedRefreshJob[]
+      }
+    },
+  })
+}
+
+export function useRefreshFeedStatus() {
+  return useMutation({
+    mutationFn: async (items: Array<{ feed_id: string; job_id: string }>) => {
+      const response = await api.post('/feeds/refresh/status', { items })
+      return response.data as { items: AdminFeedRefreshStatusItem[] }
     },
   })
 }

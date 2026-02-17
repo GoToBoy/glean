@@ -726,8 +726,11 @@ export default function SettingsPage() {
                   <ReaderModeContent />
                 </TabsPanel>
 
-                <TabsPanel value="manage-feeds" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel
+                  value="manage-feeds"
+                  className="flex h-full w-full min-w-0 flex-col overflow-hidden p-6"
+                >
+                  <div className="animate-fade-in mb-6 shrink-0">
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <ListChecks className="text-primary h-5 w-5" />
@@ -740,7 +743,10 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in w-full" style={{ animationDelay: '50ms' }}>
+                  <div
+                    className="animate-fade-in min-h-0 w-full flex-1"
+                    style={{ animationDelay: '50ms' }}
+                  >
                     <SubscriptionsTab />
                   </div>
                 </TabsPanel>

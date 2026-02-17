@@ -8,9 +8,12 @@ from datetime import UTC, datetime, timedelta
 from math import ceil
 from typing import Annotated, Any, Literal
 
+from arq.jobs import Job
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import jwt
+from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas import (
@@ -40,6 +43,7 @@ from glean_core.schemas.admin import (
     UserListResponse,
 )
 from glean_core.services import AdminService, TypedConfigService
+from glean_database.models import Feed
 from glean_database.session import get_session
 
 from ..config import settings
@@ -51,6 +55,19 @@ from ..dependencies import (
 )
 
 router = APIRouter()
+
+
+class AdminRefreshJobItem(BaseModel):
+    """Queued admin refresh job payload."""
+
+    feed_id: str
+    job_id: str = Field(min_length=1)
+
+
+class AdminRefreshStatusRequest(BaseModel):
+    """Admin refresh status query payload."""
+
+    items: list[AdminRefreshJobItem]
 
 
 @router.post("/auth/login", response_model=AdminLoginResponse)
@@ -587,6 +604,113 @@ async def batch_feed_operation(
     """
     count = await admin_service.batch_feed_operation(request.action, request.feed_ids)
     return {"affected": count}
+
+
+@router.post("/feeds/{feed_id}/refresh", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_feed_now(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, str]:
+    """Manually enqueue a refresh task for one feed."""
+    feed = await admin_service.get_feed(feed_id)
+    if not feed:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    job = await redis.enqueue_job("fetch_feed_task", feed_id)
+    return {
+        "status": "queued",
+        "feed_id": feed_id,
+        "job_id": job.job_id if job else "unknown",
+        "feed_title": feed.get("title") or feed.get("url") or feed_id,
+    }
+
+
+@router.post("/feeds/refresh-all", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/feeds/refresh/all", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_all_feeds_now(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, int | str | list[dict[str, str]]]:
+    """Manually enqueue refresh tasks for all non-disabled feeds."""
+    result = await session.execute(select(Feed).where(Feed.status != "disabled"))
+    feeds = list(result.scalars().all())
+
+    jobs: list[dict[str, str]] = []
+    for feed in feeds:
+        job = await redis.enqueue_job("fetch_feed_task", feed.id)
+        jobs.append(
+            {
+                "feed_id": feed.id,
+                "job_id": job.job_id if job else "unknown",
+                "feed_title": feed.title or feed.url,
+            }
+        )
+
+    return {"status": "queued", "queued_count": len(jobs), "jobs": jobs}
+
+
+@router.post("/feeds/refresh-status")
+@router.post("/feeds/refresh/status")
+async def refresh_status(
+    request: AdminRefreshStatusRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, list[dict[str, str | int | None]]]:
+    """Query per-feed refresh job status for admin UI."""
+    if not request.items:
+        return {"items": []}
+
+    feed_ids = {item.feed_id for item in request.items}
+    result = await session.execute(select(Feed).where(Feed.id.in_(feed_ids)))
+    feed_map = {feed.id: feed for feed in result.scalars().all()}
+
+    items: list[dict[str, str | int | None]] = []
+    for req_item in request.items:
+        feed = feed_map.get(req_item.feed_id)
+        if not feed:
+            continue
+
+        job = Job(req_item.job_id, redis)
+        status_value = "unknown"
+        result_message: str | None = None
+        result_new_entries: int | None = None
+
+        try:
+            status_info = await job.status()
+            status_value = status_info.value
+        except Exception:
+            pass
+
+        if status_value in {"complete", "not_found"}:
+            try:
+                job_result = await job.result(timeout=0)
+                if isinstance(job_result, dict):
+                    message = job_result.get("message")
+                    if message:
+                        result_message = str(message)
+                    if isinstance(job_result.get("new_entries"), int):
+                        result_new_entries = int(job_result["new_entries"])
+            except Exception as e:
+                result_message = str(e)
+
+        items.append(
+            {
+                "feed_id": feed.id,
+                "job_id": req_item.job_id,
+                "status": status_value,
+                "new_entries": result_new_entries,
+                "message": result_message,
+                "last_fetched_at": feed.last_fetched_at.isoformat() if feed.last_fetched_at else None,
+                "error_count": int(feed.error_count),
+                "fetch_error_message": feed.fetch_error_message,
+            }
+        )
+
+    return {"items": items}
 
 
 # M2: Entry management endpoints
