@@ -65,6 +65,12 @@ class Entry(Base, TimestampMixin):
 
     # Relationships
     feed = relationship("Feed", back_populates="entries")
+    translations = relationship(
+        "EntryTranslation",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     user_entries = relationship("UserEntry", back_populates="entry", cascade="all, delete-orphan")
     bookmarks = relationship("Bookmark", back_populates="entry")
     entry_events = relationship("UserEntryEvent", back_populates="entry", cascade="all, delete-orphan")

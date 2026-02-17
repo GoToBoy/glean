@@ -46,7 +46,7 @@ class EntryTranslation(Base, TimestampMixin):
     paragraph_translations: Mapped[dict[str, str] | None] = mapped_column(JSONB)
 
     # Relationships
-    entry = relationship("Entry", backref="translations")
+    entry = relationship("Entry", back_populates="translations", passive_deletes=True)
 
     # Constraints
     __table_args__ = (

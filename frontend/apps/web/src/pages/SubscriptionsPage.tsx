@@ -118,7 +118,6 @@ export default function SubscriptionsPage() {
 
   // Dialog states
   const [showBatchDeleteConfirm, setShowBatchDeleteConfirm] = useState(false)
-  const [showSingleDeleteConfirm, setShowSingleDeleteConfirm] = useState<string | null>(null)
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null)
   const [showAddFeedDialog, setShowAddFeedDialog] = useState(false)
 
@@ -191,13 +190,13 @@ export default function SubscriptionsPage() {
     setShowBatchDeleteConfirm(false)
   }
 
-  const handleSingleDelete = async () => {
-    if (showSingleDeleteConfirm) {
-      await deleteMutation.mutateAsync(showSingleDeleteConfirm)
-      selectedIds.delete(showSingleDeleteConfirm)
-      setSelectedIds(new Set(selectedIds))
-      setShowSingleDeleteConfirm(null)
-    }
+  const handleSingleDelete = async (subscriptionId: string) => {
+    await deleteMutation.mutateAsync(subscriptionId)
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      next.delete(subscriptionId)
+      return next
+    })
   }
 
   const handleRefresh = async (subscriptionId: string) => {
@@ -380,7 +379,7 @@ export default function SubscriptionsPage() {
                   subscription={sub}
                   isSelected={selectedIds.has(sub.id)}
                   onSelect={() => handleSelect(sub.id)}
-                  onDelete={() => setShowSingleDeleteConfirm(sub.id)}
+                  onDelete={() => handleSingleDelete(sub.id)}
                   onRefresh={() => handleRefresh(sub.id)}
                   onEdit={() => setEditingSubscription(sub)}
                   isRefreshing={refreshMutation.isPending}
@@ -502,40 +501,6 @@ export default function SubscriptionsPage() {
                     <Trash2 className="h-4 w-4" />
                     {t('manageSubscriptions.deleteCount', { count: selectedCount })}
                   </>
-                )}
-              </Button>
-            </AlertDialogFooter>
-          </AlertDialogPopup>
-        </AlertDialog>
-
-        {/* Single Delete Confirmation */}
-        <AlertDialog
-          open={!!showSingleDeleteConfirm}
-          onOpenChange={() => setShowSingleDeleteConfirm(null)}
-        >
-          <AlertDialogPopup>
-            <AlertDialogHeader>
-              <AlertDialogTitle>{t('manageSubscriptions.unsubscribeConfirm')}</AlertDialogTitle>
-              <AlertDialogDescription>
-                {t('manageSubscriptions.unsubscribeDescription')}
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
-                {t('common.cancel')}
-              </AlertDialogClose>
-              <Button
-                variant="destructive"
-                onClick={handleSingleDelete}
-                disabled={deleteMutation.isPending}
-              >
-                {deleteMutation.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t('manageSubscriptions.deleting')}
-                  </>
-                ) : (
-                  t('manageSubscriptions.unsubscribe')
                 )}
               </Button>
             </AlertDialogFooter>

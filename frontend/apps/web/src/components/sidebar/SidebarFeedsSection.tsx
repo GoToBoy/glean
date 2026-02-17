@@ -626,12 +626,9 @@ function SidebarFolderItem({
                   {t('dialogs.dissolveFolder.description', { name: folder.name })}
                 </p>
                 <MenuSeparator />
-                <MenuItem onClick={() => setIsMenuOpen(false)}>
-                  <span>{t('common.cancel')}</span>
-                </MenuItem>
                 <MenuItem variant="destructive" onClick={() => void handleDissolveFolder()}>
                   <Trash2 className="h-4 w-4" />
-                  <span>{t('actions.dissolveFolder')}</span>
+                  <span>{t('dialogs.dissolveFolder.confirm')}</span>
                 </MenuItem>
               </MenuSubPopup>
             </MenuSub>
@@ -929,29 +926,14 @@ function SidebarFeedItem({
                 </MenuSub>
               )}
               <MenuSeparator />
-              <MenuSub>
-                <MenuSubTrigger className="text-destructive data-highlighted:bg-destructive/10 data-highlighted:text-destructive">
-                  <Trash2 className="h-4 w-4" />
-                  <span>{t('actions.unsubscribe')}</span>
-                </MenuSubTrigger>
-                <MenuSubPopup>
-                  <p className="text-muted-foreground px-2 py-1 text-xs">
-                    {t('dialogs.unsubscribe.message')}
-                  </p>
-                  <MenuSeparator />
-                  <MenuItem onClick={() => setIsMenuOpen(false)}>
-                    <span>{t('common.cancel')}</span>
-                  </MenuItem>
-                  <MenuItem
-                    variant="destructive"
-                    onClick={() => void handleDelete()}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span>{t('dialogs.unsubscribe.unsubscribe')}</span>
-                  </MenuItem>
-                </MenuSubPopup>
-              </MenuSub>
+              <MenuItem
+                variant="destructive"
+                onClick={() => void handleDelete()}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="h-4 w-4" />
+                <span>{t('actions.unsubscribe')}</span>
+              </MenuItem>
             </MenuPopup>
           </Menu>
         )}

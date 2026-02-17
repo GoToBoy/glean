@@ -11,14 +11,6 @@ import type { Subscription, SubscriptionListResponse } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
-  buttonVariants,
-  AlertDialog,
-  AlertDialogPopup,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogClose,
   Skeleton,
   Menu,
   MenuTrigger,
@@ -57,8 +49,6 @@ export function SubscriptionsTab() {
 
   // State
   const [searchQuery, setSearchQuery] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [perPage] = useState(10)
@@ -84,13 +74,7 @@ export function SubscriptionsTab() {
   }, [searchQuery])
 
   const handleDelete = async (id: string) => {
-    setDeletingId(id)
-    try {
-      await deleteMutation.mutateAsync(id)
-    } finally {
-      setDeletingId(null)
-      setShowDeleteConfirm(false)
-    }
+    await deleteMutation.mutateAsync(id)
   }
 
   const handleRefresh = async (id: string) => {
@@ -291,10 +275,8 @@ export function SubscriptionsTab() {
                           <MenuSeparator />
                           <MenuItem
                             variant="destructive"
-                            onClick={() => {
-                              setDeletingId(subscription.id)
-                              setShowDeleteConfirm(true)
-                            }}
+                            onClick={() => handleDelete(subscription.id)}
+                            disabled={deleteMutation.isPending}
                           >
                             <Trash2 className="h-4 w-4" />
                             {t('manageFeeds.unsubscribe')}
@@ -368,30 +350,6 @@ export function SubscriptionsTab() {
           </div>
         )}
       </div>
-
-      {/* Delete Confirmation */}
-      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-        <AlertDialogPopup>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{t('manageFeeds.unsubscribeConfirm')}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {t('manageFeeds.unsubscribeDescription')}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
-              {t('manageFeeds.cancel')}
-            </AlertDialogClose>
-            <AlertDialogClose
-              className={buttonVariants({ variant: 'destructive' })}
-              onClick={() => deletingId && handleDelete(deletingId)}
-              disabled={deleteMutation.isPending}
-            >
-              {t('manageFeeds.unsubscribe')}
-            </AlertDialogClose>
-          </AlertDialogFooter>
-        </AlertDialogPopup>
-      </AlertDialog>
     </div>
   )
 }

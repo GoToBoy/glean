@@ -212,6 +212,45 @@ class TestDeleteSubscription:
         assert get_response.status_code == 404
 
     @pytest.mark.asyncio
+    async def test_delete_subscription_with_entry_translations(
+        self, client: AsyncClient, auth_headers, db_session, test_subscription, test_feed
+    ):
+        """Test deleting subscription when feed entries have translations."""
+        from sqlalchemy import func, select
+
+        from glean_database.models.entry import Entry
+        from glean_database.models.entry_translation import EntryTranslation
+
+        entry = Entry(
+            feed_id=test_feed.id,
+            url="https://example.com/article-1",
+            title="Article 1",
+            content="Content",
+            guid="article-1",
+        )
+        db_session.add(entry)
+        await db_session.flush()
+
+        translation = EntryTranslation(
+            entry_id=entry.id,
+            target_language="zh-CN",
+            translated_title="文章 1",
+            translated_content="内容",
+            status="done",
+        )
+        db_session.add(translation)
+        await db_session.commit()
+
+        response = await client.delete(f"/api/feeds/{test_subscription.id}", headers=auth_headers)
+        assert response.status_code == 204
+
+        remaining_stmt = select(func.count(EntryTranslation.id)).where(
+            EntryTranslation.target_language == "zh-CN"
+        )
+        remaining = await db_session.scalar(remaining_stmt)
+        assert remaining == 0
+
+    @pytest.mark.asyncio
     async def test_delete_nonexistent_subscription(self, client: AsyncClient, auth_headers):
         """Test deleting a non-existent subscription."""
         fake_id = "00000000-0000-0000-0000-000000000000"

@@ -69,7 +69,8 @@
     },
     "dissolveFolder": {
       "title": "解散文件夹？",
-      "description": "解散“{{name}}”后，文件夹内订阅会移动到未分类。"
+      "description": "解散“{{name}}”后，文件夹内订阅会移动到未分类。",
+      "confirm": "确认解散"
     },
     "groupFeeds": {
       "title": "将订阅归组到新文件夹",

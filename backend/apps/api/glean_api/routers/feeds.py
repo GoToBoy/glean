@@ -4,6 +4,7 @@ Feeds and subscriptions router.
 Provides endpoints for feed discovery, subscription management, and OPML import/export.
 """
 
+import logging
 from typing import Annotated
 
 from arq.connections import ArqRedis
@@ -28,6 +29,7 @@ from glean_rss import discover_feed, generate_opml, parse_opml_with_folders
 from ..dependencies import get_current_user, get_feed_service, get_folder_service, get_redis_pool
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.get("")
@@ -250,7 +252,13 @@ async def delete_subscription(
 
         # Queue Milvus embedding cleanup if feed was orphaned
         if orphaned_feed_id and entry_ids:
-            await redis.enqueue_job("cleanup_orphan_embeddings", orphaned_feed_id, entry_ids)
+            try:
+                await redis.enqueue_job("cleanup_orphan_embeddings", orphaned_feed_id, entry_ids)
+            except Exception:
+                logger.exception(
+                    "Failed to enqueue orphan embedding cleanup after subscription delete",
+                    extra={"user_id": current_user.id, "feed_id": orphaned_feed_id},
+                )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
@@ -283,7 +291,13 @@ async def batch_delete_subscriptions(
     # Queue Milvus embedding cleanup for each orphaned feed
     for feed_id, entry_ids in orphaned_feeds.items():
         if entry_ids:
-            await redis.enqueue_job("cleanup_orphan_embeddings", feed_id, entry_ids)
+            try:
+                await redis.enqueue_job("cleanup_orphan_embeddings", feed_id, entry_ids)
+            except Exception:
+                logger.exception(
+                    "Failed to enqueue orphan embedding cleanup after batch delete",
+                    extra={"user_id": current_user.id, "feed_id": feed_id},
+                )
 
     return BatchDeleteSubscriptionsResponse(deleted_count=deleted_count, failed_count=failed_count)
 

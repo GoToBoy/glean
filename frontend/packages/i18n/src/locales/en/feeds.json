@@ -69,7 +69,8 @@
     },
     "dissolveFolder": {
       "title": "Dissolve Folder?",
-      "description": "Dissolve \"{{name}}\" and move all feeds in this folder to uncategorized."
+      "description": "Dissolve \"{{name}}\" and move all feeds in this folder to uncategorized.",
+      "confirm": "Confirm Dissolve"
     },
     "groupFeeds": {
       "title": "Group Feeds into New Folder",
