@@ -171,16 +171,23 @@ export function SidebarFeedsSection({
   return (
     <>
       {(isSidebarOpen || isMobileSidebarOpen) && (
-        <div className="mb-1 flex items-center justify-between md:mb-2">
+        <div
+          className={cn(
+            'mb-1 flex items-center justify-between md:mb-2',
+            isMobileSidebarOpen &&
+              'bg-card/95 sticky top-0 z-20 -mx-1.5 mb-1 px-1.5 py-1 backdrop-blur-sm'
+          )}
+        >
           <button
             onClick={onToggleFeedsSection}
-            className="text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs"
+            className={cn(
+              'text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs',
+              isMobileSidebarOpen && 'rounded-md bg-muted/60 px-2.5 py-1 text-[11px] text-current'
+            )}
             aria-label={isFeedsSectionExpanded ? 'Collapse feeds section' : 'Expand feeds section'}
           >
             <ChevronRight
-              className={`h-3 w-3 transition-transform ${
-                isFeedsSectionExpanded ? 'rotate-90' : ''
-              }`}
+              className={cn('h-3 w-3 transition-transform', isFeedsSectionExpanded && 'rotate-90')}
             />
             {t('sidebar.feeds')}
           </button>
@@ -258,6 +265,7 @@ export function SidebarFeedsSection({
             isActive={isSmartView}
             onClick={onSmartViewSelect}
             isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
+            compact={isMobileSidebarOpen}
             title={t('sidebar.smart')}
           />
 
@@ -267,6 +275,7 @@ export function SidebarFeedsSection({
             isActive={isReaderPage && !currentFeedId && !currentFolderId && !isSmartView}
             onClick={() => onFeedSelect(undefined)}
             isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
+            compact={isMobileSidebarOpen}
             title={t('sidebar.allFeeds')}
             className="mt-0.5"
           />
@@ -316,6 +325,7 @@ export function SidebarFeedsSection({
                   dragOverFolderId={dragOverFolderId}
                   setDragOverFolderId={setDragOverFolderId}
                   isSelectionMode={isSidebarOpen && !isMobileSidebarOpen && isSelectionMode}
+                  isCompact={isMobileSidebarOpen}
                   selectedSubscriptionIds={selectedSubscriptionIds}
                   onToggleFeedSelection={toggleFeedSelection}
                 />
@@ -375,6 +385,7 @@ export function SidebarFeedsSection({
                     setDragOverFolderId(null)
                   }}
                   isSelectionMode={isSidebarOpen && !isMobileSidebarOpen && isSelectionMode}
+                  isCompact={isMobileSidebarOpen}
                   isSelected={selectedSubscriptionIds.has(sub.id)}
                   onToggleSelect={toggleFeedSelection}
                 />
@@ -443,6 +454,7 @@ interface SidebarFolderItemProps {
   readonly dragOverFolderId: string | null
   readonly setDragOverFolderId: (id: string | null) => void
   readonly isSelectionMode: boolean
+  readonly isCompact: boolean
   readonly selectedSubscriptionIds: Set<string>
   readonly onToggleFeedSelection: (subscriptionId: string) => void
 }
@@ -467,6 +479,7 @@ function SidebarFolderItem({
   dragOverFolderId,
   setDragOverFolderId,
   isSelectionMode,
+  isCompact,
   selectedSubscriptionIds,
   onToggleFeedSelection,
 }: SidebarFolderItemProps) {
@@ -537,7 +550,9 @@ function SidebarFolderItem({
       return 'bg-primary/10 ring-primary/30 ring-2'
     }
     if (isActive) {
-      return 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
+      return isCompact
+        ? 'bg-primary/15 text-primary font-semibold shadow-sm ring-1 ring-primary/25 border-l-2 border-primary'
+        : 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
     }
     return 'text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.01]'
   }
@@ -547,7 +562,8 @@ function SidebarFolderItem({
       <button
         type="button"
         className={cn(
-          'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+          'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
+          isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
           getContainerClasses()
         )}
         onContextMenu={handleContextMenu}
@@ -660,6 +676,7 @@ function SidebarFolderItem({
               dragOverFolderId={dragOverFolderId}
               setDragOverFolderId={setDragOverFolderId}
               isSelectionMode={isSelectionMode}
+              isCompact={isCompact}
               selectedSubscriptionIds={selectedSubscriptionIds}
               onToggleFeedSelection={onToggleFeedSelection}
             />
@@ -679,6 +696,7 @@ function SidebarFolderItem({
                 setDragOverFolderId(null)
               }}
               isSelectionMode={isSelectionMode}
+              isCompact={isCompact}
               isSelected={selectedSubscriptionIds.has(sub.id)}
               onToggleSelect={onToggleFeedSelection}
             />
@@ -733,6 +751,7 @@ interface SidebarFeedItemProps {
   readonly onDragStart?: () => void
   readonly onDragEnd?: () => void
   readonly isSelectionMode?: boolean
+  readonly isCompact?: boolean
   readonly isSelected?: boolean
   readonly onToggleSelect?: (subscriptionId: string) => void
 }
@@ -746,6 +765,7 @@ function SidebarFeedItem({
   onDragStart,
   onDragEnd,
   isSelectionMode = false,
+  isCompact = false,
   isSelected = false,
   onToggleSelect,
 }: SidebarFeedItemProps) {
@@ -816,7 +836,9 @@ function SidebarFeedItem({
       return 'opacity-50 border-2 border-dashed border-primary/50 bg-primary/5'
     }
     if (isActive) {
-      return 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
+      return isCompact
+        ? 'bg-primary/15 text-primary font-semibold shadow-sm ring-1 ring-primary/25 border-l-2 border-primary'
+        : 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
     }
     return 'text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.01]'
   }
@@ -834,7 +856,8 @@ function SidebarFeedItem({
       <button
         type="button"
         className={cn(
-          'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+          'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
+          isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
           !isSelectionMode && 'cursor-grab active:cursor-grabbing',
           getFeedItemClasses()
         )}
@@ -850,7 +873,10 @@ function SidebarFeedItem({
       >
         <button
           onClick={handleClick}
-          className="touch-target-none flex h-5 min-w-0 flex-1 items-center gap-3"
+          className={cn(
+            'touch-target-none flex h-5 min-w-0 flex-1 items-center',
+            isCompact ? 'gap-2' : 'gap-3'
+          )}
         >
           {isSelectionMode &&
             (isSelected ? (

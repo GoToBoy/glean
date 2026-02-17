@@ -1,5 +1,5 @@
 import { useTranslation } from '@glean/i18n'
-import { MenuItem, MenuSeparator } from '@glean/ui'
+import { MenuItem, MenuSeparator, cn } from '@glean/ui'
 import { ChevronRight, Plus, Tag, Trash2, Pencil } from 'lucide-react'
 import type { TagWithCounts } from '@glean/types'
 import { SidebarTagItem } from './SidebarItem'
@@ -34,10 +34,19 @@ export function SidebarTagsSection({
   return (
     <>
       {(isSidebarOpen || isMobileSidebarOpen) && (
-        <div className="mb-1 flex items-center justify-between md:mb-2">
+        <div
+          className={cn(
+            'mb-1 flex items-center justify-between md:mb-2',
+            isMobileSidebarOpen &&
+              'bg-card/95 sticky top-0 z-20 -mx-1.5 mb-1 px-1.5 py-1 backdrop-blur-sm'
+          )}
+        >
           <button
             onClick={onToggleTagSection}
-            className="text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs"
+            className={cn(
+              'text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs',
+              isMobileSidebarOpen && 'rounded-md bg-muted/60 px-2.5 py-1 text-[11px] text-current'
+            )}
             aria-label={isTagSectionExpanded ? 'Collapse tags section' : 'Expand tags section'}
           >
             <ChevronRight
@@ -79,6 +88,7 @@ export function SidebarTagsSection({
                   label={tag.name}
                   isActive={currentBookmarkTagId === tag.id}
                   onClick={() => onSelectTag(tag.id)}
+                  compact={isMobileSidebarOpen}
                   badge={tag.bookmark_count}
                   menuContent={
                     <>

@@ -5,7 +5,10 @@ import { ChevronRight, Folder, FolderOpen, MoreHorizontal } from 'lucide-react'
 // Unified sidebar item styles
 const SIDEBAR_ITEM_STYLES = {
   base: 'touch-target-none group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+  compact: 'gap-2 rounded-md px-2 py-1.5 text-[13px]',
   active: 'bg-primary/10 text-primary font-medium scale-[1.01] shadow-sm',
+  activeCompact:
+    'bg-primary/15 text-primary font-semibold shadow-sm ring-1 ring-primary/25 border-l-2 border-primary',
   inactive: 'text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.01]',
   collapsed: 'justify-center',
 }
@@ -25,6 +28,7 @@ interface SidebarItemProps {
   badge?: number | string
   rightElement?: React.ReactNode
   isSidebarCollapsed?: boolean
+  compact?: boolean
   title?: string
   className?: string
 }
@@ -37,6 +41,7 @@ export function SidebarItem({
   badge,
   rightElement,
   isSidebarCollapsed = false,
+  compact = false,
   title,
   className,
 }: SidebarItemProps) {
@@ -45,7 +50,12 @@ export function SidebarItem({
       onClick={onClick}
       className={cn(
         SIDEBAR_ITEM_STYLES.base,
-        isActive ? SIDEBAR_ITEM_STYLES.active : SIDEBAR_ITEM_STYLES.inactive,
+        compact && SIDEBAR_ITEM_STYLES.compact,
+        isActive
+          ? compact
+            ? SIDEBAR_ITEM_STYLES.activeCompact
+            : SIDEBAR_ITEM_STYLES.active
+          : SIDEBAR_ITEM_STYLES.inactive,
         isSidebarCollapsed && SIDEBAR_ITEM_STYLES.collapsed,
         className
       )}
@@ -62,7 +72,12 @@ export function SidebarItem({
       )}
       {!isSidebarCollapsed && rightElement}
       {isActive && !isSidebarCollapsed && (
-        <span className="bg-primary ml-auto h-1.5 w-1.5 rounded-full" />
+        <span
+          className={cn(
+            'bg-primary ml-auto rounded-full',
+            compact ? 'h-4 w-0.5 rounded-sm opacity-90' : 'h-1.5 w-1.5'
+          )}
+        />
       )}
     </button>
   )
@@ -85,6 +100,7 @@ interface SidebarFolderItemBaseProps {
   onDrop?: (e: React.DragEvent) => void
   onContextMenu?: (e: React.MouseEvent) => void
   hasChevron?: boolean
+  compact?: boolean
 }
 
 export function SidebarFolderItemBase({
@@ -103,6 +119,7 @@ export function SidebarFolderItemBase({
   onDrop,
   onContextMenu,
   hasChevron = true,
+  compact = false,
 }: SidebarFolderItemBaseProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
@@ -111,6 +128,7 @@ export function SidebarFolderItemBase({
       <div
         className={cn(
           SIDEBAR_ITEM_STYLES.base,
+          compact && SIDEBAR_ITEM_STYLES.compact,
           isDragTarget && canReceiveDrop
             ? 'bg-primary/10 ring-primary/30 ring-2'
             : isActive
@@ -189,6 +207,7 @@ interface SidebarFeedItemBaseProps {
   onDragStart?: (e: React.DragEvent) => void
   onDragEnd?: () => void
   onContextMenu?: (e: React.MouseEvent) => void
+  compact?: boolean
 }
 
 export function SidebarFeedItemBase({
@@ -202,6 +221,7 @@ export function SidebarFeedItemBase({
   onDragStart,
   onDragEnd,
   onContextMenu,
+  compact = false,
 }: SidebarFeedItemBaseProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
@@ -209,6 +229,7 @@ export function SidebarFeedItemBase({
     <div
       className={cn(
         SIDEBAR_ITEM_STYLES.base,
+        compact && SIDEBAR_ITEM_STYLES.compact,
         'cursor-grab active:cursor-grabbing',
         isDragging
           ? 'ring-primary/30 opacity-50 ring-2'
@@ -258,6 +279,7 @@ interface SidebarTagItemProps {
   onClick: () => void
   badge?: number
   menuContent?: React.ReactNode
+  compact?: boolean
 }
 
 export function SidebarTagItem({
@@ -268,6 +290,7 @@ export function SidebarTagItem({
   onClick,
   badge,
   menuContent,
+  compact = false,
 }: SidebarTagItemProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 
@@ -275,6 +298,7 @@ export function SidebarTagItem({
     <div
       className={cn(
         SIDEBAR_ITEM_STYLES.base,
+        compact && SIDEBAR_ITEM_STYLES.compact,
         isActive ? SIDEBAR_ITEM_STYLES.active : SIDEBAR_ITEM_STYLES.inactive
       )}
     >

@@ -565,9 +565,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
 
-  // On mobile, show list OR reader, not both
-  // Keep entry list visible during exit/enter animation
-  const showEntryList = !isMobile || !selectedEntryId || isExitingEntryList || isEnteringEntryList
+  // On mobile, keep list mounted to preserve scroll position and observer bindings.
+  const isReaderVisibleOnMobile = isMobile && (!!selectedEntryId || isExitingArticle)
   const showReader = !isMobile || !!selectedEntryId
   const trackedEntryIds = useMemo(() => entries.map((entry) => entry.id), [entries])
 
@@ -583,11 +582,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   useEffect(() => {
     const onToggleTranslation = () => {
-      if (!isMobile || !showEntryList) return
+      if (!isMobile || isReaderVisibleOnMobile) return
       setIsListTranslationActive((v) => !v)
     }
     const onSetFilter = (event: Event) => {
-      if (!isMobile || !showEntryList) return
+      if (!isMobile || isReaderVisibleOnMobile) return
       const detail = (event as CustomEvent).detail as { filter?: FilterType } | undefined
       const nextFilter = detail?.filter
       if (!nextFilter || !FILTER_ORDER.includes(nextFilter)) return
@@ -600,21 +599,23 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       window.removeEventListener('readerMobileListActions:toggleTranslation', onToggleTranslation)
       window.removeEventListener('readerMobileListActions:setFilter', onSetFilter)
     }
-  }, [isMobile, showEntryList, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className={`flex h-full ${isMobile ? 'relative' : ''}`}>
       {/* Entry list */}
-      {!isFullscreen && showEntryList && (
+      {!isFullscreen && (
         <>
           <div
             className={`border-border bg-card/50 relative flex min-w-0 flex-col border-r ${
               isMobile
-                ? `absolute inset-0 z-10 w-full ${
+                ? `absolute inset-0 z-10 w-full transition-opacity duration-200 ${
                     isExitingEntryList
                       ? 'entry-list-transition-exit'
                       : isEnteringEntryList
                         ? 'entry-list-transition'
+                        : isReaderVisibleOnMobile
+                          ? 'pointer-events-none opacity-0'
                         : ''
                   }`
                 : ''

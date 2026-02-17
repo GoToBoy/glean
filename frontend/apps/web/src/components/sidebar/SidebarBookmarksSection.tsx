@@ -70,10 +70,19 @@ export function SidebarBookmarksSection({
   return (
     <>
       {(isSidebarOpen || isMobileSidebarOpen) && (
-        <div className="mb-1 flex items-center justify-between md:mb-2">
+        <div
+          className={cn(
+            'mb-1 flex items-center justify-between md:mb-2',
+            isMobileSidebarOpen &&
+              'bg-card/95 sticky top-0 z-20 -mx-1.5 mb-1 px-1.5 py-1 backdrop-blur-sm'
+          )}
+        >
           <button
             onClick={onToggleBookmarkSection}
-            className="text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs"
+            className={cn(
+              'text-muted-foreground/60 hover:text-muted-foreground flex items-center gap-1 px-2 text-[10px] font-semibold tracking-wider uppercase transition-colors md:px-3 md:text-xs',
+              isMobileSidebarOpen && 'rounded-md bg-muted/60 px-2.5 py-1 text-[11px] text-current'
+            )}
             aria-label={
               isBookmarkSectionExpanded ? 'Collapse bookmarks section' : 'Expand bookmarks section'
             }
@@ -106,6 +115,7 @@ export function SidebarBookmarksSection({
             isActive={isBookmarksPage && !currentBookmarkFolderId && !currentBookmarkTagId}
             onClick={() => onSelectFolder(undefined)}
             isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
+            compact={isMobileSidebarOpen}
             title={t('bookmarks.allBookmarks')}
           />
 
@@ -125,6 +135,7 @@ export function SidebarBookmarksSection({
                   onCreateSubfolder={() => onCreateFolder(folder.id)}
                   onRename={onRenameFolder}
                   onDelete={onDeleteFolder}
+                  isCompact={isMobileSidebarOpen}
                 />
               ))}
             </div>
@@ -147,6 +158,7 @@ interface SidebarBookmarkFolderItemProps {
   onCreateSubfolder: () => void
   onRename: (id: string, name: string) => Promise<unknown>
   onDelete: (id: string) => Promise<boolean>
+  isCompact: boolean
 }
 
 function SidebarBookmarkFolderItem({
@@ -161,6 +173,7 @@ function SidebarBookmarkFolderItem({
   onCreateSubfolder,
   onRename,
   onDelete,
+  isCompact,
 }: SidebarBookmarkFolderItemProps) {
   const { t } = useTranslation('bookmarks')
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -193,9 +206,12 @@ function SidebarBookmarkFolderItem({
     <div>
       <div
         className={cn(
-          'group flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-200',
+          'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
+          isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
           isActive
-            ? 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
+            ? isCompact
+              ? 'bg-primary/15 text-primary font-semibold shadow-sm ring-1 ring-primary/25 border-l-2 border-primary'
+              : 'bg-primary/10 text-primary scale-[1.01] font-medium shadow-sm'
             : 'text-muted-foreground hover:bg-accent hover:text-foreground hover:scale-[1.01]'
         )}
       >
@@ -285,6 +301,7 @@ function SidebarBookmarkFolderItem({
               onCreateSubfolder={onCreateSubfolder}
               onRename={onRename}
               onDelete={onDelete}
+              isCompact={isCompact}
             />
           ))}
         </div>

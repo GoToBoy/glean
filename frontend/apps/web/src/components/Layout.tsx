@@ -16,6 +16,7 @@ import {
 import { useTranslation } from '@glean/i18n'
 import {
   buttonVariants,
+  cn,
   AlertDialog,
   AlertDialogPopup,
   AlertDialogHeader,
@@ -44,6 +45,7 @@ import { SidebarFeedsSection } from './sidebar/SidebarFeedsSection'
 import { SidebarBookmarksSection } from './sidebar/SidebarBookmarksSection'
 import { SidebarTagsSection } from './sidebar/SidebarTagsSection'
 import { SidebarUserSection } from './sidebar/SidebarUserSection'
+import { MobileSidebarDrawer } from './sidebar/MobileSidebarDrawer'
 import { AddFeedDialog } from './dialogs/AddFeedDialog'
 import { CreateFolderDialog } from './dialogs/CreateFolderDialog'
 import { CreateTagDialog } from './dialogs/CreateTagDialog'
@@ -468,6 +470,163 @@ export function Layout() {
     }
   }, [isReaderPage, searchParamsString])
 
+  const renderSidebarContent = (isMobileDrawer: boolean) => {
+    const isSidebarExpanded = isMobileDrawer ? true : isSidebarOpen
+
+    return (
+      <>
+        {/* Logo */}
+        <div
+          className={`border-border flex items-center justify-between border-b p-2 md:p-4 ${
+            isMacElectron ? 'md:pt-12' : ''
+          }`}
+        >
+          <Link to="/" className="flex items-center gap-2 overflow-hidden md:gap-3">
+            <div className="from-primary-500 to-primary-600 shadow-primary/20 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-lg md:h-9 md:w-9">
+              <Rss className="text-primary-foreground h-3.5 w-3.5 md:h-5 md:w-5" />
+            </div>
+            {isSidebarExpanded && (
+              <span className="font-display text-foreground text-base font-bold md:text-xl">
+                Glean
+              </span>
+            )}
+          </Link>
+          {isMobileDrawer && (
+            <button
+              onClick={() => setIsMobileSidebarOpen(false)}
+              className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+              aria-label="Close sidebar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+
+        {/* Toggle button - desktop only */}
+        {!isMobileDrawer && (
+          <button
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+            className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground absolute top-16 -right-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full border shadow-sm transition-colors md:flex"
+            aria-label={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
+          >
+            <ChevronLeft
+              className={`h-4 w-4 transition-transform ${isSidebarOpen ? '' : 'rotate-180'}`}
+            />
+          </button>
+        )}
+
+        {/* Resize handle - desktop only, when sidebar is expanded */}
+        {!isMobileDrawer && isSidebarOpen && (
+          <button
+            type="button"
+            aria-label="Resize sidebar"
+            className="absolute top-0 -right-1 bottom-0 hidden w-2 cursor-col-resize border-none bg-transparent p-0 md:block"
+            onMouseDown={handleResizeStart}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowLeft') {
+                setSidebarWidth((prev) => Math.max(SIDEBAR_MIN_WIDTH, prev - 10))
+              } else if (e.key === 'ArrowRight') {
+                setSidebarWidth((prev) => Math.min(SIDEBAR_MAX_WIDTH, prev + 10))
+              }
+            }}
+          >
+            <div
+              className={`absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors ${
+                isResizing ? 'bg-primary' : 'hover:bg-border bg-transparent'
+              }`}
+            />
+          </button>
+        )}
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto p-1.5 md:p-3">
+          <SidebarFeedsSection
+            isSidebarOpen={isSidebarExpanded}
+            isMobileSidebarOpen={isMobileDrawer}
+            isFeedsSectionExpanded={isFeedsSectionExpanded}
+            onToggleFeedsSection={() => setIsFeedsSectionExpanded((prev) => !prev)}
+            onAddFeed={() => setShowAddFeedDialog(true)}
+            onCreateFolder={(parentId) => openCreateFolderDialog(parentId, 'feed')}
+            onRefreshAll={() => refreshAllMutation.mutate()}
+            refreshAllPending={refreshAllMutation.isPending}
+            onImportOPML={handleImportClick}
+            importPending={importMutation.isPending}
+            onExportOPML={handleExport}
+            exportPending={exportMutation.isPending}
+            onFeedSelect={handleFeedSelect}
+            onSmartViewSelect={handleSmartViewSelect}
+            isSmartView={isSmartView}
+            isReaderPage={isReaderPage}
+            currentFeedId={currentFeedId}
+            currentFolderId={currentFolderId}
+            feedFolders={feedFolders}
+            subscriptionsByFolder={subscriptionsByFolder}
+            ungroupedSubscriptions={ungroupedSubscriptions}
+            expandedFolders={expandedFolders}
+            toggleFolder={toggleFolder}
+            draggedFeed={draggedFeed}
+            setDraggedFeed={setDraggedFeed}
+            dragOverFolderId={dragOverFolderId}
+            setDragOverFolderId={setDragOverFolderId}
+          />
+
+          <div
+            className={cn(
+              'border-border my-1.5 border-t md:my-3',
+              isMobileDrawer && 'my-2 border-dashed opacity-70'
+            )}
+          />
+
+          <SidebarBookmarksSection
+            isSidebarOpen={isSidebarExpanded}
+            isMobileSidebarOpen={isMobileDrawer}
+            isBookmarkSectionExpanded={isBookmarkSectionExpanded}
+            onToggleBookmarkSection={() => setIsBookmarkSectionExpanded((prev) => !prev)}
+            onCreateFolder={(parentId) => openCreateFolderDialog(parentId, 'bookmark')}
+            onSelectFolder={handleBookmarkFolderSelect}
+            isBookmarksPage={isBookmarksPage}
+            currentBookmarkFolderId={currentBookmarkFolderId || undefined}
+            currentBookmarkTagId={currentBookmarkTagId || undefined}
+            bookmarkFolders={bookmarkFolders}
+            expandedBookmarkFolders={expandedBookmarkFolders}
+            toggleBookmarkFolder={toggleBookmarkFolder}
+            onRenameFolder={updateFolder}
+            onDeleteFolder={deleteFolder}
+          />
+
+          <div
+            className={cn(
+              'border-border my-1.5 border-t md:my-3',
+              isMobileDrawer && 'my-2 border-dashed opacity-70'
+            )}
+          />
+
+          <SidebarTagsSection
+            isSidebarOpen={isSidebarExpanded}
+            isMobileSidebarOpen={isMobileDrawer}
+            isTagSectionExpanded={isTagSectionExpanded}
+            onToggleTagSection={() => setIsTagSectionExpanded((prev) => !prev)}
+            tags={tags}
+            currentBookmarkTagId={currentBookmarkTagId || undefined}
+            onSelectTag={handleTagSelect}
+            onCreateTag={() => setShowCreateTagDialog(true)}
+            onEditTag={(tag) => setEditingTag(tag)}
+            onDeleteTag={(tag) => setDeleteConfirmTag(tag)}
+          />
+        </nav>
+
+        <SidebarUserSection
+          user={user}
+          isSidebarOpen={isSidebarExpanded}
+          isMobileSidebarOpen={isMobileDrawer}
+          isSettingsActive={location.pathname === '/settings'}
+          isDiscoverActive={location.pathname === '/discover'}
+          onLogoutClick={() => setShowLogoutConfirm(true)}
+        />
+      </>
+    )
+  }
+
   return (
     <div className="bg-background flex h-screen flex-col md:flex-row">
       {/* Mobile Header - animate visibility when entering/leaving article reader */}
@@ -587,163 +746,22 @@ export function Layout() {
         )}
       </header>
 
-      {/* Mobile Sidebar Overlay */}
-      <button
-        type="button"
-        aria-label="Close sidebar"
-        className={`bg-background/80 fixed inset-0 z-40 backdrop-blur-sm transition-opacity duration-300 md:hidden ${
-          isMobileSidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        onClick={() => setIsMobileSidebarOpen(false)}
-      />
+      <MobileSidebarDrawer
+        open={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+      >
+        {renderSidebarContent(true)}
+      </MobileSidebarDrawer>
 
-      {/* Sidebar */}
+      {/* Desktop Sidebar */}
       <aside
         ref={sidebarRef}
-        className={`border-border bg-card fixed inset-y-0 left-0 z-50 flex flex-col border-r transition-[translate] duration-300 ease-out md:relative md:z-10 ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 ${isResizing ? 'sidebar-no-transition' : 'sidebar-transition'} `}
+        className={`border-border bg-card relative z-10 hidden flex-col border-r md:flex ${isResizing ? 'sidebar-no-transition' : 'sidebar-transition'}`}
         style={{
-          width: (() => {
-            if (isMobileSidebarOpen) return '288px'
-            if (isSidebarOpen) return `${sidebarWidth}px`
-            return `${SIDEBAR_COLLAPSED_WIDTH}px`
-          })(),
+          width: isSidebarOpen ? `${sidebarWidth}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
         }}
       >
-        {/* Logo */}
-        <div
-          className={`border-border flex items-center justify-between border-b p-2 md:p-4 ${
-            isMacElectron ? 'md:pt-12' : ''
-          }`}
-        >
-          <Link to="/" className="flex items-center gap-2 overflow-hidden md:gap-3">
-            <div className="from-primary-500 to-primary-600 shadow-primary/20 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-lg md:h-9 md:w-9">
-              <Rss className="text-primary-foreground h-3.5 w-3.5 md:h-5 md:w-5" />
-            </div>
-            {(isSidebarOpen || isMobileSidebarOpen) && (
-              <span className="font-display text-foreground text-base font-bold md:text-xl">
-                Glean
-              </span>
-            )}
-          </Link>
-          {/* Mobile close button */}
-          <button
-            onClick={() => setIsMobileSidebarOpen(false)}
-            className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-7 w-7 items-center justify-center rounded-lg transition-colors md:hidden"
-            aria-label="Close sidebar"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
-        {/* Toggle button - desktop only */}
-        <button
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground absolute top-16 -right-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full border shadow-sm transition-colors md:flex"
-          aria-label={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          <ChevronLeft
-            className={`h-4 w-4 transition-transform ${isSidebarOpen ? '' : 'rotate-180'}`}
-          />
-        </button>
-
-        {/* Resize handle - desktop only, when sidebar is expanded */}
-        {isSidebarOpen && (
-          <button
-            type="button"
-            aria-label="Resize sidebar"
-            className="absolute top-0 -right-1 bottom-0 hidden w-2 cursor-col-resize border-none bg-transparent p-0 md:block"
-            onMouseDown={handleResizeStart}
-            onKeyDown={(e) => {
-              if (e.key === 'ArrowLeft') {
-                setSidebarWidth((prev) => Math.max(SIDEBAR_MIN_WIDTH, prev - 10))
-              } else if (e.key === 'ArrowRight') {
-                setSidebarWidth((prev) => Math.min(SIDEBAR_MAX_WIDTH, prev + 10))
-              }
-            }}
-          >
-            <div
-              className={`absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors ${
-                isResizing ? 'bg-primary' : 'hover:bg-border bg-transparent'
-              }`}
-            />
-          </button>
-        )}
-
-        {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-1.5 md:p-3">
-          <SidebarFeedsSection
-            isSidebarOpen={isSidebarOpen}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            isFeedsSectionExpanded={isFeedsSectionExpanded}
-            onToggleFeedsSection={() => setIsFeedsSectionExpanded((prev) => !prev)}
-            onAddFeed={() => setShowAddFeedDialog(true)}
-            onCreateFolder={(parentId) => openCreateFolderDialog(parentId, 'feed')}
-            onRefreshAll={() => refreshAllMutation.mutate()}
-            refreshAllPending={refreshAllMutation.isPending}
-            onImportOPML={handleImportClick}
-            importPending={importMutation.isPending}
-            onExportOPML={handleExport}
-            exportPending={exportMutation.isPending}
-            onFeedSelect={handleFeedSelect}
-            onSmartViewSelect={handleSmartViewSelect}
-            isSmartView={isSmartView}
-            isReaderPage={isReaderPage}
-            currentFeedId={currentFeedId}
-            currentFolderId={currentFolderId}
-            feedFolders={feedFolders}
-            subscriptionsByFolder={subscriptionsByFolder}
-            ungroupedSubscriptions={ungroupedSubscriptions}
-            expandedFolders={expandedFolders}
-            toggleFolder={toggleFolder}
-            draggedFeed={draggedFeed}
-            setDraggedFeed={setDraggedFeed}
-            dragOverFolderId={dragOverFolderId}
-            setDragOverFolderId={setDragOverFolderId}
-          />
-
-          <div className="border-border my-1.5 border-t md:my-3" />
-
-          <SidebarBookmarksSection
-            isSidebarOpen={isSidebarOpen}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            isBookmarkSectionExpanded={isBookmarkSectionExpanded}
-            onToggleBookmarkSection={() => setIsBookmarkSectionExpanded((prev) => !prev)}
-            onCreateFolder={(parentId) => openCreateFolderDialog(parentId, 'bookmark')}
-            onSelectFolder={handleBookmarkFolderSelect}
-            isBookmarksPage={isBookmarksPage}
-            currentBookmarkFolderId={currentBookmarkFolderId || undefined}
-            currentBookmarkTagId={currentBookmarkTagId || undefined}
-            bookmarkFolders={bookmarkFolders}
-            expandedBookmarkFolders={expandedBookmarkFolders}
-            toggleBookmarkFolder={toggleBookmarkFolder}
-            onRenameFolder={updateFolder}
-            onDeleteFolder={deleteFolder}
-          />
-
-          <div className="border-border my-1.5 border-t md:my-3" />
-
-          <SidebarTagsSection
-            isSidebarOpen={isSidebarOpen}
-            isMobileSidebarOpen={isMobileSidebarOpen}
-            isTagSectionExpanded={isTagSectionExpanded}
-            onToggleTagSection={() => setIsTagSectionExpanded((prev) => !prev)}
-            tags={tags}
-            currentBookmarkTagId={currentBookmarkTagId || undefined}
-            onSelectTag={handleTagSelect}
-            onCreateTag={() => setShowCreateTagDialog(true)}
-            onEditTag={(tag) => setEditingTag(tag)}
-            onDeleteTag={(tag) => setDeleteConfirmTag(tag)}
-          />
-        </nav>
-
-        <SidebarUserSection
-          user={user}
-          isSidebarOpen={isSidebarOpen}
-          isMobileSidebarOpen={isMobileSidebarOpen}
-          isSettingsActive={location.pathname === '/settings'}
-          isDiscoverActive={location.pathname === '/discover'}
-          onLogoutClick={() => setShowLogoutConfirm(true)}
-        />
+        {renderSidebarContent(false)}
       </aside>
 
       {/* Main content */}

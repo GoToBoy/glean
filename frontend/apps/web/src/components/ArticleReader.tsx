@@ -177,7 +177,6 @@ function useScrollHide(
 /**
  * Mobile close gestures:
  * - Pull down to close when scrolled to top.
- * - Edge swipe right (from left edge) to close.
  */
 function useMobileCloseGestures(
   scrollContainerRef: React.RefObject<HTMLDivElement | null>,
@@ -186,8 +185,6 @@ function useMobileCloseGestures(
 ) {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null)
   const pullDistanceRef = useRef(0)
-  const edgeSwipeDistanceRef = useRef(0)
-  const startedFromLeftEdgeRef = useRef(false)
 
   const onTouchStart = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
@@ -197,8 +194,6 @@ function useMobileCloseGestures(
       const touch = e.touches[0]
       touchStartRef.current = { x: touch.clientX, y: touch.clientY }
       pullDistanceRef.current = 0
-      edgeSwipeDistanceRef.current = 0
-      startedFromLeftEdgeRef.current = touch.clientX <= 36
     },
     [enabled, scrollContainerRef]
   )
@@ -216,13 +211,6 @@ function useMobileCloseGestures(
       } else {
         pullDistanceRef.current = 0
       }
-
-      // Track left-edge horizontal swipe-to-close.
-      if (startedFromLeftEdgeRef.current && dx > 0 && Math.abs(dx) > Math.abs(dy) * 1.2) {
-        edgeSwipeDistanceRef.current = dx
-      } else {
-        edgeSwipeDistanceRef.current = 0
-      }
     },
     [enabled]
   )
@@ -231,13 +219,10 @@ function useMobileCloseGestures(
     if (!enabled || !touchStartRef.current) return
 
     const shouldCloseByPull = pullDistanceRef.current > 96
-    const shouldCloseByEdgeSwipe = edgeSwipeDistanceRef.current > 96
     touchStartRef.current = null
     pullDistanceRef.current = 0
-    edgeSwipeDistanceRef.current = 0
-    startedFromLeftEdgeRef.current = false
 
-    if ((shouldCloseByPull || shouldCloseByEdgeSwipe) && onClose) {
+    if (shouldCloseByPull && onClose) {
       onClose()
     }
   }, [enabled, onClose])
