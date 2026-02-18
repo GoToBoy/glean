@@ -525,23 +525,29 @@ async def import_opml(
         failed_count = 0
         folder_count = 0
 
-        # Create folders first and build a mapping of folder name -> folder id
+        # Build existing folder mapping first (name -> id), reusing same-name folders.
         folder_id_map: dict[str, str] = {}
+        existing_folders = await folder_service.get_folders_tree(current_user.id, "feed")
+
+        def collect_existing(nodes: list[FolderTreeNode]) -> None:
+            for node in nodes:
+                # Keep first seen folder id for a given name.
+                folder_id_map.setdefault(node.name, node.id)
+                if node.children:
+                    collect_existing(node.children)
+
+        collect_existing(existing_folders.folders)
+
+        # Create only missing folders from OPML.
         for folder_name in opml_result.folders:
-            try:
-                folder = await folder_service.create_folder(
-                    current_user.id,
-                    FolderCreate(name=folder_name, type="feed"),
-                )
-                folder_id_map[folder_name] = folder.id
-                folder_count += 1
-            except ValueError:
-                # Folder might already exist, try to find it
-                existing_folders = await folder_service.get_folders_tree(current_user.id, "feed")
-                for existing_folder in existing_folders.folders:
-                    if existing_folder.name == folder_name:
-                        folder_id_map[folder_name] = existing_folder.id
-                        break
+            if folder_name in folder_id_map:
+                continue
+            folder = await folder_service.create_folder(
+                current_user.id,
+                FolderCreate(name=folder_name, type="feed"),
+            )
+            folder_id_map[folder_name] = folder.id
+            folder_count += 1
 
         # Import feeds with folder assignment
         for opml_feed in opml_result.feeds:
