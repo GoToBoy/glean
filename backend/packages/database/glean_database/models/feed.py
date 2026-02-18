@@ -39,7 +39,9 @@ class Feed(Base, TimestampMixin):
         status: Current feed status.
         error_count: Consecutive fetch error count.
         fetch_error_message: Last error message if any.
-        last_fetched_at: Timestamp of last fetch attempt.
+        last_fetch_attempt_at: Timestamp of last fetch attempt.
+        last_fetch_success_at: Timestamp of last successful fetch.
+        last_fetched_at: Legacy alias field for last fetch attempt.
         last_entry_at: Timestamp of most recent entry published.
         next_fetch_at: Scheduled timestamp for next fetch.
         etag: HTTP ETag for conditional requests.
@@ -67,6 +69,8 @@ class Feed(Base, TimestampMixin):
     )
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     fetch_error_message: Mapped[str | None] = mapped_column(String(1000))
+    last_fetch_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_fetch_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_entry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     next_fetch_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)

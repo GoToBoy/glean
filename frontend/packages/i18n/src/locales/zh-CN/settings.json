@@ -96,6 +96,20 @@
     "untitledFeed": "未命名订阅源",
     "openFeed": "打开订阅源",
     "refreshFeed": "刷新订阅源",
+    "refreshStatus": {
+      "queued": "已排队",
+      "deferred": "延后执行",
+      "refreshing": "刷新中",
+      "completed": "已完成",
+      "notFound": "未找到任务"
+    },
+    "refreshResult": {
+      "success": "成功",
+      "notModified": "无更新",
+      "failed": "失败"
+    },
+    "entriesSuffix": "条",
+    "lastSuccessLabel": "最后成功",
     "edit": "编辑",
     "unsubscribe": "取消订阅",
     "noSubscriptionsFound": "未找到订阅",

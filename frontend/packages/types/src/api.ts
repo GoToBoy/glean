@@ -211,8 +211,11 @@ export interface RefreshStatusItem {
   feed_id: string
   job_id: string
   status: string
+  result_status: string | null
   new_entries: number | null
   message: string | null
+  last_fetch_attempt_at: string | null
+  last_fetch_success_at: string | null
   last_fetched_at: string | null
   error_count: number
   fetch_error_message: string | null

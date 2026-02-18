@@ -40,8 +40,11 @@ import {
 type FeedRefreshState = {
   jobId: string
   status: string
+  resultStatus: string | null
   newEntries: number | null
   message: string | null
+  lastFetchAttemptAt: string | null
+  lastFetchSuccessAt: string | null
   lastFetchedAt: string | null
   errorCount: number
   fetchErrorMessage: string | null
@@ -103,8 +106,11 @@ export function SubscriptionsTab() {
         [result.feed_id]: {
           jobId: result.job_id,
           status: 'queued',
+          resultStatus: null,
           newEntries: null,
           message: null,
+          lastFetchAttemptAt: null,
+          lastFetchSuccessAt: null,
           lastFetchedAt: null,
           errorCount: 0,
           fetchErrorMessage: null,
@@ -125,8 +131,11 @@ export function SubscriptionsTab() {
         next[job.feed_id] = {
           jobId: job.job_id,
           status: 'queued',
+          resultStatus: null,
           newEntries: null,
           message: null,
+          lastFetchAttemptAt: null,
+          lastFetchSuccessAt: null,
           lastFetchedAt: null,
           errorCount: 0,
           fetchErrorMessage: null,
@@ -165,8 +174,11 @@ export function SubscriptionsTab() {
         next[item.feed_id] = {
           jobId: item.job_id,
           status: item.status,
+          resultStatus: item.result_status,
           newEntries: item.new_entries,
           message: item.message,
+          lastFetchAttemptAt: item.last_fetch_attempt_at,
+          lastFetchSuccessAt: item.last_fetch_success_at,
           lastFetchedAt: item.last_fetched_at,
           errorCount: item.error_count,
           fetchErrorMessage: item.fetch_error_message,
@@ -352,19 +364,33 @@ export function SubscriptionsTab() {
                 }
                 const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
                 const statusLabelMap: Record<string, string> = {
-                  queued: 'Queued',
-                  deferred: 'Deferred',
-                  in_progress: 'Refreshing',
-                  complete: 'Completed',
-                  not_found: 'Not Found',
+                  queued: t('manageFeeds.refreshStatus.queued'),
+                  deferred: t('manageFeeds.refreshStatus.deferred'),
+                  in_progress: t('manageFeeds.refreshStatus.refreshing'),
+                  complete: t('manageFeeds.refreshStatus.completed'),
+                  not_found: t('manageFeeds.refreshStatus.notFound'),
+                }
+                const resultStatusLabelMap: Record<string, string> = {
+                  success: t('manageFeeds.refreshResult.success'),
+                  not_modified: t('manageFeeds.refreshResult.notModified'),
+                  error: t('manageFeeds.refreshResult.failed'),
                 }
                 const statusLabel = refreshState
                   ? statusLabelMap[refreshState.status] || refreshState.status
                   : null
+                const resultStatusLabel =
+                  refreshState?.resultStatus &&
+                  (resultStatusLabelMap[refreshState.resultStatus] || refreshState.resultStatus)
                 const rowLogMessage =
                   refreshState?.message ||
                   refreshState?.fetchErrorMessage ||
                   subscription.feed.fetch_error_message
+                const effectiveLastFetchAttemptAt =
+                  refreshState?.lastFetchAttemptAt ||
+                  subscription.feed.last_fetch_attempt_at ||
+                  refreshState?.lastFetchedAt
+                const effectiveLastFetchSuccessAt =
+                  refreshState?.lastFetchSuccessAt || subscription.feed.last_fetch_success_at
 
                 return (
                 <div
@@ -397,16 +423,23 @@ export function SubscriptionsTab() {
                             <div className="text-muted-foreground flex items-center gap-2 text-xs">
                               <span>
                                 {statusLabel}
+                                {resultStatusLabel ? ` · ${resultStatusLabel}` : ''}
                                 {refreshState.newEntries !== null
-                                  ? ` · +${refreshState.newEntries} entries`
+                                  ? ` · +${refreshState.newEntries} ${t('manageFeeds.entriesSuffix')}`
                                   : ''}
                               </span>
                               <span>
                                 {new Date(
-                                  refreshState.lastFetchedAt || refreshState.updatedAt
+                                  effectiveLastFetchAttemptAt || refreshState.updatedAt
                                 ).toLocaleString()}
                               </span>
                             </div>
+                            {effectiveLastFetchSuccessAt && (
+                              <p className="text-muted-foreground text-xs">
+                                {t('manageFeeds.lastSuccessLabel')}:{' '}
+                                {new Date(effectiveLastFetchSuccessAt).toLocaleString()}
+                              </p>
+                            )}
                             <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
                               <div
                                 className="bg-primary h-full transition-all duration-300"

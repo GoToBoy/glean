@@ -160,6 +160,12 @@
       "completed": "Completed",
       "notFound": "Not Found"
     },
+    "refreshResult": {
+      "success": "Success",
+      "notModified": "Not Modified",
+      "failed": "Failed"
+    },
+    "lastSuccessLabel": "Last success",
     "logLabel": "Log",
     "disableTooltip": "Disable feed",
     "enableTooltip": "Enable feed",

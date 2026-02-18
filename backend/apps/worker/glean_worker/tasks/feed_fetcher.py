@@ -45,6 +45,8 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
     logger.info("Starting feed fetch", extra={"feed_id": feed_id})
     async with get_session_context() as session:
         try:
+            fetch_attempt_at = datetime.now(UTC)
+
             # Get feed from database
             stmt = select(Feed).where(Feed.id == feed_id)
             result = await session.execute(stmt)
@@ -63,7 +65,9 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             if fetch_result is None:
                 # Not modified (304)
                 logger.info("Feed not modified (304)", extra={"feed_id": feed_id, "url": feed.url})
-                feed.last_fetched_at = datetime.now(UTC)
+                feed.last_fetch_attempt_at = fetch_attempt_at
+                feed.last_fetch_success_at = fetch_attempt_at
+                feed.last_fetched_at = fetch_attempt_at
                 return {"status": "not_modified", "new_entries": 0}
 
             logger.debug("Feed content received, parsing...", extra={"feed_id": feed_id})
@@ -102,7 +106,9 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             feed.status = FeedStatus.ACTIVE
             feed.error_count = 0
             feed.fetch_error_message = None
-            feed.last_fetched_at = datetime.now(UTC)
+            feed.last_fetch_attempt_at = fetch_attempt_at
+            feed.last_fetch_success_at = fetch_attempt_at
+            feed.last_fetched_at = fetch_attempt_at
 
             # Update cache headers
             if cache_headers and "etag" in cache_headers:
@@ -224,9 +230,11 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             feed = result.scalar_one_or_none()
 
             if feed:
+                fetch_attempt_at = datetime.now(UTC)
                 feed.error_count += 1
                 feed.fetch_error_message = str(e)
-                feed.last_fetched_at = datetime.now(UTC)
+                feed.last_fetch_attempt_at = fetch_attempt_at
+                feed.last_fetched_at = fetch_attempt_at
 
                 # Disable feed after 10 consecutive errors
                 if feed.error_count >= 10:
@@ -248,6 +256,9 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         "error_count": feed.error_count,
                     },
                 )
+                # Persist error status before raising Retry; otherwise context rollback
+                # would discard these updates.
+                await session.commit()
 
             # Retry the task
             logger.info("Retrying task in 5 minutes", extra={"feed_id": feed_id})

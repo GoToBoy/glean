@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
+import type { FeedRefreshJob, RefreshStatusItem } from '@glean/types'
 
 interface Feed {
   id: string
@@ -7,6 +8,8 @@ interface Feed {
   title: string
   status: 'active' | 'error' | 'disabled'
   subscriber_count: number
+  last_fetch_attempt_at: string | null
+  last_fetch_success_at: string | null
   last_fetched_at: string | null
   error_count: number
   fetch_error_message: string | null
@@ -36,22 +39,8 @@ interface FeedListParams {
   order?: string
 }
 
-export interface AdminFeedRefreshJob {
-  feed_id: string
-  job_id: string
-  feed_title?: string
-}
-
-export interface AdminFeedRefreshStatusItem {
-  feed_id: string
-  job_id: string
-  status: string
-  new_entries: number | null
-  message: string | null
-  last_fetched_at: string | null
-  error_count: number
-  fetch_error_message: string | null
-}
+export type AdminFeedRefreshJob = FeedRefreshJob
+export type AdminFeedRefreshStatusItem = RefreshStatusItem
 
 export function useFeeds(params: FeedListParams = {}) {
   return useQuery<FeedListResponse>({

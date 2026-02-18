@@ -64,6 +64,8 @@ export interface Feed {
   status: FeedStatus
   error_count: number
   fetch_error_message: string | null
+  last_fetch_attempt_at: string | null
+  last_fetch_success_at: string | null
   last_fetched_at: string | null
   last_entry_at: string | null
   created_at: string

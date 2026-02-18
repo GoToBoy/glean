@@ -96,6 +96,20 @@
     "untitledFeed": "Untitled Feed",
     "openFeed": "Open feed",
     "refreshFeed": "Refresh feed",
+    "refreshStatus": {
+      "queued": "Queued",
+      "deferred": "Deferred",
+      "refreshing": "Refreshing",
+      "completed": "Completed",
+      "notFound": "Not Found"
+    },
+    "refreshResult": {
+      "success": "Success",
+      "notModified": "No update",
+      "failed": "Failed"
+    },
+    "entriesSuffix": "entries",
+    "lastSuccessLabel": "Last success",
     "edit": "Edit",
     "unsubscribe": "Unsubscribe",
     "noSubscriptionsFound": "No subscriptions found",

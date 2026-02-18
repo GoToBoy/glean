@@ -111,6 +111,8 @@ class AdminFeedListItem(BaseModel):
     title: str
     status: str
     subscriber_count: int = 0
+    last_fetch_attempt_at: datetime | None
+    last_fetch_success_at: datetime | None
     last_fetched_at: datetime | None
     error_count: int = 0
     fetch_error_message: str | None = None

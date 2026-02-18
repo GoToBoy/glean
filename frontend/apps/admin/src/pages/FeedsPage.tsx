@@ -51,8 +51,11 @@ type FeedStatus = 'all' | 'active' | 'disabled' | 'error'
 type FeedRefreshState = {
   jobId: string
   status: string
+  resultStatus: string | null
   newEntries: number | null
   message: string | null
+  lastFetchAttemptAt: string | null
+  lastFetchSuccessAt: string | null
   lastFetchedAt: string | null
   errorCount: number
   fetchErrorMessage: string | null
@@ -142,8 +145,11 @@ export default function FeedsPage() {
       feed_id: string
       job_id: string
       status: string
+      result_status: string | null
       new_entries: number | null
       message: string | null
+      last_fetch_attempt_at: string | null
+      last_fetch_success_at: string | null
       last_fetched_at: string | null
       error_count: number
       fetch_error_message: string | null
@@ -156,8 +162,11 @@ export default function FeedsPage() {
         next[item.feed_id] = {
           jobId: item.job_id,
           status: item.status,
+          resultStatus: item.result_status,
           newEntries: item.new_entries,
           message: item.message,
+          lastFetchAttemptAt: item.last_fetch_attempt_at,
+          lastFetchSuccessAt: item.last_fetch_success_at,
           lastFetchedAt: item.last_fetched_at,
           errorCount: item.error_count,
           fetchErrorMessage: item.fetch_error_message,
@@ -175,8 +184,11 @@ export default function FeedsPage() {
       [result.feed_id]: {
         jobId: result.job_id,
         status: 'queued',
+        resultStatus: null,
         newEntries: null,
         message: null,
+        lastFetchAttemptAt: null,
+        lastFetchSuccessAt: null,
         lastFetchedAt: null,
         errorCount: 0,
         fetchErrorMessage: null,
@@ -194,8 +206,11 @@ export default function FeedsPage() {
         next[job.feed_id] = {
           jobId: job.job_id,
           status: 'queued',
+          resultStatus: null,
           newEntries: null,
           message: null,
+          lastFetchAttemptAt: null,
+          lastFetchSuccessAt: null,
           lastFetchedAt: null,
           errorCount: 0,
           fetchErrorMessage: null,
@@ -219,13 +234,16 @@ export default function FeedsPage() {
       try {
         const result = await refreshFeedStatusMutation.mutateAsync(pendingItems)
         upsertFeedRefreshStatus(result.items)
+        if (result.items.some((item) => item.status === 'complete')) {
+          void refetch()
+        }
       } catch {
         // Keep previous status on polling failures
       }
     }, 2000)
 
     return () => window.clearInterval(timer)
-  }, [feedRefreshState, refreshFeedStatusMutation])
+  }, [feedRefreshState, refreshFeedStatusMutation, refetch])
 
   const pageItems: Array<number | 'ellipsis'> = useMemo(() => {
     const totalPages = data?.total_pages ?? 1
@@ -433,6 +451,13 @@ export default function FeedsPage() {
                   data.items.map((feed) => {
                     const refreshState = feedRefreshState[feed.id]
                     const isRefreshing = !!refreshState && isPendingRefreshStatus(refreshState.status)
+                    const effectiveLastFetchAttemptAt =
+                      refreshState?.lastFetchAttemptAt ??
+                      feed.last_fetch_attempt_at ??
+                      refreshState?.lastFetchedAt ??
+                      feed.last_fetched_at
+                    const effectiveLastFetchSuccessAt =
+                      refreshState?.lastFetchSuccessAt ?? feed.last_fetch_success_at
                     const progressMap: Record<string, number> = {
                       queued: 20,
                       deferred: 40,
@@ -447,11 +472,22 @@ export default function FeedsPage() {
                       complete: t('admin:feeds.refreshStatus.completed'),
                       not_found: t('admin:feeds.refreshStatus.notFound'),
                     }
+                    const resultStatusLabelMap: Record<string, string> = {
+                      success: t('admin:feeds.refreshResult.success'),
+                      not_modified: t('admin:feeds.refreshResult.notModified'),
+                      error: t('admin:feeds.refreshResult.failed'),
+                    }
                     const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
                     const rowLogMessage =
                       refreshState?.message || refreshState?.fetchErrorMessage || feed.fetch_error_message
+                    const baseStatusText = refreshState
+                      ? statusLabelMap[refreshState.status] ?? refreshState.status
+                      : null
+                    const resultStatusText =
+                      refreshState?.resultStatus &&
+                      (resultStatusLabelMap[refreshState.resultStatus] ?? refreshState.resultStatus)
                     const statusText = refreshState
-                      ? `${statusLabelMap[refreshState.status] ?? refreshState.status}${refreshState.newEntries !== null ? ` · +${refreshState.newEntries}` : ''}`
+                      ? `${baseStatusText}${resultStatusText ? ` · ${resultStatusText}` : ''}${refreshState.newEntries !== null ? ` · +${refreshState.newEntries}` : ''}`
                       : null
 
                     return (
@@ -477,11 +513,21 @@ export default function FeedsPage() {
                                   <span>{statusText}</span>
                                   <span>
                                     {format(
-                                      new Date(refreshState.lastFetchedAt || refreshState.updatedAt),
+                                      new Date(
+                                        refreshState.lastFetchAttemptAt ||
+                                          refreshState.lastFetchedAt ||
+                                          refreshState.updatedAt
+                                      ),
                                       'MMM d, yyyy HH:mm:ss'
                                     )}
                                   </span>
                                 </div>
+                                {effectiveLastFetchSuccessAt && (
+                                  <div className="text-muted-foreground text-xs">
+                                    {t('admin:feeds.lastSuccessLabel')}:{' '}
+                                    {format(new Date(effectiveLastFetchSuccessAt), 'MMM d, yyyy HH:mm:ss')}
+                                  </div>
+                                )}
                                 <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
                                   <div
                                     className="bg-primary h-full transition-all duration-300"
@@ -506,8 +552,8 @@ export default function FeedsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-muted-foreground text-sm">
-                          {feed.last_fetched_at
-                            ? format(new Date(feed.last_fetched_at), 'MMM d, yyyy HH:mm')
+                          {effectiveLastFetchAttemptAt
+                            ? format(new Date(effectiveLastFetchAttemptAt), 'MMM d, yyyy HH:mm')
                             : t('admin:feeds.neverFetched')}
                         </p>
                       </td>

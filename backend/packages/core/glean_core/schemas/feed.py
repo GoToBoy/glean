@@ -31,6 +31,8 @@ class FeedResponse(BaseModel):
     language: str | None
     status: str
     error_count: int
+    last_fetch_attempt_at: datetime | None
+    last_fetch_success_at: datetime | None
     last_fetched_at: datetime | None
     last_entry_at: datetime | None
     created_at: datetime

@@ -160,6 +160,12 @@
       "completed": "已完成",
       "notFound": "未找到任务"
     },
+    "refreshResult": {
+      "success": "成功",
+      "notModified": "无更新",
+      "failed": "失败"
+    },
+    "lastSuccessLabel": "最后成功",
     "logLabel": "日志",
     "disableTooltip": "禁用订阅",
     "enableTooltip": "启用订阅",
