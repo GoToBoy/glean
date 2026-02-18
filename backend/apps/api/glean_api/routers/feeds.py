@@ -27,7 +27,7 @@ from glean_core.schemas import (
 )
 from glean_core.services import FeedService, FolderService, RSSHubService
 from glean_core.services.feed_service import UNSET
-from glean_database.models import Feed
+from glean_database.models import Feed, Subscription
 from glean_rss import discover_feed, fetch_feed, generate_opml, parse_feed, parse_opml_with_folders
 
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
@@ -524,6 +524,7 @@ async def import_opml(
         success_count = 0
         failed_count = 0
         folder_count = 0
+        updated_count = 0
 
         # Build existing folder mapping first (name -> id), reusing same-name folders.
         folder_id_map: dict[str, str] = {}
@@ -549,16 +550,51 @@ async def import_opml(
             folder_id_map[folder_name] = folder.id
             folder_count += 1
 
-        # Import feeds with folder assignment
+        # Build desired folder assignment by feed URL.
+        # If duplicate URLs appear in OPML, last occurrence wins.
+        desired_folder_by_url: dict[str, str | None] = {}
+        desired_title_by_url: dict[str, str] = {}
         for opml_feed in opml_result.feeds:
-            try:
-                # Get folder_id if feed has a folder
-                folder_id = folder_id_map.get(opml_feed.folder) if opml_feed.folder else None
+            feed_url = opml_feed.xml_url.strip()
+            folder_id = folder_id_map.get(opml_feed.folder) if opml_feed.folder else None
+            desired_folder_by_url[feed_url] = folder_id
+            desired_title_by_url[feed_url] = opml_feed.title
 
+        # Bulk load existing subscriptions for OPML URLs and update folder assignment.
+        existing_subscriptions_by_url: dict[str, Subscription] = {}
+        if desired_folder_by_url:
+            existing_stmt = (
+                select(Subscription, Feed.url)
+                .join(Feed, Subscription.feed_id == Feed.id)
+                .where(Subscription.user_id == current_user.id, Feed.url.in_(desired_folder_by_url))
+            )
+            existing_result = await feed_service.session.execute(existing_stmt)
+            for subscription, feed_url in existing_result.all():
+                existing_subscriptions_by_url[feed_url] = subscription
+
+        for feed_url, existing_subscription in existing_subscriptions_by_url.items():
+            target_folder_id = desired_folder_by_url[feed_url]
+            if existing_subscription.folder_id != target_folder_id:
+                existing_subscription.folder_id = target_folder_id
+                updated_count += 1
+
+        if updated_count > 0:
+            await feed_service.session.commit()
+
+        # Import feeds with folder assignment.
+        for opml_feed in opml_result.feeds:
+            feed_url = opml_feed.xml_url.strip()
+            folder_id = desired_folder_by_url[feed_url]
+
+            if feed_url in existing_subscriptions_by_url:
+                success_count += 1
+                continue
+
+            try:
                 subscription = await feed_service.create_subscription(
                     current_user.id,
-                    opml_feed.xml_url,
-                    opml_feed.title,
+                    feed_url,
+                    desired_title_by_url[feed_url],
                     folder_id,
                 )
                 # Immediately enqueue feed fetch task only if feed has never been fetched
@@ -566,7 +602,7 @@ async def import_opml(
                     await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
                 success_count += 1
             except ValueError:
-                # Already subscribed or invalid feed
+                # Invalid feed or other create failure
                 failed_count += 1
 
         return {

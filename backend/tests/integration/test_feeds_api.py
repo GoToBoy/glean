@@ -1,5 +1,7 @@
 """Integration tests for feeds and subscriptions API endpoints."""
 
+import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -264,3 +266,164 @@ class TestDeleteSubscription:
         response = await client.delete(f"/api/feeds/{test_subscription.id}")
 
         assert response.status_code == 401
+
+
+class TestImportOPML:
+    """Test OPML import behavior."""
+
+    @pytest.mark.asyncio
+    async def test_reimport_updates_existing_subscription_folder(
+        self, client: AsyncClient, auth_headers
+    ):
+        """Duplicate import should move existing subscription to latest OPML folder."""
+        feed_url = f"https://example.com/reimport-{uuid.uuid4().hex}.xml"
+
+        old_folder_resp = await client.post(
+            "/api/folders",
+            json={"name": "Old Folder", "type": "feed"},
+            headers=auth_headers,
+        )
+        assert old_folder_resp.status_code == 201
+        old_folder_id = old_folder_resp.json()["id"]
+
+        subscribe_resp = await client.post(
+            "/api/feeds/discover",
+            json={"url": feed_url, "folder_id": old_folder_id},
+            headers=auth_headers,
+        )
+        assert subscribe_resp.status_code == 201
+
+        opml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Import</title></head>
+  <body>
+    <outline text="New Folder">
+      <outline text="Reimport Feed" title="Reimport Feed" xmlUrl="{feed_url}" type="rss"/>
+    </outline>
+  </body>
+</opml>
+"""
+        import_resp = await client.post(
+            "/api/feeds/import",
+            files={"file": ("subscriptions.opml", opml_content, "text/xml")},
+            headers=auth_headers,
+        )
+        assert import_resp.status_code == 200
+        assert import_resp.json()["failed"] == 0
+        assert import_resp.json()["success"] == 1
+
+        folders_resp = await client.get("/api/folders?type=feed", headers=auth_headers)
+        assert folders_resp.status_code == 200
+        new_folder_id = next(
+            folder["id"]
+            for folder in folders_resp.json()["folders"]
+            if folder["name"] == "New Folder"
+        )
+
+        subscriptions_resp = await client.get("/api/feeds", headers=auth_headers)
+        assert subscriptions_resp.status_code == 200
+        subscription = subscriptions_resp.json()["items"][0]
+        assert subscription["feed"]["url"] == feed_url
+        assert subscription["folder_id"] == new_folder_id
+
+    @pytest.mark.asyncio
+    async def test_reimport_updates_existing_subscription_to_ungrouped(
+        self, client: AsyncClient, auth_headers
+    ):
+        """Duplicate import with root feed should clear existing folder assignment."""
+        feed_url = f"https://example.com/reimport-root-{uuid.uuid4().hex}.xml"
+
+        folder_resp = await client.post(
+            "/api/folders",
+            json={"name": "Folder Before", "type": "feed"},
+            headers=auth_headers,
+        )
+        assert folder_resp.status_code == 201
+        folder_id = folder_resp.json()["id"]
+
+        subscribe_resp = await client.post(
+            "/api/feeds/discover",
+            json={"url": feed_url, "folder_id": folder_id},
+            headers=auth_headers,
+        )
+        assert subscribe_resp.status_code == 201
+
+        opml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Import</title></head>
+  <body>
+    <outline text="Root Feed" title="Root Feed" xmlUrl="{feed_url}" type="rss"/>
+  </body>
+</opml>
+"""
+        import_resp = await client.post(
+            "/api/feeds/import",
+            files={"file": ("subscriptions.opml", opml_content, "text/xml")},
+            headers=auth_headers,
+        )
+        assert import_resp.status_code == 200
+        assert import_resp.json()["failed"] == 0
+        assert import_resp.json()["success"] == 1
+
+        subscriptions_resp = await client.get("/api/feeds", headers=auth_headers)
+        assert subscriptions_resp.status_code == 200
+        subscription = subscriptions_resp.json()["items"][0]
+        assert subscription["feed"]["url"] == feed_url
+        assert subscription["folder_id"] is None
+
+    @pytest.mark.asyncio
+    async def test_reimport_reuses_existing_folder_and_reorganizes(
+        self, client: AsyncClient, auth_headers
+    ):
+        """Re-import should reuse existing folder and move subscription to it."""
+        feed_url = f"https://example.com/reimport-existing-{uuid.uuid4().hex}.xml"
+
+        source_folder_resp = await client.post(
+            "/api/folders",
+            json={"name": "Source Folder", "type": "feed"},
+            headers=auth_headers,
+        )
+        assert source_folder_resp.status_code == 201
+        source_folder_id = source_folder_resp.json()["id"]
+
+        target_folder_resp = await client.post(
+            "/api/folders",
+            json={"name": "Existing Target", "type": "feed"},
+            headers=auth_headers,
+        )
+        assert target_folder_resp.status_code == 201
+        target_folder_id = target_folder_resp.json()["id"]
+
+        subscribe_resp = await client.post(
+            "/api/feeds/discover",
+            json={"url": feed_url, "folder_id": source_folder_id},
+            headers=auth_headers,
+        )
+        assert subscribe_resp.status_code == 201
+
+        opml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Import</title></head>
+  <body>
+    <outline text="Existing Target">
+      <outline text="Feed" title="Feed" xmlUrl="{feed_url}" type="rss"/>
+    </outline>
+  </body>
+</opml>
+"""
+        import_resp = await client.post(
+            "/api/feeds/import",
+            files={"file": ("subscriptions.opml", opml_content, "text/xml")},
+            headers=auth_headers,
+        )
+        assert import_resp.status_code == 200
+        data = import_resp.json()
+        assert data["success"] == 1
+        assert data["failed"] == 0
+        assert data["folders_created"] == 0
+
+        subscriptions_resp = await client.get("/api/feeds", headers=auth_headers)
+        assert subscriptions_resp.status_code == 200
+        subscription = subscriptions_resp.json()["items"][0]
+        assert subscription["feed"]["url"] == feed_url
+        assert subscription["folder_id"] == target_folder_id
