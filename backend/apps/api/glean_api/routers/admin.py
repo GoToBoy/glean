@@ -19,6 +19,7 @@ from glean_core.schemas import (
     EmbeddingConfigUpdateRequest,
     ImplicitFeedbackConfigUpdateRequest,
     RecencyDecayConfigUpdateRequest,
+    RSSHubConfigUpdateRequest,
 )
 from glean_core.schemas.admin import (
     AdminBatchEntryRequest,
@@ -1229,4 +1230,30 @@ async def update_recency_decay_settings(
 
     updates = request.model_dump(exclude_unset=True)
     updated = await config_service.update(RecencyDecayConfig, **updates)
+    return updated.model_dump(exclude={"NAMESPACE"})
+
+
+@router.get("/settings/rsshub")
+async def get_rsshub_settings(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Get RSSHub conversion configuration."""
+    from glean_core.schemas.config import RSSHubConfig
+
+    config = await config_service.get(RSSHubConfig)
+    return config.model_dump(exclude={"NAMESPACE"})
+
+
+@router.post("/settings/rsshub")
+async def update_rsshub_settings(
+    request: RSSHubConfigUpdateRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
+) -> dict[str, Any]:
+    """Update RSSHub conversion configuration."""
+    from glean_core.schemas.config import RSSHubConfig
+
+    updates = request.model_dump(exclude_unset=True)
+    updated = await config_service.update(RSSHubConfig, **updates)
     return updated.model_dump(exclude={"NAMESPACE"})

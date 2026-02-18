@@ -58,6 +58,7 @@ class DiscoverFeedRequest(BaseModel):
 
     url: HttpUrl
     folder_id: str | None = None
+    rsshub_path: str | None = None
 
 
 class UpdateSubscriptionRequest(BaseModel):
@@ -72,6 +73,8 @@ class UpdateSubscriptionRequest(BaseModel):
     folder_id: str | None = "__unset__"
     # Feed URL update (updates the underlying feed)
     feed_url: HttpUrl | None = None
+    # Optional RSSHub path to convert via configured RSSHub base URL
+    rsshub_path: str | None = None
 
 
 class BatchDeleteSubscriptionsRequest(BaseModel):

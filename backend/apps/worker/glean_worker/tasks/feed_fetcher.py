@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
-from glean_core.services import TypedConfigService
+from glean_core.services import RSSHubService, TypedConfigService
 from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session_context
 from glean_rss import fetch_and_extract_fulltext, fetch_feed, parse_feed, postprocess_html
@@ -58,25 +58,66 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
             logger.info("Fetching feed", extra={"feed_id": feed_id, "url": feed.url})
 
-            # Fetch feed content
-            logger.debug("Requesting feed", extra={"url": feed.url})
-            fetch_result = await fetch_feed(feed.url, feed.etag, feed.last_modified)
+            # Build fallback sequence: source URL -> RSSHub converted URL (if available).
+            rsshub_service = RSSHubService(session)
+            fallback_source = feed.site_url or feed.url
+            fallback_urls = await rsshub_service.convert_for_fetch(fallback_source)
+            attempt_urls = [feed.url]
+            for fallback_url in fallback_urls:
+                if fallback_url not in attempt_urls:
+                    attempt_urls.append(fallback_url)
 
-            if fetch_result is None:
-                # Not modified (304)
-                logger.info("Feed not modified (304)", extra={"feed_id": feed_id, "url": feed.url})
-                feed.last_fetch_attempt_at = fetch_attempt_at
-                feed.last_fetch_success_at = fetch_attempt_at
-                feed.last_fetched_at = fetch_attempt_at
-                return {"status": "not_modified", "new_entries": 0}
+            parsed_feed = None
+            cache_headers: dict[str, str] | None = None
+            used_url = feed.url
+            last_error: Exception | None = None
 
-            logger.debug("Feed content received, parsing...", extra={"feed_id": feed_id})
+            for idx, attempt_url in enumerate(attempt_urls):
+                try:
+                    logger.debug("Requesting feed", extra={"url": attempt_url})
+                    use_conditional = idx == 0  # ETag/Last-Modified only for primary source URL
+                    fetch_result = await fetch_feed(
+                        attempt_url,
+                        feed.etag if use_conditional else None,
+                        feed.last_modified if use_conditional else None,
+                    )
 
-            content, cache_headers = fetch_result
+                    if fetch_result is None:
+                        # Not modified (304) on primary URL.
+                        logger.info(
+                            "Feed not modified (304)",
+                            extra={"feed_id": feed_id, "url": attempt_url},
+                        )
+                        feed.last_fetch_attempt_at = fetch_attempt_at
+                        feed.last_fetch_success_at = fetch_attempt_at
+                        feed.last_fetched_at = fetch_attempt_at
+                        return {"status": "not_modified", "new_entries": 0}
 
-            # Parse feed
-            logger.debug("Parsing feed content...", extra={"feed_id": feed_id})
-            parsed_feed = await parse_feed(content, feed.url)
+                    logger.debug("Feed content received, parsing...", extra={"feed_id": feed_id})
+                    content, headers = fetch_result
+                    logger.debug("Parsing feed content...", extra={"feed_id": feed_id})
+                    parsed_feed = await parse_feed(content, attempt_url)
+                    cache_headers = headers
+                    used_url = attempt_url
+                    break
+                except Exception as e:
+                    last_error = e
+                    logger.warning(
+                        "Feed fetch attempt failed",
+                        extra={"feed_id": feed_id, "attempt_url": attempt_url, "error": str(e)},
+                    )
+                    continue
+
+            if parsed_feed is None:
+                if last_error:
+                    raise last_error
+                raise ValueError("Failed to fetch and parse feed")
+
+            if used_url != feed.url:
+                logger.info(
+                    "Fetched via RSSHub fallback",
+                    extra={"feed_id": feed_id, "source_url": feed.url, "rsshub_url": used_url},
+                )
             logger.info(
                 "Parsed feed",
                 extra={
@@ -111,9 +152,9 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             feed.last_fetched_at = fetch_attempt_at
 
             # Update cache headers
-            if cache_headers and "etag" in cache_headers:
+            if used_url == feed.url and cache_headers and "etag" in cache_headers:
                 feed.etag = cache_headers["etag"]
-            if cache_headers and "last-modified" in cache_headers:
+            if used_url == feed.url and cache_headers and "last-modified" in cache_headers:
                 feed.last_modified = cache_headers["last-modified"]
 
             # Process entries

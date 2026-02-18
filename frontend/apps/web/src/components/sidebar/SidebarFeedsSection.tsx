@@ -778,6 +778,7 @@ function SidebarFeedItem({
   const [showEditDialog, setShowEditDialog] = useState(false)
   const [editTitle, setEditTitle] = useState(subscription.custom_title || '')
   const [editUrl, setEditUrl] = useState(subscription.feed.url || '')
+  const [rsshubPath, setRsshubPath] = useState('')
   const [isSaving, setIsSaving] = useState(false)
 
   const handleContextMenu = (e: React.MouseEvent) => {
@@ -804,11 +805,14 @@ function SidebarFeedItem({
   const handleSaveEdit = async () => {
     setIsSaving(true)
     try {
-      const updateData: { custom_title: string | null; feed_url?: string } = {
+      const updateData: { custom_title: string | null; feed_url?: string; rsshub_path?: string } = {
         custom_title: editTitle || null,
       }
       if (editUrl && editUrl !== subscription.feed.url) {
         updateData.feed_url = editUrl
+      }
+      if (rsshubPath.trim()) {
+        updateData.rsshub_path = rsshubPath.trim()
       }
       await updateMutation.mutateAsync({
         subscriptionId: subscription.id,
@@ -999,6 +1003,15 @@ function SidebarFeedItem({
               <p className="text-muted-foreground text-xs">
                 {t('manageSubscriptions.rssUrlDescription')}
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-rsshub-path">RSSHub Path (Optional)</Label>
+              <Input
+                id="edit-rsshub-path"
+                value={rsshubPath}
+                onChange={(e) => setRsshubPath(e.target.value)}
+                placeholder="/bilibili/user/dynamic/946974"
+              />
             </div>
           </div>
           <DialogFooter>

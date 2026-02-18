@@ -11,6 +11,7 @@ from typing import Any, ClassVar
 
 from pydantic import BaseModel, Field
 
+from .rsshub_ruleset import RSSHUB_BUILTIN_RULES_DEFAULTS, RSSHUB_RULESET_VERSION
 
 class VectorizationStatus(str, Enum):
     """Vectorization system status."""
@@ -152,6 +153,35 @@ class RecencyDecayConfigUpdateRequest(BaseModel):
     start_day: float | None = Field(default=None, ge=0.0, le=30.0)
     half_life_days: float | None = Field(default=None, gt=0.0, le=365.0)
     floor_factor: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class RSSHubConfig(BaseModel):
+    """
+    RSSHub conversion configuration.
+
+    Stored in system_configs table with key = NAMESPACE.
+    """
+
+    NAMESPACE: ClassVar[str] = "rsshub"
+
+    enabled: bool = False
+    base_url: str | None = Field(default=None, max_length=2000)
+    auto_convert_on_subscribe: bool = True
+    fallback_on_fetch: bool = True
+    ruleset_version: str = RSSHUB_RULESET_VERSION
+    builtin_rules: dict[str, bool] = Field(default_factory=lambda: dict(RSSHUB_BUILTIN_RULES_DEFAULTS))
+    custom_rules: list[dict[str, str | bool]] = Field(default_factory=list)
+
+
+class RSSHubConfigUpdateRequest(BaseModel):
+    """Partial update request for RSSHub configuration."""
+
+    enabled: bool | None = None
+    base_url: str | None = Field(default=None, max_length=2000)
+    auto_convert_on_subscribe: bool | None = None
+    fallback_on_fetch: bool | None = None
+    builtin_rules: dict[str, bool] | None = None
+    custom_rules: list[dict[str, str | bool]] | None = None
 
 
 class EmbeddingRebuildProgress(BaseModel):

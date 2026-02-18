@@ -743,6 +743,7 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
   const { createFolder } = useFolderStore()
   const [customTitle, setCustomTitle] = useState(subscription.custom_title || '')
   const [feedUrl, setFeedUrl] = useState(subscription.feed.url || '')
+  const [rsshubPath, setRsshubPath] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(
     subscription.folder_id || null
   )
@@ -796,15 +797,22 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
   }, [])
 
   const handleSave = async () => {
-    const updateData: { custom_title: string | null; folder_id: string | null; feed_url?: string } =
-      {
-        custom_title: customTitle || null,
-        folder_id: selectedFolderId,
-      }
+    const updateData: {
+      custom_title: string | null
+      folder_id: string | null
+      feed_url?: string
+      rsshub_path?: string
+    } = {
+      custom_title: customTitle || null,
+      folder_id: selectedFolderId,
+    }
 
     // Only include feed_url if it was changed
     if (feedUrl && feedUrl !== subscription.feed.url) {
       updateData.feed_url = feedUrl
+    }
+    if (rsshubPath.trim()) {
+      updateData.rsshub_path = rsshubPath.trim()
     }
 
     await updateMutation.mutateAsync({
@@ -869,6 +877,20 @@ function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscrip
             />
             <p className="text-muted-foreground text-xs">
               {t('manageSubscriptions.rssUrlDescription')}
+            </p>
+          </div>
+
+          {/* Optional RSSHub path */}
+          <div className="space-y-2">
+            <Label htmlFor="rsshub-path">RSSHub Path (Optional)</Label>
+            <Input
+              id="rsshub-path"
+              value={rsshubPath}
+              onChange={(e) => setRsshubPath(e.target.value)}
+              placeholder="/bilibili/user/dynamic/946974"
+            />
+            <p className="text-muted-foreground text-xs">
+              Uses admin-configured RSSHub base URL to convert this subscription.
             </p>
           </div>
 
@@ -1048,6 +1070,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
   const discoverMutation = useDiscoverFeed()
   const { createFolder } = useFolderStore()
   const [url, setUrl] = useState('')
+  const [rsshubPath, setRsshubPath] = useState('')
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null)
 
   // Folder selector state
@@ -1107,6 +1130,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
       await discoverMutation.mutateAsync({
         url: url.trim(),
         folder_id: selectedFolderId,
+        rsshub_path: rsshubPath.trim() || undefined,
       })
       onClose()
     } catch {
@@ -1182,6 +1206,23 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
             />
             <p className="text-muted-foreground text-xs">
               {t('manageSubscriptions.feedUrlDescription')}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rsshubPath" className="text-foreground">
+              RSSHub Path (Optional)
+            </Label>
+            <Input
+              id="rsshubPath"
+              value={rsshubPath}
+              onChange={(e) => setRsshubPath(e.target.value)}
+              placeholder="/bilibili/user/dynamic/946974"
+              disabled={discoverMutation.isPending}
+              className="w-full"
+            />
+            <p className="text-muted-foreground text-xs">
+              If provided, subscription will use RSSHub conversion with your admin-configured base URL.
             </p>
           </div>
 

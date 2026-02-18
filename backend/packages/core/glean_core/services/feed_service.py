@@ -6,16 +6,19 @@ Handles feed discovery, subscription management, and OPML import/export.
 
 import hashlib
 import math
+from urllib.parse import urljoin
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from glean_core.schemas import (
+    RSSHubConfig,
     SubscriptionListResponse,
     SubscriptionResponse,
     SubscriptionSyncResponse,
 )
+from glean_core.services.typed_config_service import TypedConfigService
 from glean_database.models import Entry, Feed, Subscription, UserEntry, UserPreferenceStats
 
 # Sentinel for unset values
@@ -33,6 +36,37 @@ class FeedService:
             session: Database session.
         """
         self.session = session
+        self._typed_config = TypedConfigService(session)
+
+    async def _build_rsshub_feed_url(self, rsshub_path: str) -> str:
+        """
+        Build absolute RSSHub feed URL from configured base_url and path.
+
+        Args:
+            rsshub_path: RSSHub path, e.g. "/bilibili/user/dynamic/123".
+
+        Returns:
+            Absolute RSSHub feed URL.
+
+        Raises:
+            ValueError: If RSSHub config is disabled/missing or path is invalid.
+        """
+        normalized_path = (rsshub_path or "").strip()
+        if not normalized_path:
+            raise ValueError("rsshub_path cannot be empty")
+
+        config = await self._typed_config.get(RSSHubConfig)
+        if not config.enabled:
+            raise ValueError("RSSHub conversion is disabled by admin")
+        if not config.base_url:
+            raise ValueError("RSSHub base URL is not configured")
+
+        base = config.base_url.strip().rstrip("/")
+        if not base.startswith(("http://", "https://")):
+            raise ValueError("RSSHub base URL must start with http:// or https://")
+
+        path = normalized_path.lstrip("/")
+        return urljoin(base + "/", path)
 
     async def get_user_subscriptions(
         self, user_id: str, folder_id: str | None = None
@@ -278,6 +312,7 @@ class FeedService:
         feed_url: str,
         feed_title: str | None = None,
         folder_id: str | None = None,
+        rsshub_path: str | None = None,
     ) -> SubscriptionResponse:
         """
         Create a new subscription.
@@ -287,6 +322,7 @@ class FeedService:
             feed_url: Feed URL.
             feed_title: Optional feed title (if None, uses URL as title).
             folder_id: Optional folder to place the subscription in.
+            rsshub_path: Optional RSSHub path. If provided, overrides feed_url.
 
         Returns:
             Subscription response.
@@ -294,6 +330,9 @@ class FeedService:
         Raises:
             ValueError: If subscription already exists.
         """
+        if rsshub_path:
+            feed_url = await self._build_rsshub_feed_url(rsshub_path)
+
         # Check if feed exists
         stmt = select(Feed).where(Feed.url == feed_url)
         result = await self.session.execute(stmt)
@@ -453,6 +492,7 @@ class FeedService:
         custom_title: str | None = None,
         folder_id: str | None | object = UNSET,
         feed_url: str | None = None,
+        rsshub_path: str | None = None,
     ) -> SubscriptionResponse:
         """
         Update subscription settings.
@@ -464,6 +504,7 @@ class FeedService:
             folder_id: Folder to move subscription to. None removes from folder.
                        Use UNSET sentinel to keep unchanged.
             feed_url: New URL for the feed. Updates the underlying feed.
+            rsshub_path: Optional RSSHub path. If provided, takes precedence over feed_url.
 
         Returns:
             Updated subscription response.
@@ -490,8 +531,12 @@ class FeedService:
             subscription.folder_id = folder_id  # type: ignore[assignment]
 
         # Update feed URL if provided
-        if feed_url and subscription.feed:
-            subscription.feed.url = feed_url
+        resolved_feed_url = feed_url
+        if rsshub_path:
+            resolved_feed_url = await self._build_rsshub_feed_url(rsshub_path)
+
+        if resolved_feed_url and subscription.feed:
+            subscription.feed.url = resolved_feed_url
 
         await self.session.commit()
 

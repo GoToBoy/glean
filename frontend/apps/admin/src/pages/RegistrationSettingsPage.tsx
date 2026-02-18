@@ -34,6 +34,15 @@ interface RecencyDecaySettings {
   floor_factor: number
 }
 
+interface RSSHubSettings {
+  enabled: boolean
+  base_url: string | null
+  auto_convert_on_subscribe: boolean
+  fallback_on_fetch: boolean
+  builtin_rules: Record<string, boolean>
+  custom_rules: Array<Record<string, string | boolean>>
+}
+
 export default function RegistrationSettingsPage() {
   const { t } = useTranslation(['admin', 'common'])
   const [loading, setLoading] = useState(true)
@@ -42,6 +51,7 @@ export default function RegistrationSettingsPage() {
   const [updating, setUpdating] = useState(false)
   const [savingImplicit, setSavingImplicit] = useState(false)
   const [savingRecency, setSavingRecency] = useState(false)
+  const [savingRsshub, setSavingRsshub] = useState(false)
   const [implicitSettings, setImplicitSettings] = useState<ImplicitFeedbackSettings>({
     enabled: false,
     weight: 1.0,
@@ -57,6 +67,32 @@ export default function RegistrationSettingsPage() {
     half_life_days: 2,
     floor_factor: 0.05,
   })
+  const [rsshubSettings, setRsshubSettings] = useState<RSSHubSettings>({
+    enabled: false,
+    base_url: '',
+    auto_convert_on_subscribe: true,
+    fallback_on_fetch: true,
+    builtin_rules: {
+      bilibili_space: true,
+      bilibili_video: true,
+      youtube_channel: true,
+      youtube_playlist: true,
+      zhihu_column: true,
+      zhihu_people: true,
+      zhihu_question: true,
+      x_user: true,
+      github_repo: true,
+      reddit_subreddit: true,
+      reddit_user: true,
+      telegram_channel: true,
+      weibo_user: true,
+      medium_user: true,
+      medium_publication: true,
+      pixiv_user: true,
+    },
+    custom_rules: [],
+  })
+  const [rsshubCustomRulesText, setRsshubCustomRulesText] = useState('[]')
 
   useEffect(() => {
     fetchSettings()
@@ -65,14 +101,18 @@ export default function RegistrationSettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const [registrationRes, implicitRes, recencyRes] = await Promise.all([
+      const [registrationRes, implicitRes, recencyRes, rsshubRes] = await Promise.all([
         api.get('/settings/registration'),
         api.get('/settings/implicit-feedback'),
         api.get('/settings/recency-decay'),
+        api.get('/settings/rsshub'),
       ])
       setRegistrationEnabled(registrationRes.data.enabled)
       setImplicitSettings(implicitRes.data as ImplicitFeedbackSettings)
       setRecencySettings(recencyRes.data as RecencyDecaySettings)
+      const nextRsshub = rsshubRes.data as RSSHubSettings
+      setRsshubSettings(nextRsshub)
+      setRsshubCustomRulesText(JSON.stringify(nextRsshub.custom_rules ?? [], null, 2))
       setError(null)
     } catch (err) {
       console.error('Failed to fetch settings:', err)
@@ -121,6 +161,35 @@ export default function RegistrationSettingsPage() {
       setError('Failed to update recency decay settings')
     } finally {
       setSavingRecency(false)
+    }
+  }
+
+  const handleSaveRsshubSettings = async () => {
+    try {
+      setSavingRsshub(true)
+      let customRules: Array<Record<string, string | boolean>> = []
+      try {
+        const parsed = JSON.parse(rsshubCustomRulesText || '[]')
+        if (Array.isArray(parsed)) {
+          customRules = parsed as Array<Record<string, string | boolean>>
+        } else {
+          setError('RSSHub custom rules must be a JSON array')
+          return
+        }
+      } catch {
+        setError('Invalid RSSHub custom rules JSON')
+        return
+      }
+      await api.post('/settings/rsshub', {
+        ...rsshubSettings,
+        custom_rules: customRules,
+      })
+      setError(null)
+    } catch (err) {
+      console.error('Failed to update RSSHub settings:', err)
+      setError('Failed to update RSSHub settings')
+    } finally {
+      setSavingRsshub(false)
     }
   }
 
@@ -376,6 +445,120 @@ export default function RegistrationSettingsPage() {
               <div className="flex justify-end">
                 <Button onClick={handleSaveRecencySettings} disabled={savingRecency}>
                   {savingRecency ? 'Saving...' : 'Save Recency Decay Settings'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>RSSHub Conversion</CardTitle>
+              <CardDescription>
+                Configure self-hosted RSSHub for problematic sources that need conversion.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between space-x-2">
+                <Label htmlFor="rsshub-enabled" className="flex flex-col items-start space-y-1">
+                  <span>Enable RSSHub</span>
+                  <span className="text-muted-foreground font-normal">
+                    Allow feed discovery/update to use RSSHub path conversion.
+                  </span>
+                </Label>
+                <Switch
+                  id="rsshub-enabled"
+                  checked={rsshubSettings.enabled}
+                  onCheckedChange={(checked) =>
+                    setRsshubSettings((prev) => ({ ...prev, enabled: checked }))
+                  }
+                  disabled={savingRsshub}
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="flex items-center justify-between space-x-2 rounded-md border p-3">
+                  <Label htmlFor="rsshub-auto-convert" className="text-sm">
+                    Auto convert on subscribe
+                  </Label>
+                  <Switch
+                    id="rsshub-auto-convert"
+                    checked={rsshubSettings.auto_convert_on_subscribe}
+                    onCheckedChange={(checked) =>
+                      setRsshubSettings((prev) => ({ ...prev, auto_convert_on_subscribe: checked }))
+                    }
+                    disabled={savingRsshub}
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2 rounded-md border p-3">
+                  <Label htmlFor="rsshub-fetch-fallback" className="text-sm">
+                    Fallback on scheduled fetch
+                  </Label>
+                  <Switch
+                    id="rsshub-fetch-fallback"
+                    checked={rsshubSettings.fallback_on_fetch}
+                    onCheckedChange={(checked) =>
+                      setRsshubSettings((prev) => ({ ...prev, fallback_on_fetch: checked }))
+                    }
+                    disabled={savingRsshub}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Built-in rules</Label>
+                <div className="grid gap-2 md:grid-cols-2">
+                  {Object.entries(rsshubSettings.builtin_rules || {}).map(([ruleName, enabled]) => (
+                    <div
+                      key={ruleName}
+                      className="flex items-center justify-between rounded-md border px-3 py-2"
+                    >
+                      <span className="text-sm">{ruleName}</span>
+                      <Switch
+                        checked={enabled}
+                        onCheckedChange={(checked) =>
+                          setRsshubSettings((prev) => ({
+                            ...prev,
+                            builtin_rules: {
+                              ...(prev.builtin_rules || {}),
+                              [ruleName]: checked,
+                            },
+                          }))
+                        }
+                        disabled={savingRsshub}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rsshub-base-url">RSSHub base URL</Label>
+                <Input
+                  id="rsshub-base-url"
+                  type="url"
+                  placeholder="https://rsshub.example.com"
+                  value={rsshubSettings.base_url || ''}
+                  onChange={(e) =>
+                    setRsshubSettings((prev) => ({ ...prev, base_url: e.target.value }))
+                  }
+                  disabled={savingRsshub}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="rsshub-custom-rules">Custom rules (JSON array)</Label>
+                <textarea
+                  id="rsshub-custom-rules"
+                  className="border-input bg-background min-h-[140px] w-full rounded-md border p-2 text-sm"
+                  value={rsshubCustomRulesText}
+                  onChange={(e) => setRsshubCustomRulesText(e.target.value)}
+                  disabled={savingRsshub}
+                />
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveRsshubSettings} disabled={savingRsshub}>
+                  {savingRsshub ? 'Saving...' : 'Save RSSHub Settings'}
                 </Button>
               </div>
             </CardContent>

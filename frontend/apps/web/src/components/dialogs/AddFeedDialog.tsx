@@ -11,6 +11,7 @@ interface AddFeedDialogProps {
 export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
   const { t } = useTranslation('feeds')
   const [url, setUrl] = useState('')
+  const [rsshubPath, setRsshubPath] = useState('')
   const discoverMutation = useDiscoverFeed()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -19,7 +20,10 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
     if (!url.trim()) return
 
     try {
-      await discoverMutation.mutateAsync({ url: url.trim() })
+      await discoverMutation.mutateAsync({
+        url: url.trim(),
+        rsshub_path: rsshubPath.trim() || undefined,
+      })
       onClose()
     } catch {
       // handled by mutation
@@ -70,6 +74,20 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
               className="w-full"
             />
             <p className="text-muted-foreground text-xs">{t('dialogs.addFeed.urlDescription')}</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="rsshubPath" className="text-foreground">
+              RSSHub Path (Optional)
+            </Label>
+            <Input
+              id="rsshubPath"
+              value={rsshubPath}
+              onChange={(e) => setRsshubPath(e.target.value)}
+              placeholder="/bilibili/user/dynamic/946974"
+              disabled={discoverMutation.isPending}
+              className="w-full"
+            />
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">

@@ -15,6 +15,7 @@ from .folder_service import FolderService
 from .implicit_feedback_service import ImplicitFeedbackService
 from .preference_service import PreferenceService
 from .simple_score_service import SimpleScoreService
+from .rsshub_service import RSSHubService
 from .system_config_service import SystemConfigService
 from .tag_service import TagService
 from .translation_service import TranslationService
@@ -37,6 +38,7 @@ __all__ = [
     # M3 services
     "PreferenceService",
     "SimpleScoreService",
+    "RSSHubService",
     "SystemConfigService",
     "TranslationService",
     "TypedConfigService",

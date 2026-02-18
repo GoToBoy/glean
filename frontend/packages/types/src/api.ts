@@ -63,6 +63,7 @@ export interface RefreshTokenRequest {
 export interface DiscoverFeedRequest {
   url: string
   folder_id?: string | null
+  rsshub_path?: string | null
 }
 
 /** Update subscription request */
@@ -70,6 +71,7 @@ export interface UpdateSubscriptionRequest {
   custom_title?: string | null
   folder_id?: string | null
   feed_url?: string | null
+  rsshub_path?: string | null
 }
 
 /** Update entry state request */

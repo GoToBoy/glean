@@ -5,6 +5,7 @@ Provides endpoints for feed discovery, subscription management, and OPML import/
 """
 
 import logging
+from uuid import UUID
 from typing import Annotated
 
 from arq.connections import ArqRedis
@@ -24,16 +25,29 @@ from glean_core.schemas import (
     UpdateSubscriptionRequest,
     UserResponse,
 )
-from glean_core.services import FeedService, FolderService
+from glean_core.services import FeedService, FolderService, RSSHubService
 from glean_core.services.feed_service import UNSET
 from glean_database.models import Feed
-from glean_rss import discover_feed, generate_opml, parse_opml_with_folders
+from glean_rss import discover_feed, fetch_feed, generate_opml, parse_feed, parse_opml_with_folders
 
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 from ..dependencies import get_current_user, get_feed_service, get_folder_service, get_redis_pool
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _validate_feed_url(feed_url: str) -> tuple[bool, str | None]:
+    """Check that a feed URL can be fetched and parsed."""
+    try:
+        result = await fetch_feed(feed_url)
+        if result is None:
+            return True, None
+        content, _headers = result
+        await parse_feed(content, feed_url)
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 class RefreshJobItem(BaseModel):
@@ -121,9 +135,9 @@ async def sync_all_subscriptions(
     return sync_response
 
 
-@router.get("/{subscription_id}")
+@router.get("/{subscription_id:uuid}")
 async def get_subscription(
-    subscription_id: str,
+    subscription_id: UUID,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
 ) -> SubscriptionResponse:
@@ -142,7 +156,7 @@ async def get_subscription(
         HTTPException: If subscription not found or unauthorized.
     """
     try:
-        return await feed_service.get_subscription(subscription_id, current_user.id)
+        return await feed_service.get_subscription(str(subscription_id), current_user.id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
@@ -173,19 +187,65 @@ async def discover_feed_url(
     Raises:
         HTTPException: If feed discovery fails or already subscribed.
     """
-    feed_url = str(data.url)
+    source_url = str(data.url)
+    feed_url = source_url
     feed_title = None
+    source_error: str | None = None
 
     import contextlib
 
-    with contextlib.suppress(ValueError):
-        # Try to discover feed (fetch and parse)
-        feed_url, feed_title = await discover_feed(feed_url)
+    if data.rsshub_path:
+        # Manual RSSHub path mode: skip automatic source fallback logic.
+        feed_title = None
+    else:
+        with contextlib.suppress(ValueError):
+            # Try to discover feed (fetch and parse)
+            feed_url, feed_title = await discover_feed(feed_url)
+
+        is_source_valid, source_error = await _validate_feed_url(feed_url)
+
+        if not is_source_valid:
+            rsshub_service = RSSHubService(feed_service.session)
+            converted_feed_urls = await rsshub_service.convert_for_subscribe(source_url)
+            if converted_feed_urls:
+                rsshub_errors: list[str] = []
+                selected_rsshub_url: str | None = None
+                for converted_feed_url in converted_feed_urls:
+                    is_rsshub_valid, rsshub_error = await _validate_feed_url(converted_feed_url)
+                    if is_rsshub_valid:
+                        selected_rsshub_url = converted_feed_url
+                        break
+                    if rsshub_error:
+                        rsshub_errors.append(f"{converted_feed_url}: {rsshub_error}")
+
+                if selected_rsshub_url:
+                    logger.info(
+                        "Using RSSHub fallback for subscription",
+                        extra={"source_url": source_url, "rsshub_url": selected_rsshub_url},
+                    )
+                    feed_url = selected_rsshub_url
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            "Subscription failed. Source feed and RSSHub fallback both failed: "
+                            f"source={source_error}; rsshub={'; '.join(rsshub_errors)}"
+                        ),
+                    )
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Subscription failed. Source feed unavailable: {source_error}",
+                )
 
     try:
         # Create subscription (will create feed if needed)
         subscription = await feed_service.create_subscription(
-            current_user.id, feed_url, feed_title, data.folder_id
+            current_user.id,
+            feed_url,
+            feed_title,
+            data.folder_id,
+            data.rsshub_path,
         )
 
         # Immediately enqueue feed fetch task only if feed has never been fetched
@@ -197,9 +257,9 @@ async def discover_feed_url(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from None
 
 
-@router.patch("/{subscription_id}")
+@router.patch("/{subscription_id:uuid}")
 async def update_subscription(
-    subscription_id: str,
+    subscription_id: UUID,
     data: UpdateSubscriptionRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
@@ -227,19 +287,20 @@ async def update_subscription(
         should_update_folder = data.folder_id != "__unset__"
 
         return await feed_service.update_subscription(
-            subscription_id,
+            str(subscription_id),
             current_user.id,
             data.custom_title,
             data.folder_id if should_update_folder else UNSET,
             str(data.feed_url) if data.feed_url else None,
+            data.rsshub_path,
         )
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
 
 
-@router.delete("/{subscription_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{subscription_id:uuid}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_subscription(
-    subscription_id: str,
+    subscription_id: UUID,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
@@ -264,7 +325,7 @@ async def delete_subscription(
     """
     try:
         orphaned_feed_id, entry_ids = await feed_service.delete_subscription(
-            subscription_id, current_user.id
+            str(subscription_id), current_user.id
         )
 
         # Queue Milvus embedding cleanup if feed was orphaned
@@ -319,9 +380,9 @@ async def batch_delete_subscriptions(
     return BatchDeleteSubscriptionsResponse(deleted_count=deleted_count, failed_count=failed_count)
 
 
-@router.post("/{subscription_id}/refresh", status_code=status.HTTP_202_ACCEPTED)
+@router.post("/{subscription_id:uuid}/refresh", status_code=status.HTTP_202_ACCEPTED)
 async def refresh_feed(
-    subscription_id: str,
+    subscription_id: UUID,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
@@ -342,7 +403,7 @@ async def refresh_feed(
         HTTPException: If subscription not found or unauthorized.
     """
     try:
-        subscription = await feed_service.get_subscription(subscription_id, current_user.id)
+        subscription = await feed_service.get_subscription(str(subscription_id), current_user.id)
         job_payload = await enqueue_feed_refresh_job(
             redis=redis,
             feed_id=subscription.feed.id,
