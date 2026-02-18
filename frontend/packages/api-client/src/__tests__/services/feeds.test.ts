@@ -140,7 +140,7 @@ describe('FeedService', () => {
   })
 
   it('should refresh all feeds', async () => {
-    const response = { status: 'queued', queued_count: 5 }
+    const response = { status: 'queued', queued_count: 5, jobs: [] }
     vi.mocked(mockClient.post).mockResolvedValue(response)
 
     const result = await service.refreshAllFeeds()

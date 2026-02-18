@@ -320,7 +320,11 @@ describe('useRefreshAllFeeds', () => {
   })
 
   it('should refresh all feeds', async () => {
-    vi.mocked(feedService.refreshAllFeeds).mockResolvedValue({ status: 'queued', queued_count: 5 })
+    vi.mocked(feedService.refreshAllFeeds).mockResolvedValue({
+      status: 'queued',
+      queued_count: 5,
+      jobs: [],
+    })
     const { wrapper } = createQueryWrapper()
 
     const { result } = renderHook(() => useRefreshAllFeeds(), { wrapper })
