@@ -25,6 +25,7 @@ import {
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
 import { detectTargetLanguage } from '../lib/languageDetect'
+import { classifyPreElement } from '../lib/preTranslation'
 import {
   Button,
   Skeleton,
@@ -34,6 +35,7 @@ import {
   SheetTitle,
   SheetDescription,
   SheetPanel,
+  Switch,
 } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
@@ -269,6 +271,8 @@ export function ArticleReader({
   const iframeStatusRef = useRef<'idle' | 'loading' | 'loaded' | 'blocked'>('idle')
   const iframeFallbackOpenedRef = useRef(false)
   const [iframeAutoOpened, setIframeAutoOpened] = useState(false)
+  const [needsPreChoice, setNeedsPreChoice] = useState(false)
+  const [translatePreUnknown, setTranslatePreUnknown] = useState(false)
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
@@ -286,6 +290,7 @@ export function ArticleReader({
     scrollContainerRef,
     targetLanguage,
     entryId: entry.id,
+    translatePreUnknown,
   })
   const isMobile = useIsMobile()
   const barsVisible = useScrollHide(scrollContainerRef, entry.id)
@@ -316,7 +321,29 @@ export function ArticleReader({
     iframeStatusRef.current = 'idle'
     iframeFallbackOpenedRef.current = false
     setIframeAutoOpened(false)
+    setNeedsPreChoice(false)
+    setTranslatePreUnknown(false)
   }, [entry.id])
+
+  useEffect(() => {
+    if (showOriginalInline) return
+    const contentEl = contentRef.current
+    if (!contentEl) return
+
+    const preElements = contentEl.querySelectorAll('pre')
+    let hasUnknown = false
+    preElements.forEach((pre) => {
+      const classification = classifyPreElement(pre)
+      if (classification === 'unknown') {
+        hasUnknown = true
+      }
+    })
+
+    setNeedsPreChoice(hasUnknown)
+    if (!hasUnknown) {
+      setTranslatePreUnknown(false)
+    }
+  }, [displayContent, showOriginalInline, entry.id])
 
   const clearIframeTimeout = useCallback(() => {
     if (iframeTimeoutRef.current !== null) {
@@ -709,6 +736,24 @@ export function ArticleReader({
                     >
                       {t('translation.retry')}
                     </button>
+                  </div>
+                )}
+
+                {needsPreChoice && (
+                  <div className="border-border/60 bg-card/60 mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-2">
+                    <div className="min-w-0">
+                      <div className="text-foreground text-xs font-medium">
+                        {t('translation.preToggleTitle')}
+                      </div>
+                      <div className="text-muted-foreground text-[11px]">
+                        {t('translation.preToggleDesc')}
+                      </div>
+                    </div>
+                    <Switch
+                      checked={translatePreUnknown}
+                      onCheckedChange={setTranslatePreUnknown}
+                      aria-label={t('translation.preToggleLabel')}
+                    />
                   </div>
                 )}
 

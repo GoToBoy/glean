@@ -74,7 +74,10 @@
     "failed": "Translation failed",
     "retry": "Retry",
     "sentenceMode": "Sentence translation active",
-    "hideTranslation": "Hide Translation"
+    "hideTranslation": "Hide Translation",
+    "preToggleTitle": "Preformatted blocks detected",
+    "preToggleDesc": "Some blocks may be commands or logs. Translate them?",
+    "preToggleLabel": "Translate preformatted blocks"
   },
   "feedback": {
     "title": "Help improve recommendations?",

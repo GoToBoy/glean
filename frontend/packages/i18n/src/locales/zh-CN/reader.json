@@ -74,7 +74,10 @@
     "failed": "翻译失败",
     "retry": "重试",
     "sentenceMode": "逐句翻译已启用",
-    "hideTranslation": "隐藏翻译"
+    "hideTranslation": "隐藏翻译",
+    "preToggleTitle": "检测到预格式化内容",
+    "preToggleDesc": "部分内容可能是命令或日志，是否翻译？",
+    "preToggleLabel": "翻译预格式化内容"
   },
   "feedback": {
     "title": "帮助优化推荐？",

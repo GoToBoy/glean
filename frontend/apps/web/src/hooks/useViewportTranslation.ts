@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { entryService } from '@glean/api-client'
 import { splitIntoSentences } from '../lib/sentenceSplitter'
+import { classifyPreElement } from '../lib/preTranslation'
 
 // Block elements whose text content should be translated
 const TRANSLATABLE_BLOCKS = new Set([
@@ -16,6 +17,8 @@ const TRANSLATABLE_BLOCKS = new Set([
   'FIGCAPTION',
   'DT',
   'DD',
+  'ARTICLE',
+  'PRE',
 ])
 
 // Elements whose descendants should never be translated
@@ -40,6 +43,7 @@ interface UseViewportTranslationOptions {
   scrollContainerRef: React.RefObject<HTMLElement | null>
   targetLanguage: string
   entryId: string
+  translatePreUnknown?: boolean
 }
 
 interface UseViewportTranslationReturn {
@@ -75,11 +79,17 @@ function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;')
 }
 
-function collectTranslatableBlocks(root: HTMLElement): Element[] {
+function collectTranslatableBlocks(root: HTMLElement, translatePreUnknown: boolean): Element[] {
   const blocks: Element[] = []
   for (const tagName of TRANSLATABLE_BLOCKS) {
     const elements = root.querySelectorAll(tagName.toLowerCase())
     elements.forEach((el) => {
+      if (el.tagName === 'ARTICLE' && el.children.length > 0) return
+      if (el.tagName === 'PRE') {
+        const preClass = classifyPreElement(el)
+        if (preClass === 'code') return
+        if (preClass === 'unknown' && !translatePreUnknown) return
+      }
       if (!hasSkipAncestor(el) && el.textContent?.trim()) {
         blocks.push(el)
       }
@@ -100,6 +110,7 @@ export function useViewportTranslation({
   scrollContainerRef,
   targetLanguage,
   entryId,
+  translatePreUnknown = false,
 }: UseViewportTranslationOptions): UseViewportTranslationReturn {
   const [isActive, setIsActive] = useState(false)
   const [isTranslating, setIsTranslating] = useState(false)
@@ -213,7 +224,7 @@ export function useViewportTranslation({
     if (!contentRef.current || !scrollContainerRef.current) return
 
     // Find all translatable block elements
-    const blocks = collectTranslatableBlocks(contentRef.current)
+    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown)
 
     if (blocks.length === 0) return
 
@@ -258,7 +269,7 @@ export function useViewportTranslation({
   const applyCachedTranslationsImmediately = useCallback((): number => {
     if (!contentRef.current || cacheRef.current.size === 0) return 0
 
-    const blocks = collectTranslatableBlocks(contentRef.current)
+    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown)
     let applied = 0
 
     for (const block of blocks) {
