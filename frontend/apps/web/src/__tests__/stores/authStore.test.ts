@@ -211,6 +211,26 @@ describe('authStore', () => {
 
       expect(useAuthStore.getState().error).toBe('fail')
     })
+
+    it('should merge with existing settings', async () => {
+      const userWithSettings = createMockUser({
+        ...mockUser,
+        settings: { read_later_days: 7, list_translation_auto_enabled: true },
+      })
+      useAuthStore.setState({ user: userWithSettings, isAuthenticated: true })
+      vi.mocked(authService.updateUser).mockResolvedValue(
+        createMockUser({
+          ...mockUser,
+          settings: { read_later_days: 30, list_translation_auto_enabled: true },
+        })
+      )
+
+      await useAuthStore.getState().updateSettings({ read_later_days: 30 })
+
+      expect(authService.updateUser).toHaveBeenCalledWith({
+        settings: { read_later_days: 30, list_translation_auto_enabled: true },
+      })
+    })
   })
 
   describe('clearError', () => {
