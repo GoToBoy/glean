@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useBookmarkStore } from '../stores/bookmarkStore'
 import { useFolderStore } from '../stores/folderStore'
@@ -6,7 +6,9 @@ import { useTagStore } from '../stores/tagStore'
 import { useEntry } from '../hooks/useEntries'
 import { useTranslation } from '@glean/i18n'
 import { ArticleReader, ArticleReaderSkeleton } from '../components/ArticleReader'
-import { stripHtmlTags } from '../lib/html'
+import { SourceGroupBoard } from '../components/bookmarks/SourceGroupBoard'
+import { BookmarkSearchResults } from '../components/bookmarks/BookmarkSearchResults'
+import { groupBookmarksBySource } from '../components/bookmarks/bookmarkGrouping'
 import type { Bookmark, FolderTreeNode, TagWithCounts, EntryWithState } from '@glean/types'
 import {
   Bookmark as BookmarkIcon,
@@ -24,8 +26,6 @@ import {
   FileText,
   Tags,
   BookOpen,
-  LayoutGrid,
-  List,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import {
@@ -110,8 +110,6 @@ export default function BookmarksPage() {
     loading,
     fetchBookmarks,
     deleteBookmark,
-    addTag: bookmarkAddTag,
-    removeTag: bookmarkRemoveTag,
     filters,
   } = useBookmarkStore()
 
@@ -122,6 +120,7 @@ export default function BookmarksPage() {
   const selectedFolder = searchParams.get('folder') || null
   const selectedTag = searchParams.get('tag') || null
   const [searchQuery, setSearchQuery] = useState('')
+  const [listTagFilter, setListTagFilter] = useState('')
   const [showCreateBookmark, setShowCreateBookmark] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -133,16 +132,17 @@ export default function BookmarksPage() {
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  // View mode state (grid or list)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
-    const saved = localStorage.getItem('glean:bookmarksViewMode')
-    return saved === 'list' ? 'list' : 'grid'
-  })
+  const activeTagFilter = selectedTag || listTagFilter || null
+  const hasActiveFilters = Boolean(selectedFolder || activeTagFilter || searchQuery)
+  const displayMode: 'source' | 'results' = hasActiveFilters ? 'results' : 'source'
 
-  // Persist view mode to localStorage
+  const sourceGroups = useMemo(() => groupBookmarksBySource(bookmarks), [bookmarks])
+
   useEffect(() => {
-    localStorage.setItem('glean:bookmarksViewMode', viewMode)
-  }, [viewMode])
+    if (selectedTag) {
+      setListTagFilter('')
+    }
+  }, [selectedTag])
 
   // Initial data loading
   useEffect(() => {
@@ -154,12 +154,12 @@ export default function BookmarksPage() {
     const params: Parameters<typeof fetchBookmarks>[0] = {
       page: 1,
       folder_id: selectedFolder ?? undefined,
-      tag_ids: selectedTag ? [selectedTag] : undefined,
+      tag_ids: activeTagFilter ? [activeTagFilter] : undefined,
       search: searchQuery || undefined,
     }
 
     fetchBookmarks(params)
-  }, [selectedFolder, selectedTag, searchQuery, fetchBookmarks])
+  }, [selectedFolder, activeTagFilter, searchQuery, fetchBookmarks])
 
   // Clear filter helper
   const clearFilter = (type: 'folder' | 'tag' | 'search') => {
@@ -217,65 +217,19 @@ export default function BookmarksPage() {
         <div className="flex min-w-0 flex-1 flex-col">
           {/* Header */}
           <header className="border-border bg-card border-b px-4 py-3 sm:px-6 sm:py-4">
-            {/* Title row with view toggle */}
+            {/* Title row */}
             <div className="mb-3 flex items-center justify-between gap-3 md:mb-0">
               <h1 className="font-display text-foreground shrink-0 text-xl font-bold">
                 {t('title')}
               </h1>
-              {/* View Toggle - always visible next to title */}
-              <div className="border-border flex shrink-0 rounded-lg border p-0.5 md:hidden">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`flex items-center justify-center rounded-md px-3 py-1.5 transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={t('view.grid')}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`flex items-center justify-center rounded-md px-3 py-1.5 transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={t('view.list')}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
+              <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+                <BookOpen className="h-3.5 w-3.5" />
+                {displayMode === 'source' ? '来源分组' : '筛选结果'}
+              </span>
             </div>
 
             {/* Search and actions row */}
             <div className="flex items-center gap-2 sm:gap-3 md:flex-row md:items-center md:justify-between">
-              {/* Desktop view toggle */}
-              <div className="border-border hidden shrink-0 rounded-lg border p-0.5 md:flex">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                    viewMode === 'grid'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={t('view.grid')}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`flex items-center justify-center rounded-md p-1.5 transition-colors ${
-                    viewMode === 'list'
-                      ? 'bg-muted text-foreground'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                  title={t('view.list')}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
               <div className="relative min-w-0 flex-1 md:max-w-64">
                 <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 z-10 h-4 w-4 -translate-y-1/2" />
                 <Input
@@ -286,6 +240,20 @@ export default function BookmarksPage() {
                   className="h-10 w-full [&_input]:pl-9"
                 />
               </div>
+              <select
+                value={listTagFilter}
+                onChange={(e) => setListTagFilter(e.target.value)}
+                disabled={!!selectedTag}
+                className="border-input bg-background text-foreground h-10 shrink-0 rounded-lg border px-3 text-sm disabled:opacity-60"
+                title="Tag filter"
+              >
+                <option value="">All tags</option>
+                {tags.map((tag) => (
+                  <option key={tag.id} value={tag.id}>
+                    {tag.name}
+                  </option>
+                ))}
+              </select>
               <Button
                 onClick={() => setShowCreateBookmark(true)}
                 className="h-10 shrink-0 whitespace-nowrap"
@@ -296,7 +264,7 @@ export default function BookmarksPage() {
             </div>
 
             {/* Active filters */}
-            {(selectedFolder || selectedTag || searchQuery) && (
+            {(selectedFolder || selectedTag || listTagFilter || searchQuery) && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <span className="text-muted-foreground text-xs">{t('filters.label')}</span>
                 {selectedFolder && (
@@ -329,6 +297,23 @@ export default function BookmarksPage() {
                       </span>
                     ) : null
                   })()}
+                {!selectedTag &&
+                  listTagFilter &&
+                  (() => {
+                    const tag = tags.find((t) => t.id === listTagFilter)
+                    return tag ? (
+                      <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
+                        <Tag className="h-3 w-3" />
+                        <span className="max-w-24 truncate">{tag.name}</span>
+                        <button
+                          onClick={() => setListTagFilter('')}
+                          className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ) : null
+                  })()}
                 {searchQuery && (
                   <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
                     <Search className="h-3 w-3" />
@@ -348,23 +333,15 @@ export default function BookmarksPage() {
           {/* Bookmarks Grid/List */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div
-              key={`${selectedFolder || 'all'}-${selectedTag || 'none'}-${viewMode}`}
+              key={`${selectedFolder || 'all'}-${activeTagFilter || 'none'}-${displayMode}`}
               className="feed-content-transition"
             >
               {loading ? (
-                viewMode === 'grid' ? (
-                  <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <BookmarkCardSkeleton key={i} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {Array.from({ length: 6 }).map((_, i) => (
-                      <BookmarkListItemSkeleton key={i} />
-                    ))}
-                  </div>
-                )
+                <div className="space-y-2">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <BookmarkListItemSkeleton key={i} />
+                  ))}
+                </div>
               ) : bookmarks.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
@@ -383,54 +360,20 @@ export default function BookmarksPage() {
                     {t('empty.addFirstBookmark')}
                   </Button>
                 </div>
-              ) : viewMode === 'grid' ? (
-                <div className="grid gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-3">
-                  {bookmarks.map((bookmark, index) => (
-                    <BookmarkCard
-                      key={bookmark.id}
-                      bookmark={bookmark}
-                      onClick={() => handleBookmarkClick(bookmark)}
-                      onDelete={() => setDeleteConfirmId(bookmark.id)}
-                      onEdit={() => setEditingBookmark(bookmark)}
-                      allTags={tags}
-                      onAddTag={async (bookmarkId, tagId) => {
-                        await bookmarkAddTag(bookmarkId, tagId)
-                      }}
-                      onRemoveTag={async (bookmarkId, tagId) => {
-                        await bookmarkRemoveTag(bookmarkId, tagId)
-                      }}
-                      onCreateTag={async (name) => {
-                        const tag = await createTag({ name })
-                        return tag?.id ?? null
-                      }}
-                      style={{ animationDelay: `${index * 0.05}s` }}
-                    />
-                  ))}
-                </div>
+              ) : displayMode === 'source' ? (
+                <SourceGroupBoard
+                  groups={sourceGroups}
+                  onOpen={handleBookmarkClick}
+                  onEdit={(bookmark) => setEditingBookmark(bookmark)}
+                  onDelete={(bookmark) => setDeleteConfirmId(bookmark.id)}
+                />
               ) : (
-                <div className="space-y-2">
-                  {bookmarks.map((bookmark, index) => (
-                    <BookmarkListItem
-                      key={bookmark.id}
-                      bookmark={bookmark}
-                      onClick={() => handleBookmarkClick(bookmark)}
-                      onDelete={() => setDeleteConfirmId(bookmark.id)}
-                      onEdit={() => setEditingBookmark(bookmark)}
-                      allTags={tags}
-                      onAddTag={async (bookmarkId, tagId) => {
-                        await bookmarkAddTag(bookmarkId, tagId)
-                      }}
-                      onRemoveTag={async (bookmarkId, tagId) => {
-                        await bookmarkRemoveTag(bookmarkId, tagId)
-                      }}
-                      onCreateTag={async (name) => {
-                        const tag = await createTag({ name })
-                        return tag?.id ?? null
-                      }}
-                      style={{ animationDelay: `${index * 0.03}s` }}
-                    />
-                  ))}
-                </div>
+                <BookmarkSearchResults
+                  bookmarks={bookmarks}
+                  onOpen={handleBookmarkClick}
+                  onEdit={(bookmark) => setEditingBookmark(bookmark)}
+                  onDelete={(bookmark) => setDeleteConfirmId(bookmark.id)}
+                />
               )}
             </div>
           </div>
@@ -568,513 +511,6 @@ export default function BookmarksPage() {
           />
         </div>
       )}
-    </div>
-  )
-}
-
-interface BookmarkCardProps {
-  bookmark: Bookmark
-  onClick: () => void
-  onDelete: () => void
-  onEdit: () => void
-  allTags: TagWithCounts[]
-  onAddTag: (bookmarkId: string, tagId: string) => Promise<void>
-  onRemoveTag: (bookmarkId: string, tagId: string) => Promise<void>
-  onCreateTag: (name: string) => Promise<string | null>
-  style?: React.CSSProperties
-}
-
-function BookmarkCard({
-  bookmark,
-  onClick,
-  onDelete,
-  onEdit,
-  allTags,
-  onAddTag,
-  onRemoveTag,
-  onCreateTag,
-  style,
-}: BookmarkCardProps) {
-  const { t } = useTranslation('bookmarks')
-  const [tagSearch, setTagSearch] = useState('')
-  const [isCreatingTag, setIsCreatingTag] = useState(false)
-
-  // Filter tags based on search
-  const filteredTags = allTags.filter((tag) =>
-    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
-  )
-
-  // Check if search matches any existing tag
-  const exactMatch = allTags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
-
-  // Current bookmark tag IDs
-  const bookmarkTagIds = bookmark.tags.map((t) => t.id)
-
-  const handleTagToggle = async (tagId: string, isSelected: boolean) => {
-    if (isSelected) {
-      await onRemoveTag(bookmark.id, tagId)
-    } else {
-      await onAddTag(bookmark.id, tagId)
-    }
-  }
-
-  const handleCreateNewTag = async () => {
-    if (!tagSearch.trim() || exactMatch) return
-    setIsCreatingTag(true)
-    try {
-      const newTagId = await onCreateTag(tagSearch.trim())
-      if (newTagId) {
-        await onAddTag(bookmark.id, newTagId)
-      }
-      setTagSearch('')
-    } finally {
-      setIsCreatingTag(false)
-    }
-  }
-
-  return (
-    <div
-      className="card-hover animate-fade-in border-border bg-card group relative overflow-hidden rounded-xl border p-4 transition-all"
-      style={style}
-    >
-      {/* Clickable Title */}
-      <button onClick={onClick} className="mb-2 block w-full text-left">
-        <h3 className="text-foreground hover:text-primary line-clamp-2 font-medium transition-colors">
-          {bookmark.title}
-        </h3>
-      </button>
-
-      {/* Excerpt */}
-      {bookmark.excerpt && (
-        <p className="text-muted-foreground mb-3 line-clamp-2 text-sm">
-          {stripHtmlTags(bookmark.excerpt)}
-        </p>
-      )}
-
-      {/* Tags with Add Button */}
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {bookmark.tags.map((tag) => (
-          <span
-            key={tag.id}
-            className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
-          >
-            {tag.color && (
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
-            )}
-            {tag.name}
-          </span>
-        ))}
-
-        {/* Tag Combobox */}
-        <Menu>
-          <MenuTrigger
-            render={<span />}
-            className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border border-dashed px-2 py-1 text-xs transition-colors"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Plus className="h-3 w-3" />
-          </MenuTrigger>
-          <MenuPopup align="start" sideOffset={4} className="w-56">
-            {/* Search Input */}
-            <div className="p-2">
-              <div className="relative">
-                <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder={t('placeholders.searchTag')}
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && tagSearch.trim() && !exactMatch) {
-                      e.preventDefault()
-                      handleCreateNewTag()
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <MenuSeparator />
-
-            {/* Tag List */}
-            <div className="max-h-48 overflow-y-auto py-1">
-              {filteredTags.length === 0 && !tagSearch.trim() && (
-                <div className="text-muted-foreground px-2 py-3 text-center text-xs">
-                  {t('tags.noTagsYet')}
-                </div>
-              )}
-
-              {filteredTags.map((tag) => {
-                const isSelected = bookmarkTagIds.includes(tag.id)
-                return (
-                  <MenuCheckboxItem
-                    key={tag.id}
-                    checked={isSelected}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      handleTagToggle(tag.id, isSelected)
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      {tag.color && (
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                      )}
-                      {tag.name}
-                    </span>
-                  </MenuCheckboxItem>
-                )
-              })}
-
-              {/* Create New Tag Option */}
-              {tagSearch.trim() && !exactMatch && (
-                <>
-                  {filteredTags.length > 0 && <MenuSeparator />}
-                  <MenuItem
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCreateNewTag()
-                    }}
-                    disabled={isCreatingTag}
-                    className="text-primary cursor-pointer"
-                  >
-                    {isCreatingTag ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {t('tags.creating')}
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        {t('tags.create', { name: tagSearch.trim() })}
-                      </>
-                    )}
-                  </MenuItem>
-                </>
-              )}
-            </div>
-          </MenuPopup>
-        </Menu>
-      </div>
-
-      {/* Footer */}
-      <div className="text-muted-foreground flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span>{format(new Date(bookmark.created_at), 'MMM d, yyyy')}</span>
-          {bookmark.entry_id && (
-            <span
-              className="text-primary/70 flex items-center gap-1"
-              title={t('common.savedFromFeed')}
-            >
-              <FileText className="h-3 w-3" />
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onEdit()
-            }}
-            className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
-            title={t('common.edit')}
-          >
-            <Edit3 className="h-4 w-4" />
-          </button>
-          {bookmark.url && (
-            <a
-              href={bookmark.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
-              title={t('common.openExternalLink')}
-            >
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onDelete()
-            }}
-            className="text-destructive hover:bg-destructive/10 touch-target-sm flex items-center justify-center rounded p-1.5 sm:p-1"
-            title={t('common.delete')}
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Folders indicator */}
-      {bookmark.folders.length > 0 && (
-        <div className="bg-muted text-muted-foreground absolute top-2 right-2 flex items-center gap-1 rounded px-1.5 py-0.5 text-xs">
-          <FolderOpen className="h-3 w-3" />
-          {bookmark.folders.length}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function BookmarkCardSkeleton() {
-  return (
-    <div className="border-border bg-card rounded-xl border p-4">
-      <Skeleton className="mb-2 h-5 w-3/4" />
-      <Skeleton className="mb-3 h-4 w-full" />
-      <Skeleton className="mb-3 h-4 w-2/3" />
-      <div className="flex gap-1">
-        <Skeleton className="h-5 w-12 rounded-full" />
-        <Skeleton className="h-5 w-16 rounded-full" />
-      </div>
-    </div>
-  )
-}
-
-/**
- * Compact list item for list view
- */
-function BookmarkListItem({
-  bookmark,
-  onClick,
-  onDelete,
-  onEdit,
-  allTags,
-  onAddTag,
-  onRemoveTag,
-  onCreateTag,
-  style,
-}: BookmarkCardProps) {
-  const { t } = useTranslation('bookmarks')
-  const [tagSearch, setTagSearch] = useState('')
-  const [isCreatingTag, setIsCreatingTag] = useState(false)
-
-  // Filter tags based on search
-  const filteredTags = allTags.filter((tag) =>
-    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
-  )
-
-  // Check if search matches any existing tag
-  const exactMatch = allTags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
-
-  // Current bookmark tag IDs
-  const bookmarkTagIds = bookmark.tags.map((t) => t.id)
-
-  const handleTagToggle = async (tagId: string, isSelected: boolean) => {
-    if (isSelected) {
-      await onRemoveTag(bookmark.id, tagId)
-    } else {
-      await onAddTag(bookmark.id, tagId)
-    }
-  }
-
-  const handleCreateNewTag = async () => {
-    if (!tagSearch.trim() || exactMatch) return
-    setIsCreatingTag(true)
-    try {
-      const newTagId = await onCreateTag(tagSearch.trim())
-      if (newTagId) {
-        await onAddTag(bookmark.id, newTagId)
-      }
-      setTagSearch('')
-    } finally {
-      setIsCreatingTag(false)
-    }
-  }
-
-  return (
-    <div
-      className="card-hover animate-fade-in border-border bg-card group flex items-center gap-4 rounded-lg border px-4 py-3 transition-all"
-      style={style}
-    >
-      {/* Main content - clickable */}
-      <button onClick={onClick} className="min-w-0 flex-1 text-left">
-        <div className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-foreground hover:text-primary line-clamp-1 font-medium transition-colors">
-              {bookmark.title}
-            </h3>
-            {bookmark.excerpt && (
-              <p className="text-muted-foreground mt-0.5 line-clamp-1 text-sm">
-                {stripHtmlTags(bookmark.excerpt)}
-              </p>
-            )}
-          </div>
-        </div>
-      </button>
-
-      {/* Tags */}
-      <div className="hidden shrink-0 items-center gap-1.5 md:flex">
-        {bookmark.tags.slice(0, 2).map((tag) => (
-          <span
-            key={tag.id}
-            className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs"
-          >
-            {tag.color && (
-              <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: tag.color }} />
-            )}
-            {tag.name}
-          </span>
-        ))}
-        {bookmark.tags.length > 2 && (
-          <span className="text-muted-foreground text-xs">+{bookmark.tags.length - 2}</span>
-        )}
-
-        {/* Tag Combobox */}
-        <Menu>
-          <MenuTrigger
-            render={<span />}
-            className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex cursor-pointer items-center gap-1 rounded-full border border-dashed px-2 py-1 text-xs opacity-0 transition-all group-hover:opacity-100"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <Plus className="h-3 w-3" />
-          </MenuTrigger>
-          <MenuPopup align="end" sideOffset={4} className="w-56">
-            {/* Search Input */}
-            <div className="p-2">
-              <div className="relative">
-                <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
-                <input
-                  type="text"
-                  placeholder={t('placeholders.searchTag')}
-                  value={tagSearch}
-                  onChange={(e) => setTagSearch(e.target.value)}
-                  className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
-                  onClick={(e) => e.stopPropagation()}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && tagSearch.trim() && !exactMatch) {
-                      e.preventDefault()
-                      handleCreateNewTag()
-                    }
-                  }}
-                />
-              </div>
-            </div>
-
-            <MenuSeparator />
-
-            {/* Tag List */}
-            <div className="max-h-48 overflow-y-auto py-1">
-              {filteredTags.length === 0 && !tagSearch.trim() && (
-                <div className="text-muted-foreground px-2 py-3 text-center text-xs">
-                  {t('tags.noTagsYet')}
-                </div>
-              )}
-
-              {filteredTags.map((tag) => {
-                const isSelected = bookmarkTagIds.includes(tag.id)
-                return (
-                  <MenuCheckboxItem
-                    key={tag.id}
-                    checked={isSelected}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      e.preventDefault()
-                      handleTagToggle(tag.id, isSelected)
-                    }}
-                    className="cursor-pointer"
-                  >
-                    <span className="flex items-center gap-2">
-                      {tag.color && (
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                      )}
-                      {tag.name}
-                    </span>
-                  </MenuCheckboxItem>
-                )
-              })}
-
-              {/* Create New Tag Option */}
-              {tagSearch.trim() && !exactMatch && (
-                <>
-                  {filteredTags.length > 0 && <MenuSeparator />}
-                  <MenuItem
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      handleCreateNewTag()
-                    }}
-                    disabled={isCreatingTag}
-                    className="text-primary cursor-pointer"
-                  >
-                    {isCreatingTag ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        {t('tags.creating')}
-                      </>
-                    ) : (
-                      <>
-                        <Plus className="h-4 w-4" />
-                        {t('tags.create', { name: tagSearch.trim() })}
-                      </>
-                    )}
-                  </MenuItem>
-                </>
-              )}
-            </div>
-          </MenuPopup>
-        </Menu>
-      </div>
-
-      {/* Date and source indicator */}
-      <div className="text-muted-foreground hidden shrink-0 items-center gap-2 text-xs sm:flex">
-        <span>{format(new Date(bookmark.created_at), 'MMM d, yyyy')}</span>
-        {bookmark.entry_id && (
-          <span className="text-primary/70" title={t('common.savedFromFeed')}>
-            <FileText className="h-3 w-3" />
-          </span>
-        )}
-        {bookmark.folders.length > 0 && (
-          <span className="flex items-center gap-0.5" title="In folders">
-            <FolderOpen className="h-3 w-3" />
-            {bookmark.folders.length}
-          </span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="flex shrink-0 items-center gap-1 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100">
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onEdit()
-          }}
-          className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
-          title={t('common.edit')}
-        >
-          <Edit3 className="h-4 w-4" />
-        </button>
-        {bookmark.url && (
-          <a
-            href={bookmark.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            className="hover:bg-accent hover:text-foreground touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
-            title={t('common.openExternalLink')}
-          >
-            <ExternalLink className="h-4 w-4" />
-          </a>
-        )}
-        <button
-          onClick={(e) => {
-            e.stopPropagation()
-            onDelete()
-          }}
-          className="text-destructive hover:bg-destructive/10 touch-target-sm flex items-center justify-center rounded p-2 sm:p-1.5"
-          title={t('common.delete')}
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
     </div>
   )
 }
