@@ -6,6 +6,14 @@
  */
 
 /** User settings */
+export interface ReaderListResumePosition {
+  anchor_entry_id: string
+  anchor_index: number
+  updated_at: string
+}
+
+export type ReaderListResumeMap = Record<string, ReaderListResumePosition>
+
 export interface UserSettings {
   read_later_days?: number // Days until read later items expire (0 = never)
   show_read_later_remaining?: boolean // Show remaining time in read later list
@@ -21,6 +29,9 @@ export interface UserSettings {
   translation_model?: string
   translation_base_url?: string
   discovery_tavily_api_key?: string
+  auto_mark_read_on_scroll_enabled?: boolean // Auto-mark entries as read while scrolling list
+  auto_mark_read_on_scroll_threshold_screens?: number // Mark as read after this many viewport heights
+  reader_list_resume_positions?: ReaderListResumeMap // Per-scope reader list anchors for cross-device resume
 }
 
 /** User account information */

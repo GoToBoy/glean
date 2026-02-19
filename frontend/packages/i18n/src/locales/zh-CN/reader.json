@@ -35,6 +35,8 @@
     "noEntries": "没有找到条目",
     "loadingMore": "加载更多...",
     "noMoreEntries": "没有更多内容了",
+    "newAbove": "上方新增 {{count}} 条",
+    "jumpToNew": "跳转到第一条新增",
     "markAll": "全部标记为已读",
     "marking": "标记中...",
     "markConfirm": "将所有条目标记为已读？",

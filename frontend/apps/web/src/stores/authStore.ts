@@ -16,6 +16,7 @@ interface AuthState {
   logout: () => Promise<void>
   loadUser: () => Promise<void>
   updateSettings: (settings: UserSettings) => Promise<void>
+  updateSettingsSilently: (settings: UserSettings) => Promise<void>
   clearError: () => void
 }
 
@@ -25,7 +26,7 @@ interface AuthState {
  * Manages user authentication state, login/logout actions,
  * and token persistence.
  */
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: false,
@@ -118,7 +119,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   updateSettings: async (settings) => {
     set({ isLoading: true, error: null })
     try {
-      const user = await authService.updateUser({ settings })
+      const currentSettings = get().user?.settings ?? {}
+      const user = await authService.updateUser({ settings: { ...currentSettings, ...settings } })
       set({
         user,
         isLoading: false,
@@ -126,6 +128,18 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to update settings'
       set({ error: message, isLoading: false })
+      throw error
+    }
+  },
+
+  updateSettingsSilently: async (settings) => {
+    try {
+      const currentSettings = get().user?.settings ?? {}
+      const user = await authService.updateUser({ settings: { ...currentSettings, ...settings } })
+      set({ user })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to update settings'
+      set({ error: message })
       throw error
     }
   },

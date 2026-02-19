@@ -35,6 +35,8 @@
     "noEntries": "No entries found",
     "loadingMore": "Loading more...",
     "noMoreEntries": "No more entries",
+    "newAbove": "{{count}} new above",
+    "jumpToNew": "Jump to first new",
     "markAll": "Mark all as read",
     "marking": "Marking...",
     "markConfirm": "Mark all entries as read?",
