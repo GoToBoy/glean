@@ -88,7 +88,8 @@ export function PreferenceTab() {
     }
   }
 
-  const handleAutoReadThresholdChange = async (value: string) => {
+  const handleAutoReadThresholdChange = async (value: string | null) => {
+    if (!value) return
     const threshold = Number(value)
     if (!Number.isFinite(threshold) || threshold <= 0) return
     setAutoMarkReadThreshold(threshold)

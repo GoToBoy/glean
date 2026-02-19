@@ -17,17 +17,14 @@ import {
   Plus,
   Search,
   ExternalLink,
-  Trash2,
   ChevronRight,
   ChevronLeft,
   Loader2,
   X,
-  Edit3,
   FileText,
   Tags,
   BookOpen,
 } from 'lucide-react'
-import { format } from 'date-fns'
 import {
   Button,
   Input,
@@ -114,7 +111,7 @@ export default function BookmarksPage() {
   } = useBookmarkStore()
 
   const { bookmarkFolders } = useFolderStore()
-  const { tags, fetchTags, createTag } = useTagStore()
+  const { tags, fetchTags } = useTagStore()
 
   // Get filters from URL params
   const selectedFolder = searchParams.get('folder') || null
