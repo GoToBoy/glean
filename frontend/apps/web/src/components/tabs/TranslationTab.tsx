@@ -12,6 +12,7 @@ import {
 } from '@glean/ui'
 import { CheckCircle, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
+import type { TranslationTargetLanguage } from '@glean/types'
 
 type Provider = 'google' | 'deepl' | 'openai' | 'mtran'
 const DEFAULT_MTRAN_BASE_URL = 'http://mtranserver:5001'
@@ -28,6 +29,11 @@ const OPENAI_MODELS = [
   { value: 'gpt-4o', label: 'GPT-4o' },
 ]
 
+const TARGET_LANGUAGES: { value: TranslationTargetLanguage; labelKey: string }[] = [
+  { value: 'zh-CN', labelKey: 'translation.targetLanguageOptions.zh-CN' },
+  { value: 'en', labelKey: 'translation.targetLanguageOptions.en' },
+]
+
 /**
  * Translation settings tab component.
  *
@@ -39,6 +45,8 @@ export function TranslationTab() {
   const { user, updateSettings, isLoading } = useAuthStore()
 
   const currentProvider = (user?.settings?.translation_provider ?? 'google') as Provider
+  const currentTargetLanguage = (user?.settings?.translation_target_language ??
+    'zh-CN') as TranslationTargetLanguage
   const currentApiKey = user?.settings?.translation_api_key ?? ''
   const currentModel = user?.settings?.translation_model ?? 'gpt-4o-mini'
   const savedBaseUrl = user?.settings?.translation_base_url
@@ -47,17 +55,16 @@ export function TranslationTab() {
       ? savedBaseUrl.trim()
       : DEFAULT_MTRAN_BASE_URL
   const currentListTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
-  const currentListTranslationEnglishOnly = user?.settings?.list_translation_english_only ?? true
 
   const [provider, setProvider] = useState<Provider>(currentProvider)
+  const [targetLanguage, setTargetLanguage] = useState<TranslationTargetLanguage>(
+    currentTargetLanguage
+  )
   const [apiKey, setApiKey] = useState(currentApiKey)
   const [model, setModel] = useState(currentModel)
   const [baseUrl, setBaseUrl] = useState(currentBaseUrl)
   const [listTranslationAutoEnabled, setListTranslationAutoEnabled] = useState(
     currentListTranslationAutoEnabled
-  )
-  const [listTranslationEnglishOnly, setListTranslationEnglishOnly] = useState(
-    currentListTranslationEnglishOnly
   )
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -68,11 +75,11 @@ export function TranslationTab() {
 
   const hasChanges =
     provider !== currentProvider ||
+    targetLanguage !== currentTargetLanguage ||
     apiKey !== currentApiKey ||
     model !== currentModel ||
     baseUrl !== currentBaseUrl ||
-    listTranslationAutoEnabled !== currentListTranslationAutoEnabled ||
-    listTranslationEnglishOnly !== currentListTranslationEnglishOnly
+    listTranslationAutoEnabled !== currentListTranslationAutoEnabled
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -81,11 +88,11 @@ export function TranslationTab() {
       await updateSettings({
         ...user?.settings,
         translation_provider: provider,
+        translation_target_language: targetLanguage,
         translation_api_key: apiKey,
         translation_model: model,
         translation_base_url: baseUrl,
         list_translation_auto_enabled: listTranslationAutoEnabled,
-        list_translation_english_only: listTranslationEnglishOnly,
       })
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
@@ -134,6 +141,26 @@ export function TranslationTab() {
         </div>
       </div>
 
+      {/* Target language */}
+      <div className="animate-fade-in" style={{ animationDelay: '60ms' }}>
+        <Label className="text-muted-foreground mb-2 block text-sm font-medium">
+          {t('translation.targetLanguage')}
+        </Label>
+        <p className="text-muted-foreground/80 mb-4 text-sm">{t('translation.targetLanguageDesc')}</p>
+        <Select value={targetLanguage} onValueChange={(v) => v && setTargetLanguage(v as TranslationTargetLanguage)}>
+          <SelectTrigger className="w-full max-w-xs">
+            <SelectValue>{t(`translation.targetLanguageOptions.${targetLanguage}`)}</SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {TARGET_LANGUAGES.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {t(item.labelKey)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Base URL input (MTran only) */}
       {provider === 'mtran' && (
         <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
@@ -165,25 +192,6 @@ export function TranslationTab() {
           <Switch
             checked={listTranslationAutoEnabled}
             onCheckedChange={setListTranslationAutoEnabled}
-            disabled={isSaving || isLoading}
-          />
-        </div>
-      </div>
-
-      <div
-        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in rounded-xl border bg-gradient-to-br p-5 ring-1"
-        style={{ animationDelay: '120ms' }}
-      >
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <Label className="text-foreground block text-sm font-medium">
-              {t('translation.listEnglishOnly')}
-            </Label>
-            <p className="text-muted-foreground text-xs">{t('translation.listEnglishOnlyDesc')}</p>
-          </div>
-          <Switch
-            checked={listTranslationEnglishOnly}
-            onCheckedChange={setListTranslationEnglishOnly}
             disabled={isSaving || isLoading}
           />
         </div>

@@ -63,6 +63,8 @@ export function useEntry(entryId: string) {
     queryKey: entryKeys.detail(entryId),
     queryFn: () => entryService.getEntry(entryId),
     enabled: !!entryId,
+    staleTime: 2 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
   })
 }
 

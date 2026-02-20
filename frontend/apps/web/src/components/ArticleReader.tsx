@@ -43,6 +43,8 @@ import { useViewportTranslation } from '../hooks/useViewportTranslation'
 import { useEntryEngagementTracking } from '../hooks/useEntryEngagementTracking'
 import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
+import { useAuthStore } from '../stores/authStore'
+import type { TranslationTargetLanguage } from '@glean/types'
 
 /**
  * Hook to track animation state for action buttons
@@ -177,6 +179,7 @@ export function ArticleReader({
   hideReadStatus = false,
 }: ArticleReaderProps) {
   const { t } = useTranslation('reader')
+  const { user } = useAuthStore()
   const queryClient = useQueryClient()
 
   const handleOpenMenu = () => {
@@ -202,13 +205,19 @@ export function ArticleReader({
   const [iframeAutoOpened, setIframeAutoOpened] = useState(false)
   const [needsPreChoice, setNeedsPreChoice] = useState(false)
   const [translatePreUnknown, setTranslatePreUnknown] = useState(false)
+  const preferredTargetLanguage = (user?.settings?.translation_target_language ??
+    'zh-CN') as TranslationTargetLanguage
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
-    () => resolveAutoTranslationTargetLanguage(entry.title + ' ' + (entry.content || entry.summary || '')),
-    [entry.title, entry.content, entry.summary],
+    () =>
+      resolveAutoTranslationTargetLanguage(
+        entry.title + ' ' + (entry.content || entry.summary || ''),
+        preferredTargetLanguage
+      ),
+    [entry.title, entry.content, entry.summary, preferredTargetLanguage],
   )
-  const canTranslate = targetLanguage === 'zh-CN'
+  const canTranslate = targetLanguage !== null
   const {
     isActive: showTranslation,
     isTranslating,
@@ -245,7 +254,32 @@ export function ArticleReader({
 
   useEffect(() => {
     if (!canTranslate) return
-    activateTranslation()
+    let timeoutId: number | null = null
+    let idleId: number | null = null
+    const win = window as Window & {
+      requestIdleCallback?: (callback: () => void, options?: { timeout?: number }) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+
+    const start = () => activateTranslation()
+
+    if (typeof window !== 'undefined' && typeof win.requestIdleCallback === 'function') {
+      idleId = win.requestIdleCallback(() => {
+        start()
+      }, { timeout: 1200 })
+    } else {
+      // Defer translation work slightly so article content paints first.
+      timeoutId = window.setTimeout(start, 350)
+    }
+
+    return () => {
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId)
+      }
+      if (idleId !== null && typeof win.cancelIdleCallback === 'function') {
+        win.cancelIdleCallback(idleId)
+      }
+    }
   }, [canTranslate, activateTranslation, entry.id])
 
   // Reset outline state when entry changes

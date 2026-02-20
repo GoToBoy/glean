@@ -1,3 +1,5 @@
+import type { TranslationTargetLanguage } from '@glean/types'
+
 const HAN_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g
 const KANA_RE = /[\u3040-\u30ff\uff66-\uff9f]/g
 const HANGUL_RE = /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/g
@@ -41,12 +43,23 @@ export function detectTranslationLanguageCategory(text: string): TranslationLang
   return hanRatio >= 0.65 ? 'chinese' : 'non_chinese'
 }
 
-export function resolveAutoTranslationTargetLanguage(text: string): 'zh-CN' | null {
+export function resolveAutoTranslationTargetLanguage(
+  text: string,
+  preferredTargetLanguage: TranslationTargetLanguage = 'zh-CN'
+): TranslationTargetLanguage | null {
   const category = detectTranslationLanguageCategory(text)
-  if (category === 'non_chinese') return 'zh-CN'
-  return null
+  if (category === 'unknown') return null
+
+  if (preferredTargetLanguage === 'zh-CN') {
+    return category === 'non_chinese' ? 'zh-CN' : null
+  }
+
+  return category === 'chinese' ? 'en' : null
 }
 
-export function shouldTranslateToChinese(text: string): boolean {
-  return resolveAutoTranslationTargetLanguage(text) === 'zh-CN'
+export function shouldAutoTranslate(
+  text: string,
+  preferredTargetLanguage: TranslationTargetLanguage = 'zh-CN'
+): boolean {
+  return resolveAutoTranslationTargetLanguage(text, preferredTargetLanguage) !== null
 }

@@ -14,6 +14,7 @@
 - [监控与日志](#监控与日志)
 - [故障排查](#故障排查)
 - [HTTPS 配置](#https-配置)
+- [Cloudflare Tunnel](#cloudflare-tunnel)
 - [安全最佳实践](#安全最佳实践)
 - [性能调优](#性能调优)
 
@@ -958,6 +959,20 @@ CORS_ORIGINS='["https://glean.yourdomain.com", "https://admin.yourdomain.com"]'
 
 ```bash
 docker compose restart backend
+```
+
+## Cloudflare Tunnel
+
+如果你通过 Cloudflare Zero Trust Tunnel 暴露域名访问（并希望降低转发链路开销），
+请使用以下文件：
+
+- Compose 覆盖文件：`docker-compose.cloudflare.yml`
+- 优化指南：`docs/cloudflare-tunnel-optimization.md`
+
+快速启动：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d
 ```
 
 ## 安全最佳实践

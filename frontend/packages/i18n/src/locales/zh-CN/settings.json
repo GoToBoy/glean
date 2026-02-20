@@ -182,6 +182,12 @@
     "desc": "配置翻译服务提供商和 API 密钥",
     "provider": "翻译服务",
     "providerDesc": "选择您偏好的翻译服务",
+    "targetLanguage": "目标语言",
+    "targetLanguageDesc": "当检测到源文本与目标语言不同时自动翻译",
+    "targetLanguageOptions": {
+      "zh-CN": "简体中文",
+      "en": "English"
+    },
     "google": {
       "name": "Google 翻译",
       "desc": "免费翻译服务，无需 API 密钥"

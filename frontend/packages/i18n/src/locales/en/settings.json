@@ -182,6 +182,12 @@
     "desc": "Configure your translation provider and API keys",
     "provider": "Translation Provider",
     "providerDesc": "Choose your preferred translation service",
+    "targetLanguage": "Target Language",
+    "targetLanguageDesc": "Auto-translate into this language when source content differs",
+    "targetLanguageOptions": {
+      "zh-CN": "Simplified Chinese",
+      "en": "English"
+    },
     "google": {
       "name": "Google Translate",
       "desc": "Free translation service, no API key required"

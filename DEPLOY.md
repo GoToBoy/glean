@@ -14,6 +14,7 @@ This guide provides comprehensive instructions for deploying Glean in production
 - [Monitoring and Logs](#monitoring-and-logs)
 - [Troubleshooting](#troubleshooting)
 - [HTTPS Setup](#https-setup)
+- [Cloudflare Tunnel](#cloudflare-tunnel)
 - [Security Best Practices](#security-best-practices)
 - [Performance Tuning](#performance-tuning)
 
@@ -1003,6 +1004,20 @@ CORS_ORIGINS='["https://yourdomain.com", "https://admin.yourdomain.com"]'
 ### 4. Use HTTPS
 
 Always use HTTPS in production (see [HTTPS Setup](#https-setup)).
+
+## Cloudflare Tunnel
+
+For domain access via Cloudflare Zero Trust Tunnel (and lower cross-region latency), use the
+dedicated compose overlay and optimization guide:
+
+- Compose overlay: `docker-compose.cloudflare.yml`
+- Tuning guide: `docs/cloudflare-tunnel-optimization.md`
+
+Quick start:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.cloudflare.yml up -d
+```
 
 ### 5. Regular Updates
 

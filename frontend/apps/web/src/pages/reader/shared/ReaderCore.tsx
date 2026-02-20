@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { useInfiniteEntries, useEntry, useUpdateEntryState } from '../../../hooks/useEntries'
+import { useQueryClient } from '@tanstack/react-query'
+import { useInfiniteEntries, useEntry, useUpdateEntryState, entryKeys } from '../../../hooks/useEntries'
 import { useEntryListEngagementTracking } from '../../../hooks/useEntryListEngagementTracking'
 import { useReaderBehaviorConfig } from '../../../hooks/useReaderBehaviorConfig'
 import { entryService } from '@glean/api-client'
@@ -8,7 +9,7 @@ import { ArticleReader, ArticleReaderSkeleton } from '../../../components/Articl
 import { useAuthStore } from '../../../stores/authStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
-import type { EntryWithState, ReaderListResumeMap } from '@glean/types'
+import type { EntryWithState, ReaderListResumeMap, TranslationTargetLanguage } from '@glean/types'
 import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@glean/ui'
 import { useReaderController, type FilterType } from './useReaderController'
@@ -22,7 +23,7 @@ import {
   ReaderFilterTabs,
 } from './components/ReaderCoreParts'
 import { stripHtmlTags } from '../../../lib/html'
-import { shouldTranslateToChinese } from '../../../lib/translationLanguagePolicy'
+import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const READER_LIST_RESUME_MAX_SCOPES = 60
@@ -35,6 +36,7 @@ const READER_LIST_RESUME_MAX_FETCH_ATTEMPTS = 30
  */
 export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { t } = useTranslation('reader')
+  const queryClient = useQueryClient()
   const {
     selectedFeedId,
     selectedFolderId,
@@ -104,8 +106,26 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const autoMarkInFlightSetRef = useRef<Set<string>>(new Set())
   const autoMarkFailedUntilRef = useRef<Map<string, number>>(new Map())
   const autoMarkLastScrollTopRef = useRef(0)
+  const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
+  const prefetchEntryDetail = useCallback(
+    (entryId: string) => {
+      if (!entryId || prefetchingEntryIdsRef.current.has(entryId)) return
+      prefetchingEntryIdsRef.current.add(entryId)
+
+      void queryClient
+        .prefetchQuery({
+          queryKey: entryKeys.detail(entryId),
+          queryFn: () => entryService.getEntry(entryId),
+          staleTime: 2 * 60 * 1000,
+        })
+        .finally(() => {
+          prefetchingEntryIdsRef.current.delete(entryId)
+        })
+    },
+    [queryClient]
+  )
 
   // Computed value: whether we're using smart sorting (by preference score vs timeline)
   const usesSmartSorting = isSmartView || filterType === 'smart'
@@ -257,7 +277,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return map
   }, [entries])
 
-  const listTranslationTargetLanguage = 'zh-CN'
+  const preferredTargetLanguage = (user?.settings?.translation_target_language ??
+    'zh-CN') as TranslationTargetLanguage
+  const listTranslationTargetLanguage = preferredTargetLanguage
 
   // Handle filter change with slide direction
   const handleFilterChange = (newFilter: FilterType) => {
@@ -571,7 +593,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       const summaryPlain = stripHtmlTags(entry.summary || '').trim()
       const sourceTexts = [entry.title, summaryPlain]
         .filter((text) => text.length > 0)
-        .filter((text) => shouldTranslateToChinese(text))
+        .filter((text) => shouldAutoTranslate(text, preferredTargetLanguage))
       if (sourceTexts.length === 0) return
 
       const uncachedTexts = sourceTexts.filter((text) => !translationCacheRef.current.has(text))
@@ -610,6 +632,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       entriesById,
       isListTranslationActive,
       listTranslationTargetLanguage,
+      preferredTargetLanguage,
     ]
   )
 
@@ -1082,6 +1105,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                       entry={entry}
                       isSelected={selectedEntryId === entry.id}
                       onClick={() => handleSelectEntry(entry)}
+                      onPrefetch={() => prefetchEntryDetail(entry.id)}
                       style={{ animationDelay: `${index * 0.03}s` }}
                       showFeedInfo={!selectedFeedId}
                       showReadLaterRemaining={

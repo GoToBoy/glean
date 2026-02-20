@@ -115,6 +115,7 @@ export function EntryListItem({
   entry,
   isSelected,
   onClick,
+  onPrefetch,
   style,
   showFeedInfo = false,
   showReadLaterRemaining = false,
@@ -128,6 +129,7 @@ export function EntryListItem({
   entry: EntryWithState
   isSelected: boolean
   onClick: () => void
+  onPrefetch?: () => void
   style?: React.CSSProperties
   showFeedInfo?: boolean
   showReadLaterRemaining?: boolean
@@ -144,6 +146,8 @@ export function EntryListItem({
   return (
     <div
       onClick={onClick}
+      onMouseEnter={onPrefetch}
+      onTouchStart={onPrefetch}
       data-entry-id={dataEntryId}
       className={`group animate-fade-in relative cursor-pointer px-1.5 py-1.5 transition-all duration-200 ${
         isSelected

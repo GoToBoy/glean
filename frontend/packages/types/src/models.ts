@@ -13,6 +13,7 @@ export interface ReaderListResumePosition {
 }
 
 export type ReaderListResumeMap = Record<string, ReaderListResumePosition>
+export type TranslationTargetLanguage = 'zh-CN' | 'en'
 
 export interface UserSettings {
   read_later_days?: number // Days until read later items expire (0 = never)
@@ -23,6 +24,7 @@ export interface UserSettings {
   explore_ratio?: number
   manual_only?: boolean
   translation_provider?: 'google' | 'deepl' | 'openai' | 'mtran'
+  translation_target_language?: TranslationTargetLanguage
   list_translation_auto_enabled?: boolean // Auto-enable list viewport translation
   list_translation_english_only?: boolean // Translate only English content in list
   translation_api_key?: string
