@@ -260,22 +260,28 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       ]
     }
   })()
+  const visibleEntries = useMemo(() => {
+    const isUnreadScoped = filterType === 'unread' || filterType === 'smart'
+    if (!isUnreadScoped) return entries
+
+    return entries.filter((entry) => !entry.is_read || entry.id === selectedEntryId)
+  }, [entries, filterType, selectedEntryId])
 
   const entriesById = useMemo(() => {
     const map = new Map<string, EntryWithState>()
-    for (const entry of entries) {
+    for (const entry of visibleEntries) {
       map.set(entry.id, entry)
     }
     return map
-  }, [entries])
+  }, [visibleEntries])
 
   const entryIndexById = useMemo(() => {
     const map = new Map<string, number>()
-    entries.forEach((entry, index) => {
+    visibleEntries.forEach((entry, index) => {
       map.set(entry.id, index)
     })
     return map
-  }, [entries])
+  }, [visibleEntries])
 
   const preferredTargetLanguage = (user?.settings?.translation_target_language ??
     'zh-CN') as TranslationTargetLanguage
@@ -300,13 +306,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     (index: number) => {
       const container = entryListRef.current
       if (!container) return
-      if (entries.length === 0) {
+      if (visibleEntries.length === 0) {
         container.scrollTop = 0
         return
       }
 
-      const clampedIndex = Math.max(0, Math.min(index, entries.length - 1))
-      const targetEntry = entries[clampedIndex]
+      const clampedIndex = Math.max(0, Math.min(index, visibleEntries.length - 1))
+      const targetEntry = visibleEntries[clampedIndex]
       if (!targetEntry) {
         container.scrollTop = 0
         return
@@ -319,7 +325,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       }
       node.scrollIntoView({ block: 'start', behavior: 'auto' })
     },
-    [entries]
+    [visibleEntries]
   )
 
   const persistResumeAnchor = useCallback(
@@ -445,12 +451,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     container.scrollTop = 0
     setNewEntriesAboveCount(0)
 
-    const firstEntry = entries[0]
+    const firstEntry = visibleEntries[0]
     if (firstEntry) {
       schedulePersistAnchor(listTrackingScopeKey, firstEntry.id, 0)
       flushPersistAnchor()
     }
-  }, [entries, listTrackingScopeKey, schedulePersistAnchor, flushPersistAnchor])
+  }, [visibleEntries, listTrackingScopeKey, schedulePersistAnchor, flushPersistAnchor])
 
   // Infinite scroll: use Intersection Observer to detect when load-more element is visible
   useEffect(() => {
@@ -638,7 +644,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Viewport-only list translation to reduce API usage
   useEffect(() => {
-    if (!isListTranslationActive || !entryListRef.current || entries.length === 0) return
+    if (!isListTranslationActive || !entryListRef.current || visibleEntries.length === 0) return
 
     const container = entryListRef.current
     let pendingIds: string[] = []
@@ -675,7 +681,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       observer.disconnect()
       translationObserverRef.current = null
     }
-  }, [entries, isListTranslationActive, translateListEntry])
+  }, [visibleEntries, isListTranslationActive, translateListEntry])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
@@ -752,10 +758,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
       e.preventDefault()
 
-      if (entries.length === 0) return
+      if (visibleEntries.length === 0) return
 
       const currentIndex = selectedEntryId
-        ? entries.findIndex((entry) => entry.id === selectedEntryId)
+        ? visibleEntries.findIndex((entry) => entry.id === selectedEntryId)
         : -1
 
       let nextIndex: number
@@ -763,14 +769,14 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         // No entry selected: select the first one
         nextIndex = 0
       } else if (isNext) {
-        if (currentIndex >= entries.length - 1) return // Already at the end
+        if (currentIndex >= visibleEntries.length - 1) return // Already at the end
         nextIndex = currentIndex + 1
       } else {
         if (currentIndex <= 0) return // Already at the beginning
         nextIndex = currentIndex - 1
       }
 
-      const nextEntry = entries[nextIndex]
+      const nextEntry = visibleEntries[nextIndex]
       if (nextEntry) {
         handleSelectEntry(nextEntry)
         // Scroll the entry into view within the list
@@ -782,7 +788,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         }
       }
     },
-    [entries, selectedEntryId] // eslint-disable-line react-hooks/exhaustive-deps
+    [visibleEntries, selectedEntryId] // eslint-disable-line react-hooks/exhaustive-deps
   )
 
   useEffect(() => {
@@ -868,7 +874,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       hasNextPage &&
       !isFetchingNextPage &&
       resumeFetchAttemptsRef.current < READER_LIST_RESUME_MAX_FETCH_ATTEMPTS &&
-      (anchorEntryId || anchorIndex >= entries.length)
+      (anchorEntryId || anchorIndex >= visibleEntries.length)
 
     if (shouldTryLoadingMore) {
       resumeFetchAttemptsRef.current += 1
@@ -889,7 +895,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
-    entries.length,
+    visibleEntries.length,
     scrollListToEntryIndex,
   ])
 
@@ -902,7 +908,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   // On mobile, keep list mounted to preserve scroll position and observer bindings.
   const isReaderVisibleOnMobile = isMobile && (!!selectedEntryId || isExitingArticle)
   const showReader = !isMobile || !!selectedEntryId
-  const trackedEntryIds = useMemo(() => entries.map((entry) => entry.id), [entries])
+  const trackedEntryIds = useMemo(() => visibleEntries.map((entry) => entry.id), [visibleEntries])
 
   useEntryListEngagementTracking({
     entryIds: trackedEntryIds,
@@ -911,7 +917,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     minVisibleRatio: readerBehaviorConfig?.list_min_visible_ratio ?? 0.5,
     exposedMs: readerBehaviorConfig?.list_exposed_ms ?? 300,
     skimmedMs: readerBehaviorConfig?.list_skimmed_ms ?? 600,
-    enabled: entries.length > 0 && !isLoading,
+    enabled: visibleEntries.length > 0 && !isLoading,
   })
 
   useEffect(() => {
@@ -1086,7 +1092,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                   </div>
                 )}
 
-                {entries.length === 0 && !isLoading && (
+                {visibleEntries.length === 0 && !isLoading && (
                   <div className="flex flex-col items-center justify-center py-16 text-center">
                     <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
                       <Inbox className="text-muted-foreground h-8 w-8" />
@@ -1099,7 +1105,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 )}
 
                 <div className="divide-border/40 divide-y px-1 py-0.5">
-                  {entries.map((entry, index) => (
+                      {visibleEntries.map((entry, index) => (
                     <EntryListItem
                       key={entry.id}
                       entry={entry}
@@ -1128,7 +1134,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 </div>
 
                 {/* Intersection observer target for infinite scroll */}
-                {hasNextPage && !isFetchingNextPage && entries.length > 0 && (
+                {hasNextPage && !isFetchingNextPage && visibleEntries.length > 0 && (
                   <div ref={loadMoreRef} className="h-4" />
                 )}
 
@@ -1143,7 +1149,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 )}
 
                 {/* End of list indicator */}
-                {!hasNextPage && entries.length > 0 && (
+                {!hasNextPage && visibleEntries.length > 0 && (
                   <div className="flex items-center justify-center py-6">
                     <span className="text-muted-foreground text-sm">
                       {t('entries.noMoreEntries')}
