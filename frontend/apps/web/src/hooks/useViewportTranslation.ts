@@ -2,27 +2,12 @@ import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react
 import { entryService } from '@glean/api-client'
 import { splitIntoSentences } from '../lib/sentenceSplitter'
 import { classifyPreElement } from '../lib/preTranslation'
-
-// Block elements whose text content should be translated
-const TRANSLATABLE_BLOCKS = new Set([
-  'P',
-  'H1',
-  'H2',
-  'H3',
-  'H4',
-  'H5',
-  'H6',
-  'LI',
-  'BLOCKQUOTE',
-  'FIGCAPTION',
-  'DT',
-  'DD',
-  'ARTICLE',
-  'PRE',
-])
-
-// Elements whose descendants should never be translated
-const SKIP_TAGS = new Set(['CODE', 'PRE', 'SCRIPT', 'STYLE', 'KBD', 'SAMP'])
+import {
+  hasSkipAncestor,
+  collectTranslatableBlocks,
+  normalizeLooseTextNodes,
+  splitBlockByBreaks,
+} from '../lib/translationRules'
 
 // Data attribute to mark a block as already processed
 const PROCESSED_ATTR = 'data-translation-processed'
@@ -57,18 +42,6 @@ interface UseViewportTranslationReturn {
 }
 
 /**
- * Check if an element is inside a skip-tag ancestor (code, pre, etc.)
- */
-function hasSkipAncestor(el: Element): boolean {
-  let current = el.parentElement
-  while (current) {
-    if (SKIP_TAGS.has(current.tagName)) return true
-    current = current.parentElement
-  }
-  return false
-}
-
-/**
  * Escape HTML special characters for safe innerHTML insertion.
  */
 function escapeHtml(text: string): string {
@@ -77,25 +50,6 @@ function escapeHtml(text: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-}
-
-function collectTranslatableBlocks(root: HTMLElement, translatePreUnknown: boolean): Element[] {
-  const blocks: Element[] = []
-  for (const tagName of TRANSLATABLE_BLOCKS) {
-    const elements = root.querySelectorAll(tagName.toLowerCase())
-    elements.forEach((el) => {
-      if (el.tagName === 'ARTICLE' && el.children.length > 0) return
-      if (el.tagName === 'PRE') {
-        const preClass = classifyPreElement(el)
-        if (preClass === 'code') return
-        if (preClass === 'unknown' && !translatePreUnknown) return
-      }
-      if (!hasSkipAncestor(el) && el.textContent?.trim()) {
-        blocks.push(el)
-      }
-    })
-  }
-  return blocks
 }
 
 /**
@@ -146,9 +100,9 @@ export function useViewportTranslation({
       const blockSentences: { block: Element; sentences: string[] }[] = []
       for (const block of toTranslate) {
         if (hasSkipAncestor(block)) continue
-        const text = block.textContent?.trim()
-        if (!text) continue
-        const sentences = splitIntoSentences(text)
+        // Treat <br> as hard boundaries so pre/post-br are translated independently.
+        const segments = splitBlockByBreaks(block)
+        const sentences = segments.flatMap((segment) => splitIntoSentences(segment))
         if (sentences.length > 0) {
           blockSentences.push({ block, sentences })
         }
@@ -223,8 +177,11 @@ export function useViewportTranslation({
   const setupObserver = useCallback(() => {
     if (!contentRef.current || !scrollContainerRef.current) return
 
+    // Normalize loose text-node content into paragraph blocks first.
+    normalizeLooseTextNodes(contentRef.current, ORIGINAL_HTML_ATTR)
+
     // Find all translatable block elements
-    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown)
+    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown, classifyPreElement)
 
     if (blocks.length === 0) return
 
@@ -260,7 +217,7 @@ export function useViewportTranslation({
 
     observerRef.current = observer
     blocks.forEach((block) => observer.observe(block))
-  }, [contentRef, scrollContainerRef, translateBlocks])
+  }, [contentRef, scrollContainerRef, translateBlocks, translatePreUnknown])
 
   /**
    * Apply fully-cached translations immediately to avoid original-text flash.
@@ -268,17 +225,17 @@ export function useViewportTranslation({
    */
   const applyCachedTranslationsImmediately = useCallback((): number => {
     if (!contentRef.current || cacheRef.current.size === 0) return 0
+    normalizeLooseTextNodes(contentRef.current, ORIGINAL_HTML_ATTR)
 
-    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown)
+    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown, classifyPreElement)
     let applied = 0
 
     for (const block of blocks) {
       if (block.hasAttribute(PROCESSED_ATTR) || pendingBlocksRef.current.has(block)) continue
       if (hasSkipAncestor(block)) continue
 
-      const text = block.textContent?.trim()
-      if (!text) continue
-      const sentences = splitIntoSentences(text)
+      const segments = splitBlockByBreaks(block)
+      const sentences = segments.flatMap((segment) => splitIntoSentences(segment))
       if (sentences.length === 0) continue
 
       const translations = sentences.map((sentence) => cacheRef.current.get(sentence)?.trim() ?? '')
@@ -302,7 +259,7 @@ export function useViewportTranslation({
     }
 
     return applied
-  }, [contentRef])
+  }, [contentRef, translatePreUnknown])
 
   /**
    * Restore all translated blocks to their original HTML.
