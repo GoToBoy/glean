@@ -24,8 +24,8 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
-import { detectTargetLanguage } from '../lib/languageDetect'
 import { classifyPreElement } from '../lib/preTranslation'
+import { resolveAutoTranslationTargetLanguage } from '../lib/translationLanguagePolicy'
 import {
   Button,
   Skeleton,
@@ -42,6 +42,7 @@ import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
 import { useEntryEngagementTracking } from '../hooks/useEntryEngagementTracking'
 import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
+import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
 
 /**
  * Hook to track animation state for action buttons
@@ -102,78 +103,6 @@ function useIsMobile(breakpoint = 640) {
   }, [breakpoint])
 
   return isMobile
-}
-
-/**
- * Hook for auto-hiding bars on scroll
- */
-function useScrollHide(
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>,
-  resetKey?: string
-) {
-  const [isVisible, setIsVisible] = useState(true)
-  const lastScrollY = useRef(0)
-  const ticking = useRef(false)
-
-  const handleScroll = useCallback(() => {
-    if (!scrollContainerRef.current) return
-
-    const currentScrollY = scrollContainerRef.current.scrollTop
-    const scrollHeight = scrollContainerRef.current.scrollHeight
-    const clientHeight = scrollContainerRef.current.clientHeight
-    const scrollDelta = currentScrollY - lastScrollY.current
-
-    // Check if scrolled to bottom (with 10px tolerance)
-    const isAtBottom = scrollHeight - currentScrollY - clientHeight < 10
-
-    // Show bars when at top, at bottom, or scrolling up
-    if (currentScrollY < 50 || isAtBottom) {
-      setIsVisible(true)
-    } else if (scrollDelta > 5) {
-      // Scrolling down - hide
-      setIsVisible(false)
-    } else if (scrollDelta < -5) {
-      // Scrolling up - show
-      setIsVisible(true)
-    }
-
-    lastScrollY.current = currentScrollY
-    ticking.current = false
-  }, [scrollContainerRef])
-
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current
-    if (!scrollContainer) return
-
-    const onScroll = () => {
-      if (!ticking.current) {
-        requestAnimationFrame(handleScroll)
-        ticking.current = true
-      }
-    }
-
-    scrollContainer.addEventListener('scroll', onScroll, { passive: true })
-    return () => scrollContainer.removeEventListener('scroll', onScroll)
-  }, [handleScroll, scrollContainerRef])
-
-  useEffect(() => {
-    // Reset bars visibility for each newly opened article.
-    setIsVisible(true)
-    const scrollTop = scrollContainerRef.current?.scrollTop ?? 0
-    lastScrollY.current = scrollTop
-  }, [resetKey, scrollContainerRef])
-
-  useEffect(() => {
-    const scrollContainer = scrollContainerRef.current
-    if (!scrollContainer) return
-
-    // Keep controls discoverable on first touch/drag.
-    const onTouchStart = () => setIsVisible(true)
-    scrollContainer.addEventListener('touchstart', onTouchStart, { passive: true })
-    return () => scrollContainer.removeEventListener('touchstart', onTouchStart)
-  }, [scrollContainerRef])
-
-  return isVisible
 }
 
 /**
@@ -276,9 +205,10 @@ export function ArticleReader({
 
   // Viewport-based sentence-level translation
   const targetLanguage = useMemo(
-    () => detectTargetLanguage(entry.title + ' ' + (entry.content || entry.summary || '')),
+    () => resolveAutoTranslationTargetLanguage(entry.title + ' ' + (entry.content || entry.summary || '')),
     [entry.title, entry.content, entry.summary],
   )
+  const canTranslate = targetLanguage === 'zh-CN'
   const {
     isActive: showTranslation,
     isTranslating,
@@ -293,7 +223,7 @@ export function ArticleReader({
     translatePreUnknown,
   })
   const isMobile = useIsMobile()
-  const barsVisible = useScrollHide(scrollContainerRef, entry.id)
+  const barsVisible = useMobileBarsVisibility(scrollContainerRef, entry.id)
   const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
   useEntryEngagementTracking({
     entryId: entry.id,
@@ -312,6 +242,11 @@ export function ArticleReader({
   // On desktop: hide close button, show fullscreen button
   const shouldShowCloseButton = showCloseButton ?? isMobile
   const shouldShowFullscreenButton = showFullscreenButton ?? !isMobile
+
+  useEffect(() => {
+    if (!canTranslate) return
+    activateTranslation()
+  }, [canTranslate, activateTranslation, entry.id])
 
   // Reset outline state when entry changes
   useEffect(() => {
@@ -559,7 +494,7 @@ export function ArticleReader({
               </span>
             </Button>
 
-            {showTranslation ? (
+            {canTranslate && showTranslation ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -569,7 +504,7 @@ export function ArticleReader({
                 <Languages className="h-4 w-4" />
                 <span>{t('translation.hideTranslation')}</span>
               </Button>
-            ) : (
+            ) : canTranslate ? (
               <Button
                 variant="ghost"
                 size="sm"
@@ -586,7 +521,7 @@ export function ArticleReader({
                   {isTranslating ? t('translation.translating') : t('translation.translate')}
                 </span>
               </Button>
-            )}
+            ) : null}
 
             {!hideReadStatus && (
               <Button
@@ -710,7 +645,7 @@ export function ArticleReader({
                 )}
 
                 {/* Sentence translation banner */}
-                {showTranslation && (
+                {canTranslate && showTranslation && (
                   <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
                     <span className="text-muted-foreground text-xs">
                       {t('translation.sentenceMode')}
@@ -727,7 +662,7 @@ export function ArticleReader({
                   </div>
                 )}
 
-                {translationError && (
+                {canTranslate && translationError && (
                   <div className="border-destructive/20 bg-destructive/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
                     <span className="text-destructive text-xs">{t('translation.failed')}</span>
                     <button
@@ -739,7 +674,7 @@ export function ArticleReader({
                   </div>
                 )}
 
-                {needsPreChoice && (
+                {canTranslate && needsPreChoice && (
                   <div className="border-border/60 bg-card/60 mb-4 flex items-center justify-between gap-3 rounded-lg border px-4 py-2">
                     <div className="min-w-0">
                       <div className="text-foreground text-xs font-medium">
@@ -873,22 +808,24 @@ export function ArticleReader({
               </button>
             )}
 
-            <button
-              onClick={toggleTranslation}
-              disabled={isTranslating}
-              className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
-                showTranslation ? 'text-primary' : 'text-muted-foreground'
-              }`}
-            >
-              {isTranslating ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <Languages className="h-5 w-5" />
-              )}
-              <span className="text-[10px]">
-                {showTranslation ? t('translation.hideTranslation') : t('translation.translate')}
-              </span>
-            </button>
+            {canTranslate && (
+              <button
+                onClick={toggleTranslation}
+                disabled={isTranslating}
+                className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                  showTranslation ? 'text-primary' : 'text-muted-foreground'
+                }`}
+              >
+                {isTranslating ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <Languages className="h-5 w-5" />
+                )}
+                <span className="text-[10px]">
+                  {showTranslation ? t('translation.hideTranslation') : t('translation.translate')}
+                </span>
+              </button>
+            )}
 
             <button
               onClick={() => setIsMoreSheetOpen(true)}

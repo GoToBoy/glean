@@ -8,7 +8,6 @@ import { ArticleReader, ArticleReaderSkeleton } from '../../../components/Articl
 import { useAuthStore } from '../../../stores/authStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
-import { useLanguageStore } from '../../../stores/languageStore'
 import type { EntryWithState, ReaderListResumeMap } from '@glean/types'
 import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription } from '@glean/ui'
@@ -23,22 +22,11 @@ import {
   ReaderFilterTabs,
 } from './components/ReaderCoreParts'
 import { stripHtmlTags } from '../../../lib/html'
+import { shouldTranslateToChinese } from '../../../lib/translationLanguagePolicy'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const READER_LIST_RESUME_MAX_SCOPES = 60
 const READER_LIST_RESUME_MAX_FETCH_ATTEMPTS = 30
-
-function isLikelyEnglishText(text: string): boolean {
-  const sample = text.slice(0, 220)
-  const latinMatches = sample.match(/[A-Za-z]/g)
-  const chineseMatches = sample.match(/[\u4e00-\u9fff]/g)
-  const latinCount = latinMatches?.length ?? 0
-  const chineseCount = chineseMatches?.length ?? 0
-
-  if (latinCount < 6) return false
-  if (chineseCount === 0) return true
-  return latinCount / Math.max(chineseCount, 1) > 2.5
-}
 
 /**
  * Reader page.
@@ -61,7 +49,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   } = useReaderController()
   const { user, updateSettingsSilently } = useAuthStore()
   const { showPreferenceScore } = useUIStore()
-  const { language } = useLanguageStore()
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
@@ -270,8 +257,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return map
   }, [entries])
 
-  const listTranslationTargetLanguage = language === 'zh-CN' ? 'zh-CN' : 'en'
-  const listTranslationEnglishOnly = user?.settings?.list_translation_english_only ?? true
+  const listTranslationTargetLanguage = 'zh-CN'
 
   // Handle filter change with slide direction
   const handleFilterChange = (newFilter: FilterType) => {
@@ -579,15 +565,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       if (!isListTranslationActive) return
       if (pendingTranslationEntryIdsRef.current.has(entryId)) return
       if (translatedEntryIdsRef.current.has(entryId)) return
-      if (listTranslationTargetLanguage === 'en' && listTranslationEnglishOnly) return
-
       const entry = entriesById.get(entryId)
       if (!entry) return
 
       const summaryPlain = stripHtmlTags(entry.summary || '').trim()
       const sourceTexts = [entry.title, summaryPlain]
         .filter((text) => text.length > 0)
-        .filter((text) => (listTranslationEnglishOnly ? isLikelyEnglishText(text) : true))
+        .filter((text) => shouldTranslateToChinese(text))
       if (sourceTexts.length === 0) return
 
       const uncachedTexts = sourceTexts.filter((text) => !translationCacheRef.current.has(text))
@@ -626,7 +610,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       entriesById,
       isListTranslationActive,
       listTranslationTargetLanguage,
-      listTranslationEnglishOnly,
     ]
   )
 

@@ -1,34 +1,11 @@
-/**
- * Client-side language detection utility.
- *
- * Mirrors the backend logic in translation_service.py.
- * Used to auto-detect target language for viewport translation.
- */
-
-const CHINESE_RE = /[\u4e00-\u9fff]/g
-const ALPHA_RE = /[a-zA-Z\u4e00-\u9fff]/g
+import { resolveAutoTranslationTargetLanguage } from './translationLanguagePolicy'
 
 /**
- * Detect the appropriate target language for translation.
+ * Backward-compatible wrapper.
  *
- * If the text is mostly Chinese, translates to English.
- * If the text is mostly English/other, translates to Chinese.
- *
- * @param text - Sample text (title + content excerpt)
- * @returns Target language code ("en" or "zh-CN")
+ * New translation policy only auto-translates non-Chinese content to Chinese.
+ * For Chinese/unknown content this returns "zh-CN" as a stable fallback.
  */
 export function detectTargetLanguage(text: string): string {
-  if (!text) return 'zh-CN'
-
-  const sample = text.slice(0, 200)
-  const chineseMatches = sample.match(CHINESE_RE)
-  const alphaMatches = sample.match(ALPHA_RE)
-
-  const chineseCount = chineseMatches?.length ?? 0
-  const alphaCount = alphaMatches?.length ?? 0
-
-  if (alphaCount === 0) return 'zh-CN'
-
-  const ratio = chineseCount / alphaCount
-  return ratio > 0.3 ? 'en' : 'zh-CN'
+  return resolveAutoTranslationTargetLanguage(text) ?? 'zh-CN'
 }

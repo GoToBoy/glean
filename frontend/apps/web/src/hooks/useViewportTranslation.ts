@@ -26,7 +26,7 @@ function getSessionCacheKey(entryId: string, targetLanguage: string): string {
 interface UseViewportTranslationOptions {
   contentRef: React.RefObject<HTMLElement | null>
   scrollContainerRef: React.RefObject<HTMLElement | null>
-  targetLanguage: string
+  targetLanguage: string | null
   entryId: string
   translatePreUnknown?: boolean
 }
@@ -78,7 +78,7 @@ export function useViewportTranslation({
   const observerRef = useRef<IntersectionObserver | null>(null)
   // Track active state in ref for use inside observer callback
   const isActiveRef = useRef(false)
-  const sessionCacheKey = getSessionCacheKey(entryId, targetLanguage)
+  const sessionCacheKey = getSessionCacheKey(entryId, targetLanguage ?? 'disabled')
 
   /**
    * Translate a batch of visible blocks and insert translation lines.
@@ -86,6 +86,7 @@ export function useViewportTranslation({
   const translateBlocks = useCallback(
     async (blocks: Element[]) => {
       // Filter out already-processed or currently-pending blocks
+      if (!targetLanguage) return
       const toTranslate = blocks.filter(
         (b) => !b.hasAttribute(PROCESSED_ATTR) && !pendingBlocksRef.current.has(b),
       )
@@ -175,6 +176,7 @@ export function useViewportTranslation({
    * Set up IntersectionObserver on all translatable blocks.
    */
   const setupObserver = useCallback(() => {
+    if (!targetLanguage) return
     if (!contentRef.current || !scrollContainerRef.current) return
 
     // Normalize loose text-node content into paragraph blocks first.
@@ -217,7 +219,7 @@ export function useViewportTranslation({
 
     observerRef.current = observer
     blocks.forEach((block) => observer.observe(block))
-  }, [contentRef, scrollContainerRef, translateBlocks, translatePreUnknown])
+  }, [contentRef, scrollContainerRef, translateBlocks, translatePreUnknown, targetLanguage])
 
   /**
    * Apply fully-cached translations immediately to avoid original-text flash.
@@ -286,10 +288,11 @@ export function useViewportTranslation({
   }, [contentRef])
 
   const activate = useCallback(() => {
+    if (!targetLanguage) return
     setIsActive(true)
     isActiveRef.current = true
     setError(null)
-  }, [])
+  }, [targetLanguage])
 
   const deactivate = useCallback(() => {
     setIsActive(false)
@@ -311,6 +314,7 @@ export function useViewportTranslation({
   }, [removeTranslationElements])
 
   const retry = useCallback(() => {
+    if (!targetLanguage) return
     // Clear error and pending state
     setError(null)
     pendingBlocksRef.current.clear()
@@ -330,7 +334,7 @@ export function useViewportTranslation({
 
     // Re-setup observer to re-detect visible blocks
     setupObserver()
-  }, [contentRef, setupObserver])
+  }, [contentRef, setupObserver, targetLanguage])
 
   const toggle = useCallback(() => {
     if (isActiveRef.current) {
@@ -343,7 +347,7 @@ export function useViewportTranslation({
   // Set up observer when activated.
   // If persisted cache exists, apply cached translations first to avoid flash.
   useLayoutEffect(() => {
-    if (!isActive) return
+    if (!isActive || !targetLanguage) return
 
     let retryTimer: ReturnType<typeof setTimeout> | null = null
     const hasPersistedCache = cacheRef.current.size > 0
@@ -381,7 +385,7 @@ export function useViewportTranslation({
         observerRef.current = null
       }
     }
-  }, [isActive, setupObserver, applyCachedTranslationsImmediately])
+  }, [isActive, setupObserver, applyCachedTranslationsImmediately, targetLanguage])
 
   // Load cached sentence translations from DB when entry/language changes.
   // If cache exists, auto-enable translation display.
@@ -409,6 +413,8 @@ export function useViewportTranslation({
       setIsActive(true)
       isActiveRef.current = true
     }
+
+    if (!targetLanguage) return
 
     const loadPersisted = async () => {
       try {

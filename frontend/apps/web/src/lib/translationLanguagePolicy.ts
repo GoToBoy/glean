@@ -1,0 +1,52 @@
+const HAN_RE = /[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]/g
+const KANA_RE = /[\u3040-\u30ff\uff66-\uff9f]/g
+const HANGUL_RE = /[\u1100-\u11ff\u3130-\u318f\uac00-\ud7af]/g
+const LATIN_RE = /[A-Za-z]/g
+const OTHER_SCRIPT_RE = /[\u0370-\u03ff\u0400-\u04ff\u0530-\u058f\u0590-\u05ff\u0600-\u06ff\u0900-\u097f]/g
+
+export type TranslationLanguageCategory = 'chinese' | 'non_chinese' | 'unknown'
+
+function countMatches(text: string, regex: RegExp): number {
+  return text.match(regex)?.length ?? 0
+}
+
+function normalizeSample(text: string): string {
+  return text
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&[a-zA-Z0-9#]+;/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 900)
+}
+
+export function detectTranslationLanguageCategory(text: string): TranslationLanguageCategory {
+  const sample = normalizeSample(text)
+  if (!sample) return 'unknown'
+
+  const hanCount = countMatches(sample, HAN_RE)
+  const kanaCount = countMatches(sample, KANA_RE)
+  const hangulCount = countMatches(sample, HANGUL_RE)
+  const latinCount = countMatches(sample, LATIN_RE)
+  const otherScriptCount = countMatches(sample, OTHER_SCRIPT_RE)
+
+  const nonChineseSignal = kanaCount + hangulCount + latinCount + otherScriptCount
+  const totalSignal = hanCount + nonChineseSignal
+
+  if (totalSignal < 4) return 'unknown'
+  if (kanaCount > 0 || hangulCount > 0 || otherScriptCount > 0) return 'non_chinese'
+  if (hanCount === 0) return latinCount > 0 ? 'non_chinese' : 'unknown'
+  if (nonChineseSignal === 0) return 'chinese'
+
+  const hanRatio = hanCount / totalSignal
+  return hanRatio >= 0.65 ? 'chinese' : 'non_chinese'
+}
+
+export function resolveAutoTranslationTargetLanguage(text: string): 'zh-CN' | null {
+  const category = detectTranslationLanguageCategory(text)
+  if (category === 'non_chinese') return 'zh-CN'
+  return null
+}
+
+export function shouldTranslateToChinese(text: string): boolean {
+  return resolveAutoTranslationTargetLanguage(text) === 'zh-CN'
+}
