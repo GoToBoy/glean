@@ -40,7 +40,6 @@ import {
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
-import { useEntryEngagementTracking } from '../hooks/useEntryEngagementTracking'
 import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
 import { useAuthStore } from '../stores/authStore'
@@ -234,11 +233,6 @@ export function ArticleReader({
   const isMobile = useIsMobile()
   const barsVisible = useMobileBarsVisibility(scrollContainerRef, entry.id)
   const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
-  useEntryEngagementTracking({
-    entryId: entry.id,
-    content: displayContent,
-    scrollContainerRef,
-  })
   const { showPrompt, dismissPrompt } = useEndOfArticleFeedbackPrompt({
     entryId: entry.id,
     isLiked: entry.is_liked,

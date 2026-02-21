@@ -3,8 +3,6 @@ import type {
   EntryListResponse,
   FeedbackSummaryResponse,
   ParagraphTranslationsResponse,
-  TrackEntryEventRequest,
-  TrackEntryEventResponse,
   TranslateTextsResponse,
   TranslationResponse,
   UpdateEntryStateRequest,
@@ -59,16 +57,6 @@ export class EntryService {
       feed_id: feedId,
       folder_id: folderId,
     })
-  }
-
-  /**
-   * Track implicit feedback event for an entry.
-   */
-  async trackEntryEvent(
-    entryId: string,
-    data: TrackEntryEventRequest
-  ): Promise<TrackEntryEventResponse> {
-    return this.client.post<TrackEntryEventResponse>(`/entries/${entryId}/events`, data)
   }
 
   /**

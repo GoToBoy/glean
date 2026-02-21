@@ -12,7 +12,6 @@ from .discovery_service import DiscoveryService
 from .entry_service import EntryService
 from .feed_service import FeedService
 from .folder_service import FolderService
-from .implicit_feedback_service import ImplicitFeedbackService
 from .preference_service import PreferenceService
 from .simple_score_service import SimpleScoreService
 from .rsshub_service import RSSHubService
@@ -29,7 +28,6 @@ __all__ = [
     "UserService",
     "FeedService",
     "EntryService",
-    "ImplicitFeedbackService",
     # M2 services
     "BookmarkService",
     "DiscoveryService",

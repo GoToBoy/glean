@@ -82,12 +82,6 @@ class User(Base, TimestampMixin):
     preference_stats = relationship(
         "UserPreferenceStats", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
-    entry_events = relationship(
-        "UserEntryEvent", back_populates="user", cascade="all, delete-orphan"
-    )
-    entry_implicit_labels = relationship(
-        "UserEntryImplicitLabel", back_populates="user", cascade="all, delete-orphan"
-    )
     api_tokens = relationship("APIToken", back_populates="user", cascade="all, delete-orphan")
     auth_providers = relationship(
         "UserAuthProvider", back_populates="user", cascade="all, delete-orphan"

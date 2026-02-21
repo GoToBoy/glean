@@ -23,7 +23,6 @@ from .tasks import (
     embedding_rebuild,
     embedding_worker,
     feed_fetcher,
-    implicit_feedback_aggregation,
     preference_worker,
     subscription_cleanup,
     translation,
@@ -137,8 +136,6 @@ def get_oss_functions() -> list[TaskFunction]:
         # M3: Preference tasks
         preference_worker.update_user_preference,
         preference_worker.rebuild_user_preference,
-        # M4: Implicit feedback aggregation
-        implicit_feedback_aggregation.aggregate_implicit_feedback_labels,
         # Subscription cleanup
         subscription_cleanup.cleanup_orphan_embeddings,
         # Translation
@@ -153,8 +150,6 @@ def get_oss_cron_jobs() -> list[CronJob]:
         cron(feed_fetcher.scheduled_fetch, minute={0, 15, 30, 45}),
         # Read-later cleanup (hourly at minute 0)
         cron(cleanup.scheduled_cleanup, minute=0),
-        # Implicit feedback aggregation (daily at 03:10 UTC)
-        cron(implicit_feedback_aggregation.scheduled_aggregate_implicit_feedback, hour=3, minute=10),
     ]
 
 

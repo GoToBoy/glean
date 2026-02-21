@@ -17,8 +17,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas import (
     EmbeddingConfigUpdateRequest,
-    ImplicitFeedbackConfigUpdateRequest,
-    RecencyDecayConfigUpdateRequest,
     RSSHubConfigUpdateRequest,
 )
 from glean_core.schemas.admin import (
@@ -1179,58 +1177,6 @@ async def set_registration_status(
     """
     await config_service.set_registration_enabled(enabled)
     return {"enabled": enabled}
-
-
-@router.get("/settings/implicit-feedback")
-async def get_implicit_feedback_settings(
-    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
-    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
-) -> dict[str, Any]:
-    """Get implicit feedback configuration."""
-    from glean_core.schemas.config import ImplicitFeedbackConfig
-
-    config = await config_service.get(ImplicitFeedbackConfig)
-    return config.model_dump(exclude={"NAMESPACE"})
-
-
-@router.post("/settings/implicit-feedback")
-async def update_implicit_feedback_settings(
-    request: ImplicitFeedbackConfigUpdateRequest,
-    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
-    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
-) -> dict[str, Any]:
-    """Update implicit feedback configuration."""
-    from glean_core.schemas.config import ImplicitFeedbackConfig
-
-    updates = request.model_dump(exclude_unset=True)
-    updated = await config_service.update(ImplicitFeedbackConfig, **updates)
-    return updated.model_dump(exclude={"NAMESPACE"})
-
-
-@router.get("/settings/recency-decay")
-async def get_recency_decay_settings(
-    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
-    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
-) -> dict[str, Any]:
-    """Get recency decay configuration."""
-    from glean_core.schemas.config import RecencyDecayConfig
-
-    config = await config_service.get(RecencyDecayConfig)
-    return config.model_dump(exclude={"NAMESPACE"})
-
-
-@router.post("/settings/recency-decay")
-async def update_recency_decay_settings(
-    request: RecencyDecayConfigUpdateRequest,
-    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
-    config_service: Annotated[TypedConfigService, Depends(get_typed_config_service)],
-) -> dict[str, Any]:
-    """Update recency decay configuration."""
-    from glean_core.schemas.config import RecencyDecayConfig
-
-    updates = request.model_dump(exclude_unset=True)
-    updated = await config_service.update(RecencyDecayConfig, **updates)
-    return updated.model_dump(exclude={"NAMESPACE"})
 
 
 @router.get("/settings/rsshub")

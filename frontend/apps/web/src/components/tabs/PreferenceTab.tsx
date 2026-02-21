@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { preferenceService } from '@glean/api-client'
 import {
@@ -17,11 +17,6 @@ import {
   AlertDialogClose,
   Switch,
   Label,
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
 } from '@glean/ui'
 import {
   Heart,
@@ -37,7 +32,6 @@ import {
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useUIStore } from '../../stores/uiStore'
-import { useAuthStore } from '../../stores/authStore'
 import { useTranslation } from '@glean/i18n'
 
 /**
@@ -50,55 +44,6 @@ export function PreferenceTab() {
   const queryClient = useQueryClient()
   const [showRebuildConfirm, setShowRebuildConfirm] = useState(false)
   const { showPreferenceScore, setShowPreferenceScore } = useUIStore()
-  const { user, updateSettings, isLoading: isAuthSaving } = useAuthStore()
-  const [isSavingAutoRead, setIsSavingAutoRead] = useState(false)
-  const autoMarkReadEnabledFromSettings = user?.settings?.auto_mark_read_on_scroll_enabled ?? false
-  const autoMarkReadThresholdFromSettings = Math.max(
-    1,
-    user?.settings?.auto_mark_read_on_scroll_threshold_screens ?? 1.5
-  )
-  const [autoMarkReadEnabled, setAutoMarkReadEnabled] = useState(autoMarkReadEnabledFromSettings)
-  const [autoMarkReadThreshold, setAutoMarkReadThreshold] = useState(
-    autoMarkReadThresholdFromSettings
-  )
-
-  useEffect(() => {
-    setAutoMarkReadEnabled(autoMarkReadEnabledFromSettings)
-    setAutoMarkReadThreshold(autoMarkReadThresholdFromSettings)
-  }, [autoMarkReadEnabledFromSettings, autoMarkReadThresholdFromSettings])
-
-  const persistAutoReadSettings = async (enabled: boolean, threshold: number) => {
-    setIsSavingAutoRead(true)
-    try {
-      await updateSettings({
-        auto_mark_read_on_scroll_enabled: enabled,
-        auto_mark_read_on_scroll_threshold_screens: threshold,
-      })
-    } finally {
-      setIsSavingAutoRead(false)
-    }
-  }
-
-  const handleAutoReadToggle = async (enabled: boolean) => {
-    setAutoMarkReadEnabled(enabled)
-    try {
-      await persistAutoReadSettings(enabled, autoMarkReadThreshold)
-    } catch {
-      setAutoMarkReadEnabled(autoMarkReadEnabledFromSettings)
-    }
-  }
-
-  const handleAutoReadThresholdChange = async (value: string | null) => {
-    if (!value) return
-    const threshold = Number(value)
-    if (!Number.isFinite(threshold) || threshold <= 0) return
-    setAutoMarkReadThreshold(threshold)
-    try {
-      await persistAutoReadSettings(autoMarkReadEnabled, threshold)
-    } catch {
-      setAutoMarkReadThreshold(autoMarkReadThresholdFromSettings)
-    }
-  }
 
   // Fetch preference stats
   const {
@@ -194,45 +139,6 @@ export function PreferenceTab() {
           </div>
         </div>
         <Switch checked={showPreferenceScore} onCheckedChange={setShowPreferenceScore} />
-      </div>
-
-      <div className="animate-fade-in border-border bg-card space-y-3 rounded-lg border p-4">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <Label className="text-foreground text-sm font-medium">
-              {t('preferences.autoMarkReadOnScroll')}
-            </Label>
-            <p className="text-muted-foreground text-xs">
-              {t('preferences.autoMarkReadOnScrollDesc')}
-            </p>
-          </div>
-          <Switch
-            checked={autoMarkReadEnabled}
-            onCheckedChange={handleAutoReadToggle}
-            disabled={isSavingAutoRead || isAuthSaving}
-          />
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <Label className="text-muted-foreground text-xs">
-            {t('preferences.autoMarkReadThreshold')}
-          </Label>
-          <Select
-            value={String(autoMarkReadThreshold)}
-            onValueChange={handleAutoReadThresholdChange}
-            disabled={isSavingAutoRead || isAuthSaving}
-          >
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1">1.0x</SelectItem>
-              <SelectItem value="1.5">1.5x</SelectItem>
-              <SelectItem value="2">2.0x</SelectItem>
-              <SelectItem value="3">3.0x</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
       </div>
 
       {/* Stats Grid */}

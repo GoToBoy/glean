@@ -4,24 +4,19 @@ Entry service.
 Handles entry retrieval and user-specific entry state management.
 """
 
-import math
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 from arq.connections import ArqRedis
 from sqlalchemy import desc, func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import RedisKeys, get_logger
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
-    RecencyDecayConfig,
-    TrackEntryEventRequest,
     UpdateEntryStateRequest,
 )
-from glean_core.services.typed_config_service import TypedConfigService
 from glean_database.models import (
     Bookmark,
     Entry,
@@ -30,7 +25,6 @@ from glean_database.models import (
     Subscription,
     User,
     UserEntry,
-    UserEntryEvent,
 )
 
 logger = get_logger(__name__)
@@ -56,28 +50,6 @@ class EntryService:
         """
         self.session = session
         self.redis_pool = redis_pool
-        self._typed_config = TypedConfigService(session)
-
-    @staticmethod
-    def _age_days_from_published_at(published_at: datetime | None) -> float:
-        if not published_at:
-            return 0.0
-        now = datetime.now(UTC)
-        if published_at.tzinfo is None:
-            delta_seconds = (now.replace(tzinfo=None) - published_at).total_seconds()
-        else:
-            delta_seconds = (now - published_at).total_seconds()
-        return max(0.0, delta_seconds / 86400.0)
-
-    @staticmethod
-    def _recency_decay_factor(age_days: float, config: RecencyDecayConfig) -> float:
-        if not config.enabled:
-            return 1.0
-        if age_days <= config.start_day:
-            return 1.0
-        decay_days = age_days - config.start_day
-        factor = math.pow(0.5, decay_days / config.half_life_days)
-        return max(config.floor_factor, min(1.0, factor))
 
     async def _get_folder_tree_ids(self, folder_id: str, user_id: str) -> list[str]:
         """
@@ -204,9 +176,8 @@ class EntryService:
 
         # For smart view, we need to fetch more entries to score and sort
         if view == "smart" and score_service:
-            recency_config = await self._typed_config.get(RecencyDecayConfig)
             # Fetch more entries for scoring (we'll limit after sorting)
-            fetch_limit = min(total, per_page * 10)  # Fetch 10 pages worth for scoring
+            fetch_limit = min(total, per_page * 5)  # Fetch 5 pages worth for scoring
             stmt_for_scoring = stmt.order_by(desc(Entry.published_at)).limit(fetch_limit)
 
             result = await self.session.execute(stmt_for_scoring)
@@ -234,10 +205,7 @@ class EntryService:
             # Build items with scores
             items_with_scores: list[tuple[EntryResponse, float]] = []
             for entry, user_entry, bookmark_id, feed_title, feed_icon_url in all_rows:
-                base_score = scores.get(entry.id, 50.0)
-                age_days = self._age_days_from_published_at(entry.published_at)
-                decay_factor = self._recency_decay_factor(age_days, recency_config)
-                score = max(0.0, min(100.0, base_score * decay_factor))
+                score = scores.get(entry.id, 50.0)
                 item = EntryResponse(
                     id=str(entry.id),
                     feed_id=str(entry.feed_id),
@@ -532,59 +500,6 @@ class EntryService:
 
         # Return updated entry
         return await self.get_entry(entry_id, user_id)
-
-    async def track_entry_event(
-        self,
-        entry_id: str,
-        user_id: str,
-        event: TrackEntryEventRequest,
-    ) -> tuple[bool, bool]:
-        """
-        Track a user behavior event for an entry.
-
-        Returns:
-            Tuple of (accepted, duplicate).
-        """
-        entry_stmt = select(Entry).where(Entry.id == entry_id)
-        entry_result = await self.session.execute(entry_stmt)
-        entry = entry_result.scalar_one_or_none()
-        if not entry:
-            raise ValueError("Entry not found")
-
-        sub_stmt = select(Subscription).where(
-            Subscription.user_id == user_id, Subscription.feed_id == entry.feed_id
-        )
-        sub_result = await self.session.execute(sub_stmt)
-        if not sub_result.scalar_one_or_none():
-            raise ValueError("Not subscribed to this feed")
-
-        clamped_scroll = min(1.0, max(0.0, event.scroll_depth_max))
-        clamped_active_ms = max(0, event.active_ms)
-        clamped_est_read_sec = max(0, event.est_read_time_sec)
-
-        user_event = UserEntryEvent(
-            event_id=event.event_id,
-            user_id=user_id,
-            entry_id=entry_id,
-            event_type=event.event_type,
-            session_id=event.session_id,
-            occurred_at=event.occurred_at,
-            client_ts=event.client_ts,
-            view=event.view,
-            device_type=event.device_type,
-            active_ms=clamped_active_ms,
-            scroll_depth_max=clamped_scroll,
-            est_read_time_sec=clamped_est_read_sec,
-            extra=event.extra,
-        )
-        self.session.add(user_event)
-        try:
-            await self.session.commit()
-        except IntegrityError:
-            await self.session.rollback()
-            return (False, True)
-
-        return (True, False)
 
     async def get_recent_explicit_feedback_count(self, user_id: str, days: int = 7) -> int:
         """Get recent like/dislike feedback count for a user."""

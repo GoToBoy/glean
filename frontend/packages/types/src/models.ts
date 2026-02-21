@@ -31,8 +31,6 @@ export interface UserSettings {
   translation_model?: string
   translation_base_url?: string
   discovery_tavily_api_key?: string
-  auto_mark_read_on_scroll_enabled?: boolean // Auto-mark entries as read while scrolling list
-  auto_mark_read_on_scroll_threshold_screens?: number // Mark as read after this many viewport heights
   reader_list_resume_positions?: ReaderListResumeMap // Per-scope reader list anchors for cross-device resume
 }
 

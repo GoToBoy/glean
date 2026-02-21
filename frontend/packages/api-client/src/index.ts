@@ -16,7 +16,6 @@ export { BookmarkService, type BookmarkListParams } from './services/bookmarks'
 export { PreferenceService } from './services/preference'
 export {
   SystemService,
-  type ReaderBehaviorConfig,
   type VectorizationStatus,
 } from './services/system'
 // MCP services

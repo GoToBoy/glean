@@ -13,8 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from glean_core.schemas.config import (
     EmbeddingConfig,
     EmbeddingRebuildProgress,
-    ImplicitFeedbackConfig,
-    ReaderBehaviorConfigResponse,
     VectorizationStatus,
     VectorizationStatusResponse,
 )
@@ -111,16 +109,3 @@ async def health_check() -> dict[str, str]:
         Health status.
     """
     return {"status": "healthy"}
-
-
-@router.get("/reader-behavior-config", response_model=ReaderBehaviorConfigResponse)
-async def get_reader_behavior_config(
-    config_service: Annotated[TypedConfigService, Depends(get_config_service)],
-) -> ReaderBehaviorConfigResponse:
-    """Get reader behavior tracking config used by web client."""
-    config = await config_service.get(ImplicitFeedbackConfig)
-    return ReaderBehaviorConfigResponse(
-        list_min_visible_ratio=config.list_min_visible_ratio,
-        list_exposed_ms=config.list_exposed_ms,
-        list_skimmed_ms=config.list_skimmed_ms,
-    )

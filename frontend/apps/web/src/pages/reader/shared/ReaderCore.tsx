@@ -1,8 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useInfiniteEntries, useEntry, useUpdateEntryState, entryKeys } from '../../../hooks/useEntries'
-import { useEntryListEngagementTracking } from '../../../hooks/useEntryListEngagementTracking'
-import { useReaderBehaviorConfig } from '../../../hooks/useReaderBehaviorConfig'
 import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
@@ -54,7 +52,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
-  const { data: readerBehaviorConfig } = useReaderBehaviorConfig()
   const isVectorizationEnabled =
     vectorizationStatus?.enabled && vectorizationStatus?.status === 'idle'
 
@@ -101,11 +98,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const anchorPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAnchorRef = useRef<{ scopeKey: string; entryId: string; index: number } | null>(null)
   const lastPersistedAnchorRef = useRef<string | null>(null)
-  const autoMarkQueueRef = useRef<string[]>([])
-  const autoMarkQueuedSetRef = useRef<Set<string>>(new Set())
-  const autoMarkInFlightSetRef = useRef<Set<string>>(new Set())
-  const autoMarkFailedUntilRef = useRef<Map<string, number>>(new Map())
-  const autoMarkLastScrollTopRef = useRef(0)
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
@@ -171,10 +163,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return raw
   }, [user?.settings?.reader_list_resume_positions])
   const currentResumeAnchor = listResumePositions[listTrackingScopeKey]
-  const autoMarkReadOnScrollEnabled = user?.settings?.auto_mark_read_on_scroll_enabled ?? false
-  const configuredThreshold = user?.settings?.auto_mark_read_on_scroll_threshold_screens
-  const autoMarkReadThresholdScreens =
-    typeof configuredThreshold === 'number' && configuredThreshold > 0 ? configuredThreshold : 1.5
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -402,49 +390,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     void persistResumeAnchor(pending.scopeKey, pending.entryId, pending.index)
   }, [persistResumeAnchor])
 
-  const enqueueAutoMarkRead = useCallback((entryIds: string[]) => {
-    const now = Date.now()
-    entryIds.forEach((entryId) => {
-      if (!entryId) return
-      const cooldownUntil = autoMarkFailedUntilRef.current.get(entryId) ?? 0
-      if (cooldownUntil > now) return
-      if (autoMarkQueuedSetRef.current.has(entryId) || autoMarkInFlightSetRef.current.has(entryId)) {
-        return
-      }
-      autoMarkQueueRef.current.push(entryId)
-      autoMarkQueuedSetRef.current.add(entryId)
-    })
-  }, [])
-
-  const drainAutoMarkReadQueue = useCallback(() => {
-    const MAX_CONCURRENT = 2
-    while (
-      autoMarkInFlightSetRef.current.size < MAX_CONCURRENT &&
-      autoMarkQueueRef.current.length > 0
-    ) {
-      const nextId = autoMarkQueueRef.current.shift()
-      if (!nextId) continue
-      autoMarkQueuedSetRef.current.delete(nextId)
-
-      const entry = entriesById.get(nextId)
-      if (!entry || entry.is_read) continue
-
-      autoMarkInFlightSetRef.current.add(nextId)
-      updateMutation
-        .mutateAsync({
-          entryId: nextId,
-          data: { is_read: true },
-        })
-        .catch(() => {
-          autoMarkFailedUntilRef.current.set(nextId, Date.now() + 30_000)
-        })
-        .finally(() => {
-          autoMarkInFlightSetRef.current.delete(nextId)
-          drainAutoMarkReadQueue()
-        })
-    }
-  }, [entriesById, updateMutation])
-
   const handleJumpToNewEntries = useCallback(() => {
     const container = entryListRef.current
     if (!container) return
@@ -491,7 +436,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     // fetchNextPage is stable and always uses current query parameters
   }, [hasNextPage, isFetchingNextPage, fetchNextPage, isLoading])
 
-  // Scroll handling: prefetch next page, persist resume anchors, and auto-mark read.
+  // Scroll handling: prefetch next page and persist resume anchors.
   useEffect(() => {
     const container = entryListRef.current
     if (!container || isLoading) return
@@ -523,35 +468,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         }
         break
       }
-
-      // Auto-mark entries as read after scrolling past N screens.
-      if (autoMarkReadOnScrollEnabled) {
-        const previousScrollTop = autoMarkLastScrollTopRef.current
-        autoMarkLastScrollTopRef.current = currentScrollTop
-        if (currentScrollTop > previousScrollTop) {
-          const readBoundary =
-            currentScrollTop - container.clientHeight * autoMarkReadThresholdScreens
-          if (readBoundary > 0) {
-            const passedEntryIds: string[] = []
-            for (const node of entryNodes) {
-              const nodeBottom = node.offsetTop + node.offsetHeight
-              if (nodeBottom > readBoundary) break
-              const entryId = node.dataset.entryId
-              if (!entryId) continue
-              const entry = entriesById.get(entryId)
-              if (entry && !entry.is_read) {
-                passedEntryIds.push(entryId)
-              }
-            }
-            if (passedEntryIds.length > 0) {
-              enqueueAutoMarkRead(passedEntryIds)
-              drainAutoMarkReadQueue()
-            }
-          }
-        }
-      } else {
-        autoMarkLastScrollTopRef.current = currentScrollTop
-      }
     }
 
     container.addEventListener('scroll', onScroll, { passive: true })
@@ -568,11 +484,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     listTrackingScopeKey,
     schedulePersistAnchor,
     flushPersistAnchor,
-    autoMarkReadOnScrollEnabled,
-    autoMarkReadThresholdScreens,
-    entriesById,
-    enqueueAutoMarkRead,
-    drainAutoMarkReadQueue,
   ])
 
   // Initialize list translation toggle from persisted setting
@@ -834,7 +745,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   useEffect(() => {
     restoredScopeKeyRef.current = null
     resumeFetchAttemptsRef.current = 0
-    autoMarkLastScrollTopRef.current = 0
     setNewEntriesAboveCount(0)
   }, [listTrackingScopeKey])
 
@@ -908,17 +818,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   // On mobile, keep list mounted to preserve scroll position and observer bindings.
   const isReaderVisibleOnMobile = isMobile && (!!selectedEntryId || isExitingArticle)
   const showReader = !isMobile || !!selectedEntryId
-  const trackedEntryIds = useMemo(() => visibleEntries.map((entry) => entry.id), [visibleEntries])
-
-  useEntryListEngagementTracking({
-    entryIds: trackedEntryIds,
-    scrollContainerRef: entryListRef,
-    scopeKey: listTrackingScopeKey,
-    minVisibleRatio: readerBehaviorConfig?.list_min_visible_ratio ?? 0.5,
-    exposedMs: readerBehaviorConfig?.list_exposed_ms ?? 300,
-    skimmedMs: readerBehaviorConfig?.list_skimmed_ms ?? 600,
-    enabled: visibleEntries.length > 0 && !isLoading,
-  })
 
   useEffect(() => {
     const onToggleTranslation = () => {

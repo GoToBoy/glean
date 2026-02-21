@@ -5,7 +5,6 @@ Request and response models for entry-related operations.
 """
 
 from datetime import datetime
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -106,39 +105,3 @@ class ParagraphTranslationsResponse(BaseModel):
     """Cached paragraph-level translations for an entry."""
 
     translations: dict[str, str]
-
-
-EntryEventType = Literal[
-    "entry_impression",
-    "entry_open",
-    "entry_dwell",
-    "entry_scroll_depth",
-    "entry_exit",
-    "entry_return",
-]
-
-EntryViewType = Literal["timeline", "smart"]
-DeviceType = Literal["desktop", "mobile", "tablet", "unknown"]
-
-
-class TrackEntryEventRequest(BaseModel):
-    """Track a user behavior event for an entry."""
-
-    event_id: str
-    event_type: EntryEventType
-    session_id: str
-    occurred_at: datetime
-    client_ts: datetime | None = None
-    view: EntryViewType | None = None
-    device_type: DeviceType = "unknown"
-    active_ms: int = 0
-    scroll_depth_max: float = 0.0
-    est_read_time_sec: int = 0
-    extra: dict[str, str | int | float | bool | None] | None = None
-
-
-class TrackEntryEventResponse(BaseModel):
-    """Result of tracking a user behavior event."""
-
-    accepted: bool
-    duplicate: bool = False

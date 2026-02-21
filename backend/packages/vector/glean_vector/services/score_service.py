@@ -6,7 +6,6 @@ import numpy as np
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_core.services.implicit_feedback_service import ImplicitFeedbackService
 from glean_database.models import Entry, UserPreferenceStats
 from glean_vector.clients.milvus_client import MilvusClient
 from glean_vector.config import preference_config
@@ -36,7 +35,6 @@ class ScoreService:
         self.milvus = milvus_client
         self.pref_config = preference_config
         self._user_stats_cache: dict[str, UserPreferenceStats | None] = {}
-        self._implicit_feedback = ImplicitFeedbackService(db_session)
 
     async def _get_user_stats(self, user_id: str) -> UserPreferenceStats | None:
         """Get user preference stats with caching to avoid N+1 queries."""
@@ -143,10 +141,7 @@ class ScoreService:
                 )
 
         # Final score
-        implicit_boosts = await self._implicit_feedback.batch_get_boosts(user_id, [entry_id])
-        implicit_boost = implicit_boosts.get(entry_id, 0.0)
-
-        final_score = score_with_confidence + source_boost + author_boost + implicit_boost
+        final_score = score_with_confidence + source_boost + author_boost
         final_score = max(0, min(100, final_score))
 
         return {
@@ -157,7 +152,6 @@ class ScoreService:
                 "confidence": round(confidence, 3),
                 "source_boost": round(source_boost, 2),
                 "author_boost": round(author_boost, 2),
-                "implicit_boost": round(implicit_boost, 2),
             },
         }
 
@@ -232,8 +226,6 @@ class ScoreService:
         # Get all entry embeddings in batch
         entry_ids = [entry.id for entry in entries]
         embeddings = await self.milvus.batch_get_entry_embeddings(entry_ids)
-        implicit_boosts = await self._implicit_feedback.batch_get_boosts(user_id, entry_ids)
-
         # Calculate scores
         for entry in entries:
             embedding = embeddings.get(entry.id)
@@ -272,8 +264,7 @@ class ScoreService:
                     )
 
             # Final score
-            implicit_boost = implicit_boosts.get(entry.id, 0.0)
-            final_score = score_with_confidence + source_boost + author_boost + implicit_boost
+            final_score = score_with_confidence + source_boost + author_boost
             final_score = max(0, min(100, final_score))
 
             scores[entry.id] = round(final_score, 1)
