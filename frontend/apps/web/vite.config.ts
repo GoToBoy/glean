@@ -78,12 +78,32 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       emptyOutDir: true,
-      ...(isElectron && {
-        rollupOptions: {
-          // Only exclude electron in electron mode
-          external: ['electron'],
+      cssCodeSplit: true,
+      rollupOptions: {
+        ...(isElectron ? { external: ['electron'] } : {}),
+        output: {
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return
+            if (
+              id.includes('/react/') ||
+              id.includes('/react-dom/') ||
+              id.includes('/react-router')
+            ) {
+              return 'vendor-react'
+            }
+            if (id.includes('@tanstack/react-query')) {
+              return 'vendor-query'
+            }
+            if (id.includes('lightgallery') || id.includes('highlight.js') || id.includes('dompurify')) {
+              return 'vendor-reader'
+            }
+            if (id.includes('date-fns') || id.includes('lucide-react')) {
+              return 'vendor-ui'
+            }
+            return 'vendor-misc'
+          },
         },
-      }),
+      },
     },
   }
 })

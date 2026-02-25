@@ -65,6 +65,8 @@ interface SidebarFeedsSectionProps {
   readonly onExportOPML: () => void
   readonly exportPending: boolean
   readonly onFeedSelect: (feedId?: string, folderId?: string) => void
+  readonly onFeedHover?: (feedId?: string, folderId?: string) => void
+  readonly onFolderHover?: (folderId: string) => void
   readonly onSmartViewSelect: () => void
   readonly isSmartView: boolean
   readonly isReaderPage: boolean
@@ -95,6 +97,8 @@ export function SidebarFeedsSection({
   onExportOPML,
   exportPending,
   onFeedSelect,
+  onFeedHover,
+  onFolderHover,
   onSmartViewSelect,
   isSmartView,
   isReaderPage,
@@ -274,6 +278,8 @@ export function SidebarFeedsSection({
             label={t('sidebar.allFeeds')}
             isActive={isReaderPage && !currentFeedId && !currentFolderId && !isSmartView}
             onClick={() => onFeedSelect(undefined)}
+            onMouseEnter={() => onFeedHover?.(undefined, undefined)}
+            onTouchStart={() => onFeedHover?.(undefined, undefined)}
             isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
             compact={isMobileSidebarOpen}
             title={t('sidebar.allFeeds')}
@@ -310,6 +316,7 @@ export function SidebarFeedsSection({
                   isExpanded={expandedFolders.has(folder.id)}
                   onToggle={() => toggleFolder(folder.id)}
                   onSelect={(folderId) => onFeedSelect(undefined, folderId)}
+                  onHoverFolder={onFolderHover}
                   isActive={currentFolderId === folder.id}
                   subscriptions={getSubscriptionsForFolder(folder.id)}
                   subscriptionsByFolder={subscriptionsByFolder}
@@ -318,6 +325,7 @@ export function SidebarFeedsSection({
                   currentFeedId={currentFeedId}
                   currentFolderId={currentFolderId}
                   onFeedSelect={(feedId) => onFeedSelect(feedId)}
+                  onFeedHover={(feedId) => onFeedHover?.(feedId)}
                   allFolders={feedFolders}
                   onCreateSubfolder={() => onCreateFolder(folder.id)}
                   draggedFeed={draggedFeed}
@@ -374,6 +382,7 @@ export function SidebarFeedsSection({
                   subscription={sub}
                   isActive={isReaderPage && currentFeedId === sub.feed_id}
                   onClick={() => onFeedSelect(sub.feed_id)}
+                  onHover={() => onFeedHover?.(sub.feed_id)}
                   allFolders={feedFolders}
                   isDragging={
                     !(isSidebarOpen && !isMobileSidebarOpen && isSelectionMode) &&
@@ -447,6 +456,8 @@ interface SidebarFolderItemProps {
   readonly currentFeedId?: string
   readonly currentFolderId?: string
   readonly onFeedSelect: (feedId: string) => void
+  readonly onFeedHover?: (feedId: string) => void
+  readonly onHoverFolder?: (folderId: string) => void
   readonly allFolders: FolderTreeNode[]
   readonly onCreateSubfolder: () => void
   readonly draggedFeed: Subscription | null
@@ -472,6 +483,8 @@ function SidebarFolderItem({
   currentFeedId,
   currentFolderId,
   onFeedSelect,
+  onFeedHover,
+  onHoverFolder,
   allFolders,
   onCreateSubfolder,
   draggedFeed,
@@ -571,6 +584,7 @@ function SidebarFolderItem({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
         onClick={() => onSelect(folder.id)}
+        onMouseEnter={() => onHoverFolder?.(folder.id)}
       >
         <button onClick={onToggle} className="touch-target-none flex h-5 items-center gap-2.5">
           <ChevronRight
@@ -669,6 +683,8 @@ function SidebarFolderItem({
               currentFeedId={currentFeedId}
               currentFolderId={currentFolderId}
               onFeedSelect={onFeedSelect}
+              onFeedHover={onFeedHover}
+              onHoverFolder={onHoverFolder}
               allFolders={allFolders}
               onCreateSubfolder={() => {}}
               draggedFeed={draggedFeed}
@@ -688,6 +704,7 @@ function SidebarFolderItem({
               subscription={sub}
               isActive={currentFeedId === sub.feed_id}
               onClick={() => onFeedSelect(sub.feed_id)}
+              onHover={() => onFeedHover?.(sub.feed_id)}
               allFolders={allFolders}
               isDragging={!isSelectionMode && draggedFeed?.id === sub.id}
               onDragStart={() => setDraggedFeed(sub)}
@@ -746,6 +763,7 @@ interface SidebarFeedItemProps {
   readonly subscription: Subscription
   readonly isActive: boolean
   readonly onClick: () => void
+  readonly onHover?: () => void
   readonly allFolders: FolderTreeNode[]
   readonly isDragging?: boolean
   readonly onDragStart?: () => void
@@ -760,6 +778,7 @@ function SidebarFeedItem({
   subscription,
   isActive,
   onClick,
+  onHover,
   allFolders,
   isDragging = false,
   onDragStart,
@@ -874,6 +893,8 @@ function SidebarFeedItem({
         onDragEnd={onDragEnd}
         onContextMenu={handleContextMenu}
         onClick={handleClick}
+        onMouseEnter={onHover}
+        onTouchStart={onHover}
       >
         <button
           onClick={handleClick}

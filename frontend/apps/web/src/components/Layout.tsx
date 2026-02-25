@@ -41,6 +41,8 @@ import {
   useExportOPML,
   clearSubscriptionCache,
 } from '../hooks/useSubscriptions'
+import { entryKeys, getInfiniteEntriesQueryOptions } from '../hooks/useEntries'
+import { entryService } from '@glean/api-client'
 import { SidebarFeedsSection } from './sidebar/SidebarFeedsSection'
 import { SidebarBookmarksSection } from './sidebar/SidebarBookmarksSection'
 import { SidebarTagsSection } from './sidebar/SidebarTagsSection'
@@ -255,17 +257,50 @@ export function Layout() {
   }
 
   const handleFeedSelect = (feedId?: string, folderId?: string) => {
+    const nextParams = new URLSearchParams()
+    if (currentView) nextParams.set('view', currentView)
+    if (currentTab) nextParams.set('tab', currentTab)
+
     if (folderId) {
-      navigate(`/reader?folder=${folderId}`)
+      nextParams.set('folder', folderId)
+      navigate(`/reader?${nextParams.toString()}`)
     } else if (feedId) {
-      navigate(`/reader?feed=${feedId}`)
+      nextParams.set('feed', feedId)
+      navigate(`/reader?${nextParams.toString()}`)
     } else {
-      navigate('/reader')
+      navigate(nextParams.toString() ? `/reader?${nextParams.toString()}` : '/reader')
     }
   }
 
   const handleSmartViewSelect = () => {
     navigate('/reader?view=smart')
+  }
+
+  const prefetchReaderData = async (feedId?: string, folderId?: string) => {
+    const isReadLater = currentTab === 'read-later'
+    const isUnreadLike = currentTab === 'unread' || currentTab === 'smart' || !currentTab
+    const filters = {
+      feed_id: feedId,
+      folder_id: folderId,
+      is_read: isUnreadLike ? false : undefined,
+      read_later: isReadLater ? true : undefined,
+      view: currentView === 'smart' || currentTab === 'smart' ? ('smart' as const) : ('timeline' as const),
+    }
+
+    const listOptions = getInfiniteEntriesQueryOptions(filters)
+    await queryClient.prefetchInfiniteQuery(listOptions)
+
+    const cached = queryClient.getQueryData<{
+      pages?: Array<{ items?: Array<{ id: string }> }>
+    }>(listOptions.queryKey)
+    const firstEntryId = cached?.pages?.[0]?.items?.[0]?.id
+    if (!firstEntryId) return
+
+    await queryClient.prefetchQuery({
+      queryKey: entryKeys.detail(firstEntryId),
+      queryFn: () => entryService.getEntry(firstEntryId),
+      staleTime: 2 * 60 * 1000,
+    })
   }
 
   const toggleFolder = (folderId: string) => {
@@ -554,6 +589,8 @@ export function Layout() {
             onExportOPML={handleExport}
             exportPending={exportMutation.isPending}
             onFeedSelect={handleFeedSelect}
+            onFeedHover={prefetchReaderData}
+            onFolderHover={(folderId) => prefetchReaderData(undefined, folderId)}
             onSmartViewSelect={handleSmartViewSelect}
             isSmartView={isSmartView}
             isReaderPage={isReaderPage}

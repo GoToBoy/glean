@@ -1,11 +1,6 @@
 import { useEffect, useRef } from 'react'
-import hljs from 'highlight.js'
-import lightGallery from 'lightgallery'
 import type { LightGallery } from 'lightgallery/lightgallery'
-
-// Configure highlight.js to ignore unescaped HTML warnings.
-// RSS feed content often contains pre-formatted code blocks with HTML entities.
-hljs.configure({ ignoreUnescapedHTML: true })
+import { loadHighlightCore } from '../lib/highlightLoader'
 
 /**
  * Hook to enhance content rendering with syntax highlighting and image gallery.
@@ -21,46 +16,58 @@ export function useContentRenderer(content?: string) {
   const galleryRef = useRef<LightGallery | null>(null)
 
   useEffect(() => {
-    if (!contentRef.current) return
+    const container = contentRef.current
+    if (!container) return
+    let disposed = false
 
-    // Apply syntax highlighting to all code blocks
-    const codeBlocks = contentRef.current.querySelectorAll('pre code')
-    codeBlocks.forEach((block) => {
-      // Remove the highlighted marker to allow re-highlighting (e.g., in React Strict Mode)
-      delete (block as HTMLElement).dataset.highlighted
-      hljs.highlightElement(block as HTMLElement)
-    })
+    const codeBlocks = container.querySelectorAll('pre code')
+    const images = container.querySelectorAll('img')
 
-    // Initialize lightGallery for images
-    const images = contentRef.current.querySelectorAll('img')
-    if (images.length > 0) {
-      // Wrap images in anchors if they aren't already
-      images.forEach((img) => {
-        if (img.parentElement?.tagName !== 'A') {
-          const anchor = document.createElement('a')
-          anchor.href = img.src
-          anchor.setAttribute('data-src', img.src)
-          if (img.alt) {
-            anchor.setAttribute('data-sub-html', `<h4>${img.alt}</h4>`)
-          }
-          img.parentNode?.insertBefore(anchor, img)
-          anchor.appendChild(img)
-        }
-      })
+    const run = async () => {
+      if (codeBlocks.length > 0) {
+        const hljs = await loadHighlightCore()
+        if (disposed) return
+        codeBlocks.forEach((block) => {
+          delete (block as HTMLElement).dataset.highlighted
+          hljs.highlightElement(block as HTMLElement)
+        })
+      }
 
-      // Initialize lightGallery
-      galleryRef.current = lightGallery(contentRef.current, {
-        selector: 'a[data-src]',
-        speed: 500,
-        download: true,
-        counter: true,
-        thumbnail: true,
-        animateThumb: true,
-      })
+      if (images.length > 0) {
+        await Promise.all([
+          import('lightgallery'),
+          import('lightgallery/css/lightgallery.css'),
+        ]).then(([{ default: lightGallery }]) => {
+          if (disposed) return
+
+          images.forEach((img) => {
+            if (img.parentElement?.tagName !== 'A') {
+              const anchor = document.createElement('a')
+              anchor.href = img.src
+              anchor.setAttribute('data-src', img.src)
+              if (img.alt) {
+                anchor.setAttribute('data-sub-html', `<h4>${img.alt}</h4>`)
+              }
+              img.parentNode?.insertBefore(anchor, img)
+              anchor.appendChild(img)
+            }
+          })
+
+          galleryRef.current = lightGallery(container, {
+            selector: 'a[data-src]',
+            speed: 500,
+            download: true,
+            counter: true,
+          })
+        })
+      }
     }
+
+    void run()
 
     // Cleanup function
     return () => {
+      disposed = true
       if (galleryRef.current) {
         galleryRef.current.destroy()
         galleryRef.current = null

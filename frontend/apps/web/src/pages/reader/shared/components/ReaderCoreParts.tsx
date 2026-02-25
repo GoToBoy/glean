@@ -147,6 +147,8 @@ export function EntryListItem({
     <div
       onClick={onClick}
       onMouseEnter={onPrefetch}
+      onMouseDown={onPrefetch}
+      onPointerDown={onPrefetch}
       onTouchStart={onPrefetch}
       data-entry-id={dataEntryId}
       className={`group animate-fade-in relative cursor-pointer px-1.5 py-1.5 transition-all duration-200 ${
@@ -154,7 +156,11 @@ export function EntryListItem({
           ? 'before:bg-primary relative before:absolute before:inset-y-0.5 before:left-0 before:w-0.5 before:rounded-full'
           : ''
       }`}
-      style={style}
+      style={{
+        contentVisibility: 'auto',
+        containIntrinsicSize: '160px',
+        ...style,
+      }}
     >
       <div
         className={`rounded-lg px-2.5 py-2 transition-all duration-200 ${

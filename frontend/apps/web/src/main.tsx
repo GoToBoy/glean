@@ -3,9 +3,6 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
-import 'lightgallery/css/lightgallery.css'
-import 'lightgallery/css/lg-thumbnail.css'
-// Custom highlight.js theme is defined in globals.css
 import './styles/globals.css'
 import App from './App'
 import { initializeTheme } from './stores/themeStore'
@@ -26,8 +23,12 @@ initFromStorage()
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Cache data for 5 minutes before considering it stale
-      staleTime: 1000 * 60 * 5,
+      // Keep data warm while reducing foreground refetch churn.
+      staleTime: 1000 * 60,
+      gcTime: 1000 * 60 * 30,
+      refetchOnWindowFocus: false,
+      refetchOnReconnect: true,
+      refetchOnMount: false,
       // Only retry failed requests once
       retry: 1,
     },

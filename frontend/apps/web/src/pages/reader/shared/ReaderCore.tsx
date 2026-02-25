@@ -26,6 +26,10 @@ import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const READER_LIST_RESUME_MAX_SCOPES = 60
 const READER_LIST_RESUME_MAX_FETCH_ATTEMPTS = 30
+const ENTRY_ROW_ESTIMATED_HEIGHT = 144
+const VIRTUALIZATION_THRESHOLD = 80
+const VIRTUALIZATION_OVERSCAN = 8
+const ENTRY_FADE_ANIMATION_LIMIT = 24
 
 /**
  * Reader page.
@@ -92,6 +96,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const [translatedEntryTexts, setTranslatedEntryTexts] = useState<
     Record<string, { title?: string; summary?: string }>
   >({})
+  const [listScrollTop, setListScrollTop] = useState(0)
+  const [listViewportHeight, setListViewportHeight] = useState(0)
   const [newEntriesAboveCount, setNewEntriesAboveCount] = useState(0)
   const restoredScopeKeyRef = useRef<string | null>(null)
   const resumeFetchAttemptsRef = useRef(0)
@@ -262,6 +268,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
     return map
   }, [visibleEntries])
+  const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
+  const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
 
   const entryIndexById = useMemo(() => {
     const map = new Map<string, number>()
@@ -270,6 +278,38 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     })
     return map
   }, [visibleEntries])
+
+  const shouldVirtualize = visibleEntries.length >= VIRTUALIZATION_THRESHOLD
+  const virtualizedList = useMemo(() => {
+    if (!shouldVirtualize) {
+      return {
+        startIndex: 0,
+        endIndex: visibleEntries.length,
+        entries: visibleEntries,
+        topSpacerHeight: 0,
+        bottomSpacerHeight: 0,
+      }
+    }
+
+    const viewportHeight = listViewportHeight > 0 ? listViewportHeight : 720
+    const visibleCount = Math.ceil(viewportHeight / ENTRY_ROW_ESTIMATED_HEIGHT)
+    const startIndex = Math.max(
+      0,
+      Math.floor(listScrollTop / ENTRY_ROW_ESTIMATED_HEIGHT) - VIRTUALIZATION_OVERSCAN
+    )
+    const endIndex = Math.min(
+      visibleEntries.length,
+      startIndex + visibleCount + VIRTUALIZATION_OVERSCAN * 2
+    )
+
+    return {
+      startIndex,
+      endIndex,
+      entries: visibleEntries.slice(startIndex, endIndex),
+      topSpacerHeight: startIndex * ENTRY_ROW_ESTIMATED_HEIGHT,
+      bottomSpacerHeight: Math.max(0, (visibleEntries.length - endIndex) * ENTRY_ROW_ESTIMATED_HEIGHT),
+    }
+  }, [shouldVirtualize, visibleEntries, listViewportHeight, listScrollTop])
 
   const preferredTargetLanguage = (user?.settings?.translation_target_language ??
     'zh-CN') as TranslationTargetLanguage
@@ -300,18 +340,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       }
 
       const clampedIndex = Math.max(0, Math.min(index, visibleEntries.length - 1))
-      const targetEntry = visibleEntries[clampedIndex]
-      if (!targetEntry) {
-        container.scrollTop = 0
-        return
-      }
-
-      const node = container.querySelector<HTMLElement>(`[data-entry-id="${targetEntry.id}"]`)
-      if (!node) {
-        if (clampedIndex === 0) container.scrollTop = 0
-        return
-      }
-      node.scrollIntoView({ block: 'start', behavior: 'auto' })
+      container.scrollTo({
+        top: clampedIndex * ENTRY_ROW_ESTIMATED_HEIGHT,
+        behavior: 'auto',
+      })
     },
     [visibleEntries]
   )
@@ -331,12 +363,15 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           ? currentSettings.reader_list_resume_positions
           : {}
       const normalizedCurrentPositions: ReaderListResumeMap = Object.fromEntries(
-        Object.entries(currentPositions).filter(([, value]: [string, any]) => {
+        Object.entries(currentPositions).filter(([, value]: [string, unknown]) => {
+          if (!value || typeof value !== 'object') return false
+          const candidate = value as {
+            anchor_entry_id?: unknown
+            anchor_index?: unknown
+          }
           return (
-            !!value &&
-            typeof value === 'object' &&
-            typeof value.anchor_entry_id === 'string' &&
-            typeof value.anchor_index === 'number'
+            typeof candidate.anchor_entry_id === 'string' &&
+            typeof candidate.anchor_index === 'number'
           )
         })
       )
@@ -403,6 +438,24 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
   }, [visibleEntries, listTrackingScopeKey, schedulePersistAnchor, flushPersistAnchor])
 
+  useEffect(() => {
+    const container = entryListRef.current
+    if (!container) return
+
+    const syncMetrics = () => {
+      setListViewportHeight(container.clientHeight)
+      setListScrollTop(container.scrollTop)
+    }
+
+    syncMetrics()
+    const resizeObserver = new ResizeObserver(syncMetrics)
+    resizeObserver.observe(container)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [isMobile])
+
   // Infinite scroll: use Intersection Observer to detect when load-more element is visible
   useEffect(() => {
     const loadMoreElement = loadMoreRef.current
@@ -443,6 +496,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
     const onScroll = () => {
       const currentScrollTop = container.scrollTop
+      setListScrollTop(currentScrollTop)
 
       if (hasNextPage && !isFetchingNextPage) {
         const remaining = container.scrollHeight - container.scrollTop - container.clientHeight
@@ -454,19 +508,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         setNewEntriesAboveCount((prev) => (prev > 0 ? 0 : prev))
       }
 
-      const entryNodes = container.querySelectorAll<HTMLElement>('[data-entry-id]')
-
-      // Persist top visible anchor for cross-device resume.
-      for (const node of entryNodes) {
-        const nodeBottom = node.offsetTop + node.offsetHeight
-        if (nodeBottom <= currentScrollTop + 1) continue
-        const entryId = node.dataset.entryId
-        if (!entryId) break
-        const anchorIndex = entryIndexById.get(entryId)
-        if (anchorIndex !== undefined) {
-          schedulePersistAnchor(listTrackingScopeKey, entryId, anchorIndex)
-        }
-        break
+      const anchorIndex = Math.max(
+        0,
+        Math.min(visibleEntries.length - 1, Math.floor(currentScrollTop / ENTRY_ROW_ESTIMATED_HEIGHT))
+      )
+      const anchorEntry = visibleEntries[anchorIndex]
+      if (anchorEntry) {
+        schedulePersistAnchor(listTrackingScopeKey, anchorEntry.id, anchorIndex)
       }
     }
 
@@ -484,6 +532,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     listTrackingScopeKey,
     schedulePersistAnchor,
     flushPersistAnchor,
+    visibleEntries,
   ])
 
   // Initialize list translation toggle from persisted setting
@@ -592,7 +641,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       observer.disconnect()
       translationObserverRef.current = null
     }
-  }, [visibleEntries, isListTranslationActive, translateListEntry])
+  }, [
+    virtualizedList.startIndex,
+    virtualizedList.endIndex,
+    isListTranslationActive,
+    translateListEntry,
+    visibleEntries.length,
+  ])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
@@ -606,7 +661,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     else if (!isSmartView && prev.isSmartView) {
       setFilterType('all')
     }
-  }, [isSmartView])
+  }, [isSmartView, setFilterType])
 
   // Trigger animation on view change (Smart <-> Feed/Folder/All)
   // Also reset selected entry when switching views to prevent stale entries
@@ -690,12 +745,18 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       const nextEntry = visibleEntries[nextIndex]
       if (nextEntry) {
         handleSelectEntry(nextEntry)
-        // Scroll the entry into view within the list
-        const entryEl = entryListRef.current?.querySelector(
-          `[data-entry-id="${nextEntry.id}"]`
-        )
-        if (entryEl) {
-          entryEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        const container = entryListRef.current
+        if (container) {
+          const itemTop = nextIndex * ENTRY_ROW_ESTIMATED_HEIGHT
+          const itemBottom = itemTop + ENTRY_ROW_ESTIMATED_HEIGHT
+          if (itemTop < container.scrollTop) {
+            container.scrollTo({ top: itemTop, behavior: 'smooth' })
+          } else if (itemBottom > container.scrollTop + container.clientHeight) {
+            container.scrollTo({
+              top: itemBottom - container.clientHeight,
+              behavior: 'smooth',
+            })
+          }
         }
       }
     },
@@ -709,6 +770,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Handle entry selection - automatically mark as read
   const handleSelectEntry = async (entry: EntryWithState) => {
+    // Seed detail cache immediately for perceived instant open.
+    queryClient.setQueryData(entryKeys.detail(entry.id), (old: EntryWithState | undefined) => ({
+      ...entry,
+      ...(old || {}),
+    }))
+
     // On mobile, trigger entry list exit animation while opening reader
     if (isMobile) {
       setIsExitingEntryList(true)
@@ -1004,14 +1071,24 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 )}
 
                 <div className="divide-border/40 divide-y px-1 py-0.5">
-                      {visibleEntries.map((entry, index) => (
+                  {virtualizedList.topSpacerHeight > 0 && (
+                    <div aria-hidden style={{ height: virtualizedList.topSpacerHeight }} />
+                  )}
+                  {virtualizedList.entries.map((entry, index) => {
+                    const globalIndex = virtualizedList.startIndex + index
+                    const delay =
+                      !shouldVirtualize && globalIndex < ENTRY_FADE_ANIMATION_LIMIT
+                        ? `${globalIndex * 0.02}s`
+                        : undefined
+
+                    return (
                     <EntryListItem
                       key={entry.id}
                       entry={entry}
                       isSelected={selectedEntryId === entry.id}
                       onClick={() => handleSelectEntry(entry)}
                       onPrefetch={() => prefetchEntryDetail(entry.id)}
-                      style={{ animationDelay: `${index * 0.03}s` }}
+                      style={delay ? { animationDelay: delay } : undefined}
                       showFeedInfo={!selectedFeedId}
                       showReadLaterRemaining={
                         !isMobile &&
@@ -1029,7 +1106,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                       }
                       dataEntryId={entry.id}
                     />
-                  ))}
+                    )
+                  })}
+                  {virtualizedList.bottomSpacerHeight > 0 && (
+                    <div aria-hidden style={{ height: virtualizedList.bottomSpacerHeight }} />
+                  )}
                 </div>
 
                 {/* Intersection observer target for infinite scroll */}
@@ -1087,11 +1168,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             }
           }}
         >
-          {isLoadingEntry && selectedEntryId ? (
+          {isLoadingEntry && selectedEntryId && !resolvedSelectedEntry ? (
             <ArticleReaderSkeleton />
-          ) : selectedEntry || exitingEntryRef.current ? (
+          ) : resolvedSelectedEntry || exitingEntryRef.current ? (
             <ArticleReader
-              entry={(selectedEntry || exitingEntryRef.current)!}
+              entry={(resolvedSelectedEntry || exitingEntryRef.current)!}
               onClose={() => {
                 if (isMobile && selectedEntry) {
                   // Notify Layout to show its header immediately (starts fade-in animation

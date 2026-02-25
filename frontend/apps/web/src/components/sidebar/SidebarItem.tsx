@@ -31,6 +31,8 @@ interface SidebarItemProps {
   compact?: boolean
   title?: string
   className?: string
+  onMouseEnter?: () => void
+  onTouchStart?: () => void
 }
 
 export function SidebarItem({
@@ -44,10 +46,14 @@ export function SidebarItem({
   compact = false,
   title,
   className,
+  onMouseEnter,
+  onTouchStart,
 }: SidebarItemProps) {
   return (
     <button
       onClick={onClick}
+      onMouseEnter={onMouseEnter}
+      onTouchStart={onTouchStart}
       className={cn(
         SIDEBAR_ITEM_STYLES.base,
         compact && SIDEBAR_ITEM_STYLES.compact,

@@ -19,6 +19,7 @@ RUN pnpm install --frozen-lockfile
 
 # Build the web app
 RUN pnpm --filter=@glean/web build
+RUN pnpm --filter=@glean/web compress:assets
 
 # Production stage
 FROM nginx:alpine

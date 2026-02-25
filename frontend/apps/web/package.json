@@ -15,6 +15,7 @@
     "dev": "vite",
     "dev:electron": "vite --mode electron",
     "build": "tsc && vite build",
+    "compress:assets": "node scripts/precompress-assets.mjs",
     "build:electron": "tsc && vite build --mode electron && electron-builder",
     "build:win": "npm run build:electron -- --win",
     "build:mac": "npm run build:electron -- --mac",

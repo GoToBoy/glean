@@ -58,6 +58,33 @@ function App() {
     })
   }, [loadUser])
 
+  useEffect(() => {
+    if (!isInitialized) return
+
+    const preload = () => {
+      void import('./pages/BookmarksPage')
+      void import('./pages/SettingsPage')
+      void import('./pages/PreferencePage')
+      void import('./pages/DiscoverPage')
+    }
+
+    const win = window as Window & {
+      requestIdleCallback?: (
+        callback: (deadline: { didTimeout: boolean; timeRemaining: () => number }) => void,
+        options?: { timeout: number }
+      ) => number
+      cancelIdleCallback?: (handle: number) => void
+    }
+
+    if (typeof win.requestIdleCallback === 'function') {
+      const id = win.requestIdleCallback(preload, { timeout: 1500 })
+      return () => win.cancelIdleCallback?.(id)
+    }
+
+    const timer = window.setTimeout(preload, 300)
+    return () => window.clearTimeout(timer)
+  }, [isInitialized])
+
   // Show loading spinner while initializing authentication
   if (!isInitialized) {
     return <LoadingSpinner />

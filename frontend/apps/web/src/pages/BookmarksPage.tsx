@@ -117,6 +117,7 @@ export default function BookmarksPage() {
   const selectedFolder = searchParams.get('folder') || null
   const selectedTag = searchParams.get('tag') || null
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
   const [listTagFilter, setListTagFilter] = useState('')
   const [showCreateBookmark, setShowCreateBookmark] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
@@ -141,6 +142,14 @@ export default function BookmarksPage() {
     }
   }, [selectedTag])
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery.trim())
+    }, 250)
+
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   // Initial data loading
   useEffect(() => {
     fetchTags()
@@ -152,11 +161,11 @@ export default function BookmarksPage() {
       page: 1,
       folder_id: selectedFolder ?? undefined,
       tag_ids: activeTagFilter ? [activeTagFilter] : undefined,
-      search: searchQuery || undefined,
+      search: debouncedSearchQuery || undefined,
     }
 
     fetchBookmarks(params)
-  }, [selectedFolder, activeTagFilter, searchQuery, fetchBookmarks])
+  }, [selectedFolder, activeTagFilter, debouncedSearchQuery, fetchBookmarks])
 
   // Clear filter helper
   const clearFilter = (type: 'folder' | 'tag' | 'search') => {

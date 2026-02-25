@@ -27,6 +27,27 @@ export interface EntryFilters {
   view?: 'timeline' | 'smart'
 }
 
+export type InfiniteEntryFilters = Omit<EntryFilters, 'page'>
+
+export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
+  return {
+    queryKey: entryKeys.list(filters || {}),
+    queryFn: ({ pageParam = 1 }: { pageParam?: number }) =>
+      entryService.getEntries({ ...filters, page: pageParam, per_page: 20 }),
+    getNextPageParam: (lastPage: { page: number; total_pages: number }) => {
+      if (lastPage.page < lastPage.total_pages) {
+        return lastPage.page + 1
+      }
+      return undefined
+    },
+    initialPageParam: 1,
+    staleTime: 45 * 1000,
+    gcTime: 30 * 60 * 1000,
+    maxPages: 30,
+    refetchOnWindowFocus: false,
+  }
+}
+
 /**
  * Hook to fetch entries with filters.
  */
@@ -34,25 +55,17 @@ export function useEntries(filters?: EntryFilters) {
   return useQuery({
     queryKey: entryKeys.list(filters || {}),
     queryFn: () => entryService.getEntries(filters),
+    staleTime: 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
   })
 }
 
 /**
  * Hook to fetch entries with infinite scroll support.
  */
-export function useInfiniteEntries(filters?: Omit<EntryFilters, 'page'>) {
-  return useInfiniteQuery({
-    queryKey: entryKeys.list(filters || {}),
-    queryFn: ({ pageParam = 1 }) =>
-      entryService.getEntries({ ...filters, page: pageParam, per_page: 20 }),
-    getNextPageParam: (lastPage) => {
-      if (lastPage.page < lastPage.total_pages) {
-        return lastPage.page + 1
-      }
-      return undefined
-    },
-    initialPageParam: 1,
-  })
+export function useInfiniteEntries(filters?: InfiniteEntryFilters) {
+  return useInfiniteQuery(getInfiniteEntriesQueryOptions(filters))
 }
 
 /**
