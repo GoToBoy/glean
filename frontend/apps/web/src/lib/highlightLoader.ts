@@ -1,8 +1,8 @@
-type HighlightModule = typeof import('highlight.js/lib/core')
+import type { HLJSApi } from 'highlight.js'
 
-let loaderPromise: Promise<HighlightModule> | null = null
+let loaderPromise: Promise<HLJSApi> | null = null
 
-export function loadHighlightCore(): Promise<HighlightModule> {
+export function loadHighlightCore(): Promise<HLJSApi> {
   if (loaderPromise) return loaderPromise
 
   loaderPromise = (async () => {
