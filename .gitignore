@@ -45,6 +45,7 @@ env/
 .claude
 .cursor
 .cursorrules
+.ccb
 
 # Testing
 .coverage

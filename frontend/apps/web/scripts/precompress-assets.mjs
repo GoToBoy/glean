@@ -68,10 +68,15 @@ async function main() {
 
   const files = await walk(rootDir)
   const compressed = []
+  const failedFiles = []
 
   for (const filePath of files) {
-    const result = await compressOne(filePath)
-    if (result) compressed.push(result)
+    try {
+      const result = await compressOne(filePath)
+      if (result) compressed.push(result)
+    } catch (error) {
+      failedFiles.push({ filePath, error })
+    }
   }
 
   const totalRaw = compressed.reduce((sum, item) => sum + item.raw, 0)
@@ -79,8 +84,19 @@ async function main() {
   const totalBrotli = compressed.reduce((sum, item) => sum + item.brotli, 0)
 
   console.log(
-    `[compress-assets] files=${compressed.length} raw=${(totalRaw / 1024).toFixed(1)}KB gzip=${(totalGzip / 1024).toFixed(1)}KB br=${(totalBrotli / 1024).toFixed(1)}KB`
+    `[compress-assets] files=${compressed.length} raw=${(totalRaw / 1024).toFixed(1)}KB gzip=${(
+      totalGzip / 1024
+    ).toFixed(1)}KB br=${(totalBrotli / 1024).toFixed(1)}KB`
   )
+
+  if (failedFiles.length > 0) {
+    console.error(`\n[compress-assets] ERROR: Failed to compress ${failedFiles.length} file(s):`)
+    for (const { filePath, error } of failedFiles) {
+      const relativePath = path.relative(process.cwd(), filePath)
+      console.error(`  - ${relativePath}: ${error.message || error}`)
+    }
+    throw new Error(`Asset compression failed for ${failedFiles.length} file(s).`)
+  }
 }
 
 main().catch((error) => {

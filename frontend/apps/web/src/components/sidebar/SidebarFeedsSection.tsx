@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
@@ -122,6 +122,15 @@ export function SidebarFeedsSection({
   const [showGroupDialog, setShowGroupDialog] = useState(false)
   const [groupFolderName, setGroupFolderName] = useState('')
   const [isGrouping, setIsGrouping] = useState(false)
+
+  useEffect(() => {
+    // Clean up drag and drop state when the component unmounts.
+    // This prevents visual state from persisting across page navigations.
+    return () => {
+      setDraggedFeed(null)
+      setDragOverFolderId(null)
+    }
+  }, []) // Empty dependency array ensures this runs only on mount and unmount.
 
   const getSubscriptionsForFolder = (folderId: string) => subscriptionsByFolder[folderId] || []
   const selectedCount = selectedSubscriptionIds.size

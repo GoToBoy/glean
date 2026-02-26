@@ -84,23 +84,13 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (!id.includes('node_modules')) return
-            if (
-              id.includes('/react/') ||
-              id.includes('/react-dom/') ||
-              id.includes('/react-router')
-            ) {
-              return 'vendor-react'
-            }
-            if (id.includes('@tanstack/react-query')) {
-              return 'vendor-query'
-            }
-            if (id.includes('lightgallery') || id.includes('highlight.js') || id.includes('dompurify')) {
+            // Only split truly independent heavy libraries that don't depend on React.
+            // Splitting React-dependent packages (zustand, react-query, i18next, etc.)
+            // into separate chunks causes init-order errors: createContext is called
+            // before vendor-react finishes executing.
+            if (id.includes('lightgallery') || id.includes('highlight.js')) {
               return 'vendor-reader'
             }
-            if (id.includes('date-fns') || id.includes('lucide-react')) {
-              return 'vendor-ui'
-            }
-            return 'vendor-misc'
           },
         },
       },

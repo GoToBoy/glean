@@ -9,15 +9,24 @@ WORKDIR /app
 RUN npm install -g pnpm@10.26.0
 
 # Copy workspace configuration
-COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
-COPY packages/ packages/
-COPY apps/web/ apps/web/
-COPY turbo.json ./
+# First step: copy only dependency description files
+COPY pnpm-workspace.yaml package.json pnpm-lock.yaml turbo.json ./
 
-# Install dependencies
+# Copy all package.json (for workspace recognition)
+COPY packages/ui/package.json ./packages/ui/
+COPY packages/api-client/package.json ./packages/api-client/
+COPY packages/types/package.json ./packages/types/
+COPY packages/logger/package.json ./packages/logger/
+COPY packages/i18n/package.json ./packages/i18n/
+COPY apps/web/package.json ./apps/web/
+COPY apps/admin/package.json ./apps/admin/
+
+# Install dependencies (this layer will be cached until lock file changes)
 RUN pnpm install --frozen-lockfile
 
-# Build the web app
+# Second step: copy source code and build
+COPY packages/ packages/
+COPY apps/web/ apps/web/
 RUN pnpm --filter=@glean/web build
 RUN pnpm --filter=@glean/web compress:assets
 

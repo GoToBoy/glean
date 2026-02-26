@@ -46,7 +46,10 @@ export function loadHighlightCore(): Promise<HLJSApi> {
 
     hljs.configure({ ignoreUnescapedHTML: true })
     return hljs
-  })()
+  })().catch((err) => {
+    loaderPromise = null // Clear on failure, allowing retry next time
+    throw err
+  })
 
   return loaderPromise
 }

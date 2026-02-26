@@ -46,7 +46,9 @@ export function useContentRenderer(content?: string) {
               anchor.href = img.src
               anchor.setAttribute('data-src', img.src)
               if (img.alt) {
-                anchor.setAttribute('data-sub-html', `<h4>${img.alt}</h4>`)
+                const escapedAlt = document.createElement('span')
+                escapedAlt.textContent = img.alt
+                anchor.setAttribute('data-sub-html', `<h4>${escapedAlt.innerHTML}</h4>`)
               }
               img.parentNode?.insertBefore(anchor, img)
               anchor.appendChild(img)

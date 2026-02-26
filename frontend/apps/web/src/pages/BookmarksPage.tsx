@@ -230,7 +230,7 @@ export default function BookmarksPage() {
               </h1>
               <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
                 <BookOpen className="h-3.5 w-3.5" />
-                {displayMode === 'source' ? '来源分组' : '筛选结果'}
+                {displayMode === 'source' ? t('displayMode.source') : t('displayMode.results')}
               </span>
             </div>
 

@@ -134,5 +134,9 @@
   "view": {
     "grid": "Grid view",
     "list": "List view"
+  },
+  "displayMode": {
+    "source": "By Source",
+    "results": "Search Results"
   }
 }

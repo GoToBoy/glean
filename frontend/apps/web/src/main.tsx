@@ -13,6 +13,10 @@ import { initializeLanguage } from '@glean/i18n'
 initializeTheme()
 
 // Initialize i18n
+// `initializeLanguage` from `@glean/i18n` is synchronous. It performs an initial
+// validation of the language detected by i18next. `initFromStorage` then syncs
+// the language from localStorage. This order is safe as i18next internally
+// queues operations that are performed before its initialization is complete.
 initializeLanguage()
 
 // Initialize language from localStorage (call before any components render)

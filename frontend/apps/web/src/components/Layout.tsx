@@ -109,6 +109,7 @@ export function Layout() {
     const saved = localStorage.getItem(SIDEBAR_STORAGE_KEY)
     return saved ? Number.parseInt(saved, 10) : SIDEBAR_DEFAULT_WIDTH
   })
+  const sidebarWidthRef = useRef(sidebarWidth)
   const [isResizing, setIsResizing] = useState(false)
   const sidebarRef = useRef<HTMLElement>(null)
 
@@ -215,6 +216,7 @@ export function Layout() {
 
       const newWidth = e.clientX
       if (newWidth >= SIDEBAR_MIN_WIDTH && newWidth <= SIDEBAR_MAX_WIDTH) {
+        sidebarWidthRef.current = newWidth
         setSidebarWidth(newWidth)
       }
     }
@@ -222,7 +224,7 @@ export function Layout() {
     const handleMouseUp = () => {
       if (isResizing) {
         setIsResizing(false)
-        localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarWidth.toString())
+        localStorage.setItem(SIDEBAR_STORAGE_KEY, sidebarWidthRef.current.toString())
       }
     }
 
@@ -239,7 +241,7 @@ export function Layout() {
       document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-  }, [isResizing, sidebarWidth])
+  }, [isResizing])
 
   const handleResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()

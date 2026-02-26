@@ -134,5 +134,9 @@
   "view": {
     "grid": "网格视图",
     "list": "列表视图"
+  },
+  "displayMode": {
+    "source": "来源分组",
+    "results": "筛选结果"
   }
 }
