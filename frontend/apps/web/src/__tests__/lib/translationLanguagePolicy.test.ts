@@ -34,6 +34,20 @@ describe('translationLanguagePolicy', () => {
     expect(shouldAutoTranslate(text, 'zh-CN')).toBe(true)
   })
 
+  it('does not translate Chinese tech articles that contain English terms/code', () => {
+    // Common pattern: Chinese article with embedded English words, variable names, etc.
+    const mixedTechText =
+      '本文介绍如何在 React 中使用 TypeScript，包括 useState、useEffect 等 Hook 的用法。' +
+      '我们还会讨论 API 设计和 HTTP 请求的最佳实践，以及如何配置 webpack 和 Vite 构建工具。'
+    expect(detectTranslationLanguageCategory(mixedTechText)).toBe('chinese')
+    expect(shouldAutoTranslate(mixedTechText, 'zh-CN')).toBe(false)
+
+    // Article starting with an English term should still be classified as Chinese
+    const startsWithEnglish = 'GPT-4 发布之后，业界对大语言模型的讨论更加热烈，很多中文开发者开始关注 AI 应用开发。'
+    expect(detectTranslationLanguageCategory(startsWithEnglish)).toBe('chinese')
+    expect(shouldAutoTranslate(startsWithEnglish, 'zh-CN')).toBe(false)
+  })
+
   it('when target is English, only Chinese content is auto-translated', () => {
     const zhText = '这是中文内容，应该翻译成英文。'
     const enText = 'This English sentence should stay unchanged.'
