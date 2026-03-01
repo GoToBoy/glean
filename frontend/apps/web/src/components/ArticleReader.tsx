@@ -25,7 +25,10 @@ import {
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
 import { classifyPreElement } from '../lib/preTranslation'
-import { resolveAutoTranslationTargetLanguage } from '../lib/translationLanguagePolicy'
+import {
+  detectTranslationLanguageCategory,
+  resolveAutoTranslationTargetLanguage,
+} from '../lib/translationLanguagePolicy'
 import {
   Button,
   Skeleton,
@@ -207,15 +210,16 @@ export function ArticleReader({
   const preferredTargetLanguage = (user?.settings?.translation_target_language ??
     'zh-CN') as TranslationTargetLanguage
 
-  // Viewport-based sentence-level translation
-  const targetLanguage = useMemo(
-    () =>
-      resolveAutoTranslationTargetLanguage(
-        entry.title + ' ' + (entry.content || entry.summary || ''),
-        preferredTargetLanguage
-      ),
-    [entry.title, entry.content, entry.summary, preferredTargetLanguage],
-  )
+  // Viewport-based sentence-level translation.
+  // If the title is Chinese the article is Chinese — skip translation entirely,
+  // even if the body contains substantial English (code, terms, quotes).
+  const targetLanguage = useMemo(() => {
+    if (detectTranslationLanguageCategory(entry.title) === 'chinese') return null
+    return resolveAutoTranslationTargetLanguage(
+      entry.title + ' ' + (entry.content || entry.summary || ''),
+      preferredTargetLanguage
+    )
+  }, [entry.title, entry.content, entry.summary, preferredTargetLanguage])
   const canTranslate = targetLanguage !== null
   const {
     isActive: showTranslation,
