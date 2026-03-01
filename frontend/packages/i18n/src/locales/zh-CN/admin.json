@@ -152,6 +152,7 @@
     },
     "resetTooltip": "重置错误计数",
     "refreshAll": "全部刷新",
+    "retryErrored": "重试出错订阅源",
     "refreshNowTooltip": "立即刷新",
     "refreshStatus": {
       "queued": "已排队",
@@ -176,6 +177,19 @@
     "neverFetched": "从未拉取",
     "emptyFiltered": "未找到符合条件的订阅",
     "empty": "暂无订阅",
+    "batch": {
+      "selected": "已选 {{count}} 条",
+      "selectAll": "全选本页",
+      "deselectAll": "取消全选",
+      "clearSelection": "清除选择",
+      "refresh": "刷新",
+      "enable": "启用",
+      "disable": "禁用",
+      "resetError": "重置错误",
+      "delete": "删除",
+      "batchDeleteTitle": "删除 {{count}} 个订阅？",
+      "batchDeleteDescription": "此操作无法撤销，所有选中的订阅将被永久删除。"
+    },
     "pagination": {
       "page": "第 {{page}} 页 / 共 {{totalPages}} 页（共 {{total}} 个订阅）",
       "previous": "上一页",

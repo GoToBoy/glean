@@ -148,7 +148,7 @@ class AdminFeedUpdateRequest(BaseModel):
 class AdminBatchFeedRequest(BaseModel):
     """Admin batch feed operation request schema."""
 
-    action: str = Field(..., pattern="^(enable|disable|delete)$")
+    action: str = Field(..., pattern="^(enable|disable|delete|reset_error)$")
     feed_ids: list[str]
 
 

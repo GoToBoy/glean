@@ -153,6 +153,19 @@ export function useRefreshAllFeedsNow() {
   })
 }
 
+export function useRefreshErroredFeedsNow() {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await api.post('/feeds/refresh-errored')
+      return response.data as {
+        status: string
+        queued_count: number
+        jobs: AdminFeedRefreshJob[]
+      }
+    },
+  })
+}
+
 export function useRefreshFeedStatus() {
   return useMutation({
     mutationFn: async (items: Array<{ feed_id: string; job_id: string }>) => {

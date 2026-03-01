@@ -6,7 +6,9 @@ import {
   useDeleteFeed,
   useRefreshFeedNow,
   useRefreshAllFeedsNow,
+  useRefreshErroredFeedsNow,
   useRefreshFeedStatus,
+  useBatchFeedOperation,
 } from '../hooks/useFeeds'
 import {
   Button,
@@ -42,6 +44,8 @@ import {
   XCircle,
   ExternalLink,
   Filter,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
@@ -84,6 +88,8 @@ export default function FeedsPage() {
   const [pendingFeedId, setPendingFeedId] = useState<string | null>(null)
   const [deleteConfirmFeedId, setDeleteConfirmFeedId] = useState<string | null>(null)
   const [feedRefreshState, setFeedRefreshState] = useState<Record<string, FeedRefreshState>>({})
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
 
   const { data, isLoading, refetch } = useFeeds({
     page,
@@ -99,7 +105,62 @@ export default function FeedsPage() {
   const deleteFeedMutation = useDeleteFeed()
   const refreshFeedNowMutation = useRefreshFeedNow()
   const refreshAllFeedsNowMutation = useRefreshAllFeedsNow()
+  const refreshErroredFeedsNowMutation = useRefreshErroredFeedsNow()
   const refreshFeedStatusMutation = useRefreshFeedStatus()
+  const batchMutation = useBatchFeedOperation()
+
+  const currentPageIds = useMemo(() => data?.items.map((f) => f.id) ?? [], [data?.items])
+  const allCurrentPageSelected =
+    currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.has(id))
+
+  const toggleSelectAll = () => {
+    if (allCurrentPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        currentPageIds.forEach((id) => next.delete(id))
+        return next
+      })
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        currentPageIds.forEach((id) => next.add(id))
+        return next
+      })
+    }
+  }
+
+  const toggleSelectOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const clearSelection = () => setSelectedIds(new Set())
+
+  const handleBatchAction = async (action: string) => {
+    const ids = Array.from(selectedIds)
+    if (ids.length === 0) return
+    if (action === 'refresh') {
+      // Refresh each selected feed individually
+      const jobs: Array<{ feed_id: string; job_id: string }> = []
+      for (const feedId of ids) {
+        try {
+          const result = await refreshFeedNowMutation.mutateAsync(feedId)
+          jobs.push({ feed_id: result.feed_id, job_id: result.job_id })
+        } catch {
+          // Continue with remaining feeds
+        }
+      }
+      applyRefreshJobs(jobs)
+    } else {
+      await batchMutation.mutateAsync({ action, feedIds: ids })
+      await refetch()
+    }
+    clearSelection()
+  }
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -197,12 +258,11 @@ export default function FeedsPage() {
     }))
   }
 
-  const handleRefreshAllFeeds = async () => {
-    const result = await refreshAllFeedsNowMutation.mutateAsync()
+  const applyRefreshJobs = (jobs: Array<{ feed_id: string; job_id: string }>) => {
     const nowIso = new Date().toISOString()
     setFeedRefreshState((prev) => {
       const next = { ...prev }
-      for (const job of result.jobs) {
+      for (const job of jobs) {
         next[job.feed_id] = {
           jobId: job.job_id,
           status: 'queued',
@@ -219,6 +279,16 @@ export default function FeedsPage() {
       }
       return next
     })
+  }
+
+  const handleRefreshAllFeeds = async () => {
+    const result = await refreshAllFeedsNowMutation.mutateAsync()
+    applyRefreshJobs(result.jobs)
+  }
+
+  const handleRefreshErroredFeeds = async () => {
+    const result = await refreshErroredFeedsNowMutation.mutateAsync()
+    applyRefreshJobs(result.jobs)
   }
 
   useEffect(() => {
@@ -390,7 +460,81 @@ export default function FeedsPage() {
             )}
             {t('admin:feeds.refreshAll')}
           </Button>
+          {statusFilter === 'error' && (
+            <Button
+              variant="outline"
+              onClick={handleRefreshErroredFeeds}
+              disabled={refreshErroredFeedsNowMutation.isPending}
+              className="border-destructive/50 text-destructive hover:bg-destructive/10"
+            >
+              {refreshErroredFeedsNowMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              {t('admin:feeds.retryErrored')}
+            </Button>
+          )}
         </div>
+
+        {/* Batch action toolbar */}
+        {selectedIds.size > 0 && (
+          <div className="border-primary/30 bg-primary/5 flex items-center gap-3 rounded-lg border px-4 py-2">
+            <span className="text-primary text-sm font-medium">
+              {t('admin:feeds.batch.selected', { count: selectedIds.size })}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBatchAction('refresh')}
+                disabled={batchMutation.isPending || refreshFeedNowMutation.isPending}
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                {t('admin:feeds.batch.refresh')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBatchAction('enable')}
+                disabled={batchMutation.isPending}
+              >
+                <Play className="h-3.5 w-3.5" />
+                {t('admin:feeds.batch.enable')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBatchAction('disable')}
+                disabled={batchMutation.isPending}
+              >
+                <Pause className="h-3.5 w-3.5" />
+                {t('admin:feeds.batch.disable')}
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => handleBatchAction('reset_error')}
+                disabled={batchMutation.isPending}
+              >
+                <RotateCcw className="h-3.5 w-3.5" />
+                {t('admin:feeds.batch.resetError')}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => setBatchDeleteConfirm(true)}
+                disabled={batchMutation.isPending}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                {t('admin:feeds.batch.delete')}
+              </Button>
+            </div>
+            <Button size="sm" variant="ghost" onClick={clearSelection} className="ml-auto">
+              {t('admin:feeds.batch.clearSelection')}
+            </Button>
+          </div>
+        )}
 
         {/* Feeds table */}
         <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm">
@@ -398,6 +542,19 @@ export default function FeedsPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-border bg-muted/50 border-b">
+                  <th className="w-10 px-4 py-4">
+                    <button
+                      onClick={toggleSelectAll}
+                      className="text-muted-foreground hover:text-foreground flex items-center"
+                      title={allCurrentPageSelected ? t('admin:feeds.batch.deselectAll') : t('admin:feeds.batch.selectAll')}
+                    >
+                      {allCurrentPageSelected ? (
+                        <CheckSquare className="h-4 w-4" />
+                      ) : (
+                        <Square className="h-4 w-4" />
+                      )}
+                    </button>
+                  </th>
                   <th className="text-muted-foreground px-6 py-4 text-left text-xs font-semibold tracking-wider uppercase">
                     {t('admin:feeds.table.feed')}
                   </th>
@@ -422,6 +579,9 @@ export default function FeedsPage() {
                 {isLoading ? (
                   Array.from({ length: 5 }).map((_, i) => (
                     <tr key={i}>
+                      <td className="w-10 px-4 py-4">
+                        <Skeleton className="h-4 w-4" />
+                      </td>
                       <td className="px-6 py-4">
                         <Skeleton className="h-4 w-48" />
                         <Skeleton className="mt-1 h-3 w-64" />
@@ -475,7 +635,9 @@ export default function FeedsPage() {
                       error: t('admin:feeds.refreshResult.failed'),
                     }
                     const rowLogMessage =
-                      refreshState?.message || refreshState?.fetchErrorMessage || feed.fetch_error_message
+                      refreshState?.message ||
+                      refreshState?.fetchErrorMessage ||
+                      (isRowDone && !isRowError ? null : feed.fetch_error_message)
                     const baseStatusText = refreshState
                       ? statusLabelMap[refreshState.status] ?? refreshState.status
                       : null
@@ -487,7 +649,19 @@ export default function FeedsPage() {
                       : null
 
                     return (
-                    <tr key={feed.id} className="hover:bg-muted/50 transition-colors">
+                    <tr key={feed.id} className={`hover:bg-muted/50 transition-colors ${selectedIds.has(feed.id) ? 'bg-primary/5' : ''}`}>
+                      <td className="w-10 px-4 py-4">
+                        <button
+                          onClick={() => toggleSelectOne(feed.id)}
+                          className="text-muted-foreground hover:text-foreground flex items-center"
+                        >
+                          {selectedIds.has(feed.id) ? (
+                            <CheckSquare className="h-4 w-4 text-primary" />
+                          ) : (
+                            <Square className="h-4 w-4" />
+                          )}
+                        </button>
+                      </td>
                       <td className="px-6 py-4">
                         <div className="flex items-start gap-2">
                           <div className="min-w-0 flex-1">
@@ -633,7 +807,7 @@ export default function FeedsPage() {
                   })
                 ) : (
                   <tr>
-                    <td colSpan={6} className="px-6 py-12 text-center">
+                    <td colSpan={7} className="px-6 py-12 text-center">
                       <p className="text-muted-foreground text-sm">
                         {search || statusFilter !== 'all'
                           ? t('admin:feeds.emptyFiltered')
@@ -718,6 +892,42 @@ export default function FeedsPage() {
                 </>
               ) : (
                 t('admin:feeds.delete')
+              )}
+            </AlertDialogClose>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+
+      {/* Batch Delete Confirmation Dialog */}
+      <AlertDialog open={batchDeleteConfirm} onOpenChange={() => setBatchDeleteConfirm(false)}>
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('admin:feeds.batch.batchDeleteTitle', { count: selectedIds.size })}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('admin:feeds.batch.batchDeleteDescription')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose className={buttonVariants({ variant: 'ghost' })}>
+              {t('common:actions.cancel')}
+            </AlertDialogClose>
+            <AlertDialogClose
+              className={buttonVariants({ variant: 'destructive' })}
+              onClick={async () => {
+                await handleBatchAction('delete')
+                setBatchDeleteConfirm(false)
+              }}
+              disabled={batchMutation.isPending}
+            >
+              {batchMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  {t('admin:feeds.deleting')}
+                </>
+              ) : (
+                t('admin:feeds.batch.delete')
               )}
             </AlertDialogClose>
           </AlertDialogFooter>

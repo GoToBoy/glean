@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   useSubscriptions,
   useDeleteSubscription,
@@ -9,7 +9,7 @@ import {
   useExportOPML,
 } from '../../hooks/useSubscriptions'
 import { useFolderStore } from '../../stores/folderStore'
-import type { RefreshStatusItem, Subscription, SubscriptionListResponse } from '@glean/types'
+import type { FolderTreeNode, RefreshStatusItem, Subscription, SubscriptionListResponse } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
@@ -35,6 +35,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Folder,
 } from 'lucide-react'
 
 type FeedRefreshState = {
@@ -59,7 +60,20 @@ type FeedRefreshState = {
  */
 export function SubscriptionsTab() {
   const { t } = useTranslation('settings')
-  const { fetchFolders } = useFolderStore()
+  const { fetchFolders, feedFolders } = useFolderStore()
+
+  // Build flat folderId → name map from the folder tree
+  const folderMap = useMemo(() => {
+    const map = new Map<string, string>()
+    const traverse = (nodes: FolderTreeNode[]) => {
+      for (const node of nodes) {
+        map.set(node.id, node.name)
+        if (node.children.length > 0) traverse(node.children)
+      }
+    }
+    traverse(feedFolders)
+    return map
+  }, [feedFolders])
   const deleteMutation = useDeleteSubscription()
   const refreshMutation = useRefreshFeed()
   const refreshAllMutation = useRefreshAllFeeds()
@@ -415,7 +429,7 @@ export function SubscriptionsTab() {
                 const rowLogMessage =
                   refreshState?.message ||
                   refreshState?.fetchErrorMessage ||
-                  subscription.feed.fetch_error_message
+                  (isDone && !isError ? null : subscription.feed.fetch_error_message)
                 const effectiveLastFetchAttemptAt =
                   refreshState?.lastFetchAttemptAt ||
                   subscription.feed.last_fetch_attempt_at ||
@@ -446,9 +460,17 @@ export function SubscriptionsTab() {
                             subscription.feed.title ||
                             t('manageFeeds.untitledFeed')}
                         </h3>
-                        <p className="text-muted-foreground truncate text-sm">
-                          {subscription.feed.url}
-                        </p>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <p className="text-muted-foreground truncate text-sm">
+                            {subscription.feed.url}
+                          </p>
+                          {subscription.folder_id && folderMap.get(subscription.folder_id) && (
+                            <span className="text-muted-foreground bg-muted flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-xs">
+                              <Folder className="h-3 w-3" />
+                              {folderMap.get(subscription.folder_id)}
+                            </span>
+                          )}
+                        </div>
                         {refreshState && (
                           <div className="mt-2 space-y-1">
                             <div className={`flex items-center gap-2 text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}>

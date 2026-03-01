@@ -152,6 +152,7 @@
     },
     "resetTooltip": "Reset error count",
     "refreshAll": "Refresh All",
+    "retryErrored": "Retry Errored",
     "refreshNowTooltip": "Refresh now",
     "refreshStatus": {
       "queued": "Queued",
@@ -176,6 +177,19 @@
     "neverFetched": "Never",
     "emptyFiltered": "No feeds found matching your criteria",
     "empty": "No feeds yet",
+    "batch": {
+      "selected": "{{count}} selected",
+      "selectAll": "Select all on this page",
+      "deselectAll": "Deselect all",
+      "clearSelection": "Clear selection",
+      "refresh": "Refresh",
+      "enable": "Enable",
+      "disable": "Disable",
+      "resetError": "Reset Error",
+      "delete": "Delete",
+      "batchDeleteTitle": "Delete {{count}} feeds?",
+      "batchDeleteDescription": "This action cannot be undone. All selected feeds will be permanently deleted."
+    },
     "pagination": {
       "page": "Page {{page}} of {{totalPages}} ({{total}} total feeds)",
       "previous": "Previous",

@@ -522,6 +522,12 @@ class AdminService:
             elif action == "delete":
                 await self.session.delete(feed)
                 count += 1
+            elif action == "reset_error":
+                feed.error_count = 0
+                feed.fetch_error_message = None
+                if feed.status == FeedStatus.ERROR:
+                    feed.status = FeedStatus.ACTIVE
+                count += 1
 
         await self.session.commit()
         return count

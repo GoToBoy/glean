@@ -12,7 +12,7 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from jose import jwt
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas import (
@@ -44,7 +44,6 @@ from glean_core.services import AdminService, TypedConfigService
 from glean_database.models import Feed
 from glean_database.session import get_session
 
-from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 from ..config import settings
 from ..dependencies import (
     get_admin_service,
@@ -52,6 +51,7 @@ from ..dependencies import (
     get_redis_pool,
     get_typed_config_service,
 )
+from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 
 router = APIRouter()
 
@@ -634,6 +634,29 @@ async def refresh_all_feeds_now(
 ) -> dict[str, int | str | list[dict[str, str]]]:
     """Manually enqueue refresh tasks for all non-disabled feeds."""
     result = await session.execute(select(Feed).where(Feed.status != "disabled"))
+    feeds = list(result.scalars().all())
+
+    jobs: list[dict[str, str]] = []
+    for feed in feeds:
+        jobs.append(
+            await enqueue_feed_refresh_job(
+                redis=redis, feed_id=feed.id, feed_title=feed.title or feed.url
+            )
+        )
+
+    return {"status": "queued", "queued_count": len(jobs), "jobs": jobs}
+
+
+@router.post("/feeds/refresh-errored", status_code=status.HTTP_202_ACCEPTED)
+async def refresh_errored_feeds_now(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, int | str | list[dict[str, str]]]:
+    """Manually enqueue refresh tasks for all feeds with errors."""
+    result = await session.execute(
+        select(Feed).where(or_(Feed.error_count > 0, Feed.status == "error"))
+    )
     feeds = list(result.scalars().all())
 
     jobs: list[dict[str, str]] = []
