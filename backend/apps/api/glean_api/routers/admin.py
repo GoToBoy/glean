@@ -1161,6 +1161,85 @@ async def get_embedding_status(
     }
 
 
+class ModelDownloadRequest(BaseModel):
+    model: str = Field(..., min_length=1)
+    dimension: int = Field(default=384, ge=1)
+
+
+@router.post("/embedding/download-model")
+async def start_model_download(
+    request: ModelDownloadRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, Any]:
+    """
+    Enqueue a background task to download a sentence-transformers model.
+
+    If the model is already downloading or done, returns the current status without
+    re-enqueuing. Frontend polls /download-model/status for progress.
+    """
+    import json
+
+    from glean_worker.tasks.embedding_worker import (
+        MODEL_DOWNLOAD_KEY_PREFIX,
+        MODEL_DOWNLOAD_TTL,
+    )
+
+    redis_key = f"{MODEL_DOWNLOAD_KEY_PREFIX}{request.model}"
+
+    # Return existing status if already in-progress or done
+    existing = await redis_pool.get(redis_key)
+    if existing:
+        data = json.loads(existing)
+        current_status = data.get("status")
+        if current_status in ("downloading", "done"):
+            return {
+                "model": request.model,
+                "status": current_status,
+                "already_running": True,
+            }
+
+    # Mark as pending immediately so the frontend can show a spinner right away
+    await redis_pool.set(
+        redis_key,
+        json.dumps({"status": "pending"}),
+        ex=MODEL_DOWNLOAD_TTL,
+    )
+
+    await redis_pool.enqueue_job(
+        "download_embedding_model",
+        model=request.model,
+        dimension=request.dimension,
+    )
+
+    return {"model": request.model, "status": "pending", "already_running": False}
+
+
+@router.get("/embedding/download-model/status")
+async def get_model_download_status(
+    model: Annotated[str, Query(min_length=1)],
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> dict[str, Any]:
+    """Get the current download status of a sentence-transformers model."""
+    import json
+
+    from glean_worker.tasks.embedding_worker import MODEL_DOWNLOAD_KEY_PREFIX
+
+    redis_key = f"{MODEL_DOWNLOAD_KEY_PREFIX}{model}"
+    raw = await redis_pool.get(redis_key)
+
+    if not raw:
+        return {"model": model, "status": "not_started", "error": None}
+
+    data = json.loads(raw)
+    return {
+        "model": model,
+        "status": data.get("status", "unknown"),
+        "error": data.get("error"),
+    }
+
+
 # System Settings
 @router.get("/settings/registration", response_model=dict[str, bool])
 async def get_registration_status(

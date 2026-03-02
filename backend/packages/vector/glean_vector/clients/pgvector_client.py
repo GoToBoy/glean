@@ -98,14 +98,72 @@ class PgVectorClient:
             return (False, f"Model changed: existing={current}, expected={expected}")
         return (True, None)
 
+    async def _setup_vector_index(self, dimension: int) -> None:
+        """
+        Alter vector columns to vector(N) and (re)create the HNSW index.
+
+        pgvector requires a typed vector(N) column for HNSW indexing.
+        The migration creates the column as untyped `vector`; this method
+        sets the correct dimension and builds the index at first use or on
+        model change (after the table has been emptied).
+
+        Safe to call repeatedly: skips the ALTER if the dimension is already correct.
+        """
+        # Check the current declared type of entry_embeddings.embedding
+        result = await self.db.execute(
+            text(
+                "SELECT pg_catalog.format_type(a.atttypid, a.atttypmod)"
+                " FROM pg_attribute a"
+                " JOIN pg_class c ON a.attrelid = c.oid"
+                " WHERE c.relname = 'entry_embeddings' AND a.attname = 'embedding'"
+            )
+        )
+        row = result.fetchone()
+        current_type = row[0] if row else None
+        target_type = f"vector({dimension})"
+
+        if current_type == target_type:
+            return  # Already set correctly, nothing to do
+
+        logger.info(
+            f"Configuring vector column dimension: {current_type or 'vector'} → {target_type}"
+        )
+
+        # Drop the HNSW index first (required before changing column type)
+        await self.db.execute(text("DROP INDEX IF EXISTS ix_entry_embeddings_vec"))
+
+        # Set dimension on both tables (table must be empty for this to succeed)
+        await self.db.execute(
+            text(
+                f"ALTER TABLE entry_embeddings"
+                f" ALTER COLUMN embedding TYPE {target_type}"
+            )
+        )
+        await self.db.execute(
+            text(
+                f"ALTER TABLE user_preference_vectors"
+                f" ALTER COLUMN embedding TYPE {target_type}"
+            )
+        )
+
+        # Recreate HNSW index with the now-typed column
+        await self.db.execute(
+            text(
+                "CREATE INDEX ix_entry_embeddings_vec"
+                " ON entry_embeddings USING hnsw (embedding vector_cosine_ops)"
+            )
+        )
+        await self.db.flush()
+        logger.info(f"HNSW index created for dimension={dimension}")
+
     async def ensure_collections(
         self, dimension: int, provider: str | None = None, model: str | None = None
     ) -> None:
         """
-        Ensure model signature is set; recreate if model has changed.
+        Ensure vector columns have the correct dimension and HNSW index exists.
 
         Args:
-            dimension: Vector dimension (informational; column is untyped).
+            dimension: Vector dimension from embedding config.
             provider: Embedding provider name.
             model: Model name.
         """
@@ -116,10 +174,11 @@ class PgVectorClient:
         current = await self._get_model_signature()
 
         if current is None:
-            # First time: just record the signature
+            # First time setup: set column dimension, create HNSW index, record signature
+            await self._setup_vector_index(dimension)
             await self._set_model_signature(expected)
         elif current != expected:
-            # Model changed: drop all embeddings and update signature
+            # Model changed: drop all embeddings and reconfigure for new dimension
             logger.info(f"Embedding model changed ({current} → {expected}), clearing vectors")
             await self.recreate_collections(dimension, provider, model)
 
@@ -127,12 +186,16 @@ class PgVectorClient:
         self, dimension: int, provider: str | None = None, model: str | None = None
     ) -> None:
         """
-        Delete all stored vectors and update the model signature.
+        Delete all stored vectors, reconfigure vector dimension, and update model signature.
 
         This is the pgvector equivalent of dropping and recreating Milvus collections.
         """
         await self.db.execute(text("DELETE FROM entry_embeddings"))
         await self.db.execute(text("DELETE FROM user_preference_vectors"))
+        await self.db.flush()
+
+        # Re-dimension the columns and rebuild the HNSW index for the new model
+        await self._setup_vector_index(dimension)
 
         if provider and model:
             sig = self._build_model_signature(provider, model, dimension)

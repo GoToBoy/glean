@@ -100,6 +100,7 @@ def get_oss_functions() -> list[TaskFunction]:
         embedding_worker.batch_generate_embeddings,
         embedding_worker.retry_failed_embeddings,
         embedding_worker.validate_and_rebuild_embeddings,
+        embedding_worker.download_embedding_model,
         embedding_rebuild.rebuild_embeddings,
         # M3: Preference tasks
         preference_worker.update_user_preference,

@@ -1,16 +1,3 @@
-# Glean - Personal Build (ghcr.io/gotoboy)
-#
-# Usage on UGREEN NAS:
-#   1. Push a tag on your fork:  git tag v0.1.0-alpha.1 && git push origin v0.1.0-alpha.1
-#   2. Wait for GitHub Actions to finish building
-#   3. Copy this entire file into UGREEN Docker Compose editor
-#   4. Modify IMAGE_TAG below to match your tag (without the 'v' prefix)
-#
-# To switch back to official images:
-#   Replace "ghcr.io/gotoboy/glean" with "ghcr.io/leslieleung/glean"
-
-x-image-tag: &image-tag ${IMAGE_TAG:-latest}
-
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -46,26 +33,25 @@ services:
     restart: unless-stopped
 
   mtranserver:
-    image: ${MTRAN_IMAGE:-mtranserver/mtranserver:latest}
+    image: xxnuo/mtranserver
     container_name: glean-mtranserver
-    profiles: ["mtran"]
     ports:
       - "${MTRAN_PORT:-5001}:5001"
+      - "${MTRAN_UI_PORT:-8989}:8989"
     networks:
       - glean-network
     restart: unless-stopped
 
   backend:
-    # ========== YOUR FORK IMAGE ==========
     image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
     container_name: glean-backend
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
       REDIS_URL: redis://redis:6379/0
+      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       CORS_ORIGINS: '["http://localhost", "http://localhost:3000", "http://localhost:3001"]'
       DEBUG: ${DEBUG:-false}
-      MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       RUN_MIGRATIONS: "true"
       CREATE_ADMIN: ${CREATE_ADMIN:-true}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
@@ -97,14 +83,13 @@ services:
     command: ["uv", "run", "--no-sync", "uvicorn", "glean_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   worker:
-    # ========== YOUR FORK IMAGE ==========
     image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
     container_name: glean-worker
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
+      SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: ${WORKER_LOG_FILE:-/app/logs/glean-worker.log}
       LOG_ERROR_FILE: ${WORKER_LOG_ERROR_FILE:-/app/logs/glean-worker.error.log}
@@ -127,11 +112,10 @@ services:
     command: ["uv", "run", "--no-sync", "arq", "glean_worker.main.WorkerSettings"]
 
   web:
-    # ========== YOUR FORK IMAGE ==========
     image: ghcr.io/gotoboy/glean-web:${IMAGE_TAG:-latest}
     container_name: glean-web
     ports:
-      - "${WEB_PORT:-80}:80"
+      - "${WEB_PORT:-8800}:80"
     depends_on:
       - backend
     networks:
@@ -139,7 +123,6 @@ services:
     restart: unless-stopped
 
   admin:
-    # ========== YOUR FORK IMAGE ==========
     image: ghcr.io/gotoboy/glean-admin:${IMAGE_TAG:-latest}
     container_name: glean-admin
     ports:

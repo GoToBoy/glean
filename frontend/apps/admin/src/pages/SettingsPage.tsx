@@ -23,6 +23,8 @@ import {
   useTestEmbedding,
   useRebuildEmbedding,
   useCancelRebuild,
+  useDownloadModel,
+  useModelDownloadStatus,
   type EmbeddingConfigUpdatePayload,
   type VectorizationStatus,
 } from '../hooks/useEmbeddingConfig'
@@ -35,6 +37,7 @@ import {
   PowerOff,
   Square,
   Zap,
+  Download,
 } from 'lucide-react'
 
 const PROVIDERS = [
@@ -133,11 +136,17 @@ export default function SettingsPage() {
   const testMutation = useTestEmbedding()
   const rebuildMutation = useRebuildEmbedding()
   const cancelMutation = useCancelRebuild()
+  const downloadModelMutation = useDownloadModel()
 
   const [form, setForm] = useState<EmbeddingConfigUpdatePayload>({
     provider: DEFAULT_PROVIDER,
     model: DEFAULT_SENTENCE_MODEL.value,
   })
+
+  // Poll download status only when sentence-transformers provider is selected
+  const isSentenceTransformers = form.provider === 'sentence-transformers'
+  const modelToCheck = isSentenceTransformers && form.model ? form.model : undefined
+  const { data: downloadStatus } = useModelDownloadStatus(modelToCheck)
 
   // Initialize form when config loads
   useEffect(() => {
@@ -305,6 +314,11 @@ export default function SettingsPage() {
     await cancelMutation.mutateAsync()
   }
 
+  const handleDownloadModel = async () => {
+    if (!form.model) return
+    await downloadModelMutation.mutateAsync({ model: form.model, dimension: config?.dimension })
+  }
+
   const isAnyLoading =
     updateMutation.isPending ||
     enableMutation.isPending ||
@@ -312,7 +326,8 @@ export default function SettingsPage() {
     validateMutation.isPending ||
     testMutation.isPending ||
     rebuildMutation.isPending ||
-    cancelMutation.isPending
+    cancelMutation.isPending ||
+    downloadModelMutation.isPending
 
   return (
     <div className="flex flex-1 flex-col overflow-y-auto">
@@ -456,6 +471,118 @@ export default function SettingsPage() {
                       />
                     )}
                   </div>
+
+                  {/* Model Download Card — only for sentence-transformers */}
+                  {form.provider === 'sentence-transformers' && form.model && (
+                    <div className="border-border rounded-lg border p-4">
+                      <div className="mb-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {t(
+                              'admin:settings.embedding.modelDownload.title',
+                              'Model Download'
+                            )}
+                          </p>
+                          <p className="text-muted-foreground mt-0.5 text-xs">
+                            {t(
+                              'admin:settings.embedding.modelDownload.desc',
+                              'Download the model to the server before enabling vectorization.'
+                            )}
+                          </p>
+                        </div>
+
+                        {/* Status badge */}
+                        {downloadStatus?.status === 'done' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-500">
+                            <CheckCircle className="h-3.5 w-3.5" />
+                            {t('admin:settings.embedding.modelDownload.ready', 'Ready')}
+                          </span>
+                        ) : downloadStatus?.status === 'error' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-red-500/10 px-2.5 py-1 text-xs font-medium text-red-500">
+                            <XCircle className="h-3.5 w-3.5" />
+                            {t('admin:settings.embedding.modelDownload.failed', 'Failed')}
+                          </span>
+                        ) : downloadStatus?.status === 'downloading' ||
+                          downloadStatus?.status === 'pending' ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 px-2.5 py-1 text-xs font-medium text-blue-500">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {t(
+                              'admin:settings.embedding.modelDownload.downloading',
+                              'Downloading...'
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">
+                            {t(
+                              'admin:settings.embedding.modelDownload.notStarted',
+                              'Not downloaded'
+                            )}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Progress details */}
+                      {(downloadStatus?.status === 'downloading' ||
+                        downloadStatus?.status === 'pending') && (
+                        <div className="bg-muted mb-3 rounded-md p-3">
+                          <div className="animate-progress-indeterminate bg-primary h-1.5 rounded-full" />
+                          <p className="text-muted-foreground mt-2 text-xs">
+                            {t(
+                              'admin:settings.embedding.modelDownload.downloadingNote',
+                              'Downloading from HuggingFace. This may take several minutes depending on your network speed.'
+                            )}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Error details */}
+                      {downloadStatus?.status === 'error' && downloadStatus.error && (
+                        <p className="mb-3 text-xs text-red-500">{downloadStatus.error}</p>
+                      )}
+
+                      {/* Download / Retry button */}
+                      {downloadStatus?.status !== 'done' && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleDownloadModel}
+                          disabled={
+                            isAnyLoading ||
+                            downloadStatus?.status === 'downloading' ||
+                            downloadStatus?.status === 'pending'
+                          }
+                        >
+                          {downloadStatus?.status === 'downloading' ||
+                          downloadStatus?.status === 'pending' ? (
+                            <>
+                              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                              {t(
+                                'admin:settings.embedding.modelDownload.inProgress',
+                                'Downloading...'
+                              )}
+                            </>
+                          ) : downloadStatus?.status === 'error' ? (
+                            <>
+                              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+                              {t(
+                                'admin:settings.embedding.modelDownload.retry',
+                                'Retry Download'
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <Download className="mr-2 h-3.5 w-3.5" />
+                              {t(
+                                'admin:settings.embedding.modelDownload.start',
+                                'Download Model'
+                              )}
+                            </>
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  )}
 
                   {/* API Key and Base URL - only show for providers that need them */}
                   {form.provider !== 'sentence-transformers' && (

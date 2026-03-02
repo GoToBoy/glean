@@ -178,6 +178,49 @@ export function useCancelRebuild() {
   })
 }
 
+export type ModelDownloadStatus = 'not_started' | 'pending' | 'downloading' | 'done' | 'error'
+
+export interface ModelDownloadStatusResponse {
+  model: string
+  status: ModelDownloadStatus
+  error: string | null
+}
+
+export function useDownloadModel() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ model, dimension }: { model: string; dimension?: number }) => {
+      const res = await api.post('/embedding/download-model', {
+        model,
+        dimension: dimension ?? 384,
+      })
+      return res.data as ModelDownloadStatusResponse
+    },
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['model-download-status', variables.model] })
+    },
+  })
+}
+
+export function useModelDownloadStatus(model: string | undefined) {
+  return useQuery<ModelDownloadStatusResponse>({
+    queryKey: ['model-download-status', model],
+    queryFn: async () => {
+      const res = await api.get('/embedding/download-model/status', {
+        params: { model },
+      })
+      return res.data as ModelDownloadStatusResponse
+    },
+    enabled: !!model,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      // Stop polling once terminal state is reached
+      if (status === 'done' || status === 'error') return false
+      return 2000
+    },
+  })
+}
+
 export function useEmbeddingStatus(enabled = true) {
   const qc = useQueryClient()
   return useQuery<EmbeddingStatusResponse>({

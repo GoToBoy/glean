@@ -192,6 +192,14 @@ class SentenceTransformerProvider(EmbeddingProvider):
         global _model_cache
 
         if self._model is None:
+            try:
+                import sentence_transformers  # noqa: F401
+            except ImportError:
+                raise ImportError(
+                    "sentence-transformers is not installed. "
+                    "Install it with: uv sync --extra local\n"
+                    "Or install manually: pip install sentence-transformers torch"
+                ) from None
             # Check global cache first (without lock for performance)
             cache_key = self.model
             if cache_key in _model_cache:

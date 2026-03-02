@@ -84,6 +84,18 @@
         "validating": "Validating...",
         "rebuilding": "Rebuilding...",
         "error": "Error"
+      },
+      "modelDownload": {
+        "title": "Model Download",
+        "desc": "Download the model to the server before enabling vectorization.",
+        "ready": "Ready",
+        "failed": "Failed",
+        "downloading": "Downloading...",
+        "notStarted": "Not downloaded",
+        "downloadingNote": "Downloading from HuggingFace. This may take several minutes depending on your network speed.",
+        "inProgress": "Downloading...",
+        "retry": "Retry Download",
+        "start": "Download Model"
       }
     }
   },

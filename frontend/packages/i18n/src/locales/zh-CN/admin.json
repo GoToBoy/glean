@@ -84,6 +84,18 @@
         "validating": "验证中...",
         "rebuilding": "重建中...",
         "error": "错误"
+      },
+      "modelDownload": {
+        "title": "模型下载",
+        "desc": "在启用向量化之前，需先将模型下载到服务器。",
+        "ready": "已就绪",
+        "failed": "下载失败",
+        "downloading": "下载中...",
+        "notStarted": "未下载",
+        "downloadingNote": "正在从 HuggingFace 下载，具体耗时取决于网络速度，可能需要数分钟。",
+        "inProgress": "下载中...",
+        "retry": "重试下载",
+        "start": "下载模型"
       }
     }
   },

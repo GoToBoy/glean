@@ -35,10 +35,9 @@ def upgrade() -> None:
         )
     """)
     op.execute("CREATE INDEX IF NOT EXISTS ix_entry_embeddings_feed_id ON entry_embeddings (feed_id)")
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_entry_embeddings_vec "
-        "ON entry_embeddings USING hnsw (embedding vector_cosine_ops)"
-    )
+    # HNSW index is NOT created here because pgvector requires vector(N) with a fixed dimension,
+    # but the dimension is user-configured (unknown at migration time).
+    # PgVectorClient.ensure_collections() handles ALTER TABLE + CREATE INDEX at runtime.
 
     # User preference vectors table (replaces Milvus user_preferences collection)
     op.execute("""

@@ -842,9 +842,13 @@ dependencies = [
     { name = "pgvector" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
+    { name = "volcengine-python-sdk", extra = ["ark"] },
+]
+
+[package.optional-dependencies]
+local = [
     { name = "sentence-transformers" },
     { name = "torch" },
-    { name = "volcengine-python-sdk", extra = ["ark"] },
 ]
 
 [package.metadata]
@@ -857,10 +861,11 @@ requires-dist = [
     { name = "pgvector", specifier = ">=0.3.0" },
     { name = "pydantic", specifier = ">=2.0.0" },
     { name = "pydantic-settings", specifier = ">=2.0.0" },
-    { name = "sentence-transformers", specifier = ">=2.2.0" },
-    { name = "torch", specifier = ">=2.0.0" },
+    { name = "sentence-transformers", marker = "extra == 'local'", specifier = ">=2.2.0" },
+    { name = "torch", marker = "extra == 'local'", specifier = ">=2.0.0" },
     { name = "volcengine-python-sdk", extras = ["ark"], specifier = ">=1.0.0" },
 ]
+provides-extras = ["local"]
 
 [[package]]
 name = "glean-worker"

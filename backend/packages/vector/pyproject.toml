@@ -10,11 +10,17 @@ dependencies = [
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
-    "sentence-transformers>=2.2.0",
-    "torch>=2.0.0",
     "volcengine-python-sdk[ark]>=1.0.0",
     "loguru>=0.7.0",
     "glean-database",
+]
+
+[project.optional-dependencies]
+# Install only when using local sentence-transformers embedding provider
+# Example: uv sync --extra local
+local = [
+    "sentence-transformers>=2.2.0",
+    "torch>=2.0.0",
 ]
 
 [tool.uv.sources]

@@ -1,5 +1,7 @@
 """Embedding generation worker tasks."""
 
+import asyncio
+import json
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +19,10 @@ logger = get_logger(__name__)
 
 # Circuit breaker state
 CONSECUTIVE_FAILURES_THRESHOLD = 5
+
+# Model download status tracking (Redis keys)
+MODEL_DOWNLOAD_KEY_PREFIX = "glean:model_download:"
+MODEL_DOWNLOAD_TTL = 86400  # 24 hours
 
 
 async def _check_vectorization_enabled(session: AsyncSession) -> tuple[bool, EmbeddingConfig]:
@@ -309,3 +315,50 @@ async def validate_and_rebuild_embeddings(ctx: dict[str, Any]) -> dict[str, Any]
             await redis.enqueue_job("rebuild_embeddings")
 
         return {"success": True, "message": "Validation passed, rebuild queued"}
+
+
+async def download_embedding_model(
+    ctx: dict[str, Any], model: str, dimension: int
+) -> dict[str, Any]:
+    """
+    Download and warm up a sentence-transformers model.
+
+    Reports download status to Redis so the admin frontend can poll for progress.
+    Status values: downloading → done | error
+    """
+    redis = ctx.get("redis")
+    redis_key = f"{MODEL_DOWNLOAD_KEY_PREFIX}{model}"
+
+    async def _set_status(status: str, error: str | None = None) -> None:
+        if redis:
+            data: dict[str, str] = {"status": status}
+            if error:
+                data["error"] = error
+            await redis.set(redis_key, json.dumps(data), ex=MODEL_DOWNLOAD_TTL)
+
+    await _set_status("downloading")
+    logger.info(f"Starting sentence-transformers model download: {model}")
+
+    try:
+        from glean_vector.clients.providers.sentence_transformer_provider import (
+            SentenceTransformerProvider,
+        )
+
+        provider = SentenceTransformerProvider(model=model, dimension=dimension)
+
+        # _get_model() is blocking (downloads + loads into memory), run in thread pool
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, provider._get_model)
+
+        actual_dimension = provider.dimension
+        logger.info(
+            f"Model downloaded and cached: {model}, dimension={actual_dimension}"
+        )
+        await _set_status("done")
+        return {"success": True, "model": model, "dimension": actual_dimension}
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Failed to download model {model}: {error_msg}", exc_info=True)
+        await _set_status("error", error=error_msg)
+        return {"success": False, "model": model, "error": error_msg}
