@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import RedisKeys
 from glean_database.models import Entry, UserEntry, UserPreferenceStats
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.config import preference_config
 
 
@@ -33,7 +33,7 @@ class PreferenceService:
     def __init__(
         self,
         db_session: AsyncSession,
-        milvus_client: MilvusClient,
+        milvus_client: PgVectorClient,
         redis_client: Redis | None = None,
     ) -> None:
         """
@@ -41,7 +41,7 @@ class PreferenceService:
 
         Args:
             db_session: Database session
-            milvus_client: Milvus vector database client
+            milvus_client: pgvector client (parameter name kept for compatibility)
             redis_client: Redis client for distributed locks (optional but recommended)
         """
         self.db = db_session

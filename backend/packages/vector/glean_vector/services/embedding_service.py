@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from glean_core import get_logger
 from glean_database.models import Entry
 from glean_vector.clients.embedding_client import EmbeddingClient
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 
 logger = get_logger(__name__)
 
@@ -29,7 +29,7 @@ class EmbeddingService:
         self,
         db_session: AsyncSession,
         embedding_client: EmbeddingClient,
-        milvus_client: MilvusClient,
+        milvus_client: PgVectorClient,
     ) -> None:
         """
         Initialize embedding service.
@@ -37,7 +37,7 @@ class EmbeddingService:
         Args:
             db_session: Database session
             embedding_client: Embedding API client
-            milvus_client: Milvus vector database client
+            milvus_client: pgvector client (parameter name kept for compatibility)
         """
         self.db = db_session
         self.embedding_client = embedding_client

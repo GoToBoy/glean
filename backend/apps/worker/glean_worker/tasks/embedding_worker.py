@@ -9,7 +9,7 @@ from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import TypedConfigService
 from glean_database.session import get_session_context
 from glean_vector.clients.embedding_client import EmbeddingClient
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.config import EmbeddingConfig as EmbeddingSettings
 from glean_vector.services.embedding_service import EmbeddingService
 
@@ -102,10 +102,6 @@ async def generate_entry_embedding(ctx: dict[str, Any], entry_id: str) -> dict[s
     Returns:
         Result dictionary
     """
-    milvus_client: MilvusClient | None = ctx.get("milvus_client")
-    if not milvus_client:
-        return {"success": False, "entry_id": entry_id, "error": "Milvus unavailable"}
-
     async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
@@ -115,17 +111,17 @@ async def generate_entry_embedding(ctx: dict[str, Any], entry_id: str) -> dict[s
 
         settings, rate_limit = await _load_embedding_settings(config)
         embedding_client = EmbeddingClient(config=settings, rate_limit=rate_limit)
+        vector_client = PgVectorClient(session)
 
         try:
-            # Ensure Milvus collections exist with correct model
-            await milvus_client.ensure_collections(
+            await vector_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 
             embedding_service = EmbeddingService(
                 db_session=session,
                 embedding_client=embedding_client,
-                milvus_client=milvus_client,
+                milvus_client=vector_client,
             )
 
             success = await embedding_service.generate_embedding(entry_id)
@@ -140,7 +136,7 @@ async def generate_entry_embedding(ctx: dict[str, Any], entry_id: str) -> dict[s
             error_msg = str(e)
             logger.error(
                 f"Failed to generate embedding for entry {entry_id}: {error_msg}",
-                exc_info=True,  # Include full traceback
+                exc_info=True,
             )
             await _handle_embedding_error(session, e)
             raise
@@ -160,10 +156,6 @@ async def batch_generate_embeddings(ctx: dict[str, Any], limit: int = 100) -> di
     Returns:
         Result dictionary with processed and failed counts
     """
-    milvus_client: MilvusClient | None = ctx.get("milvus_client")
-    if not milvus_client:
-        return {"processed": 0, "failed": 0, "error": "Milvus unavailable"}
-
     async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
@@ -173,17 +165,17 @@ async def batch_generate_embeddings(ctx: dict[str, Any], limit: int = 100) -> di
 
         settings, rate_limit = await _load_embedding_settings(config)
         embedding_client = EmbeddingClient(config=settings, rate_limit=rate_limit)
+        vector_client = PgVectorClient(session)
 
         try:
-            # Ensure Milvus collections exist with correct model
-            await milvus_client.ensure_collections(
+            await vector_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 
             embedding_service = EmbeddingService(
                 db_session=session,
                 embedding_client=embedding_client,
-                milvus_client=milvus_client,
+                milvus_client=vector_client,
             )
 
             result = await embedding_service.batch_generate(limit=limit)
@@ -214,10 +206,6 @@ async def retry_failed_embeddings(ctx: dict[str, Any], limit: int = 50) -> dict[
     Returns:
         Result dictionary with processed and failed counts
     """
-    milvus_client: MilvusClient | None = ctx.get("milvus_client")
-    if not milvus_client:
-        return {"processed": 0, "failed": 0, "error": "Milvus unavailable"}
-
     async with get_session_context() as session:
         # Check if vectorization is enabled
         is_enabled, config = await _check_vectorization_enabled(session)
@@ -227,17 +215,17 @@ async def retry_failed_embeddings(ctx: dict[str, Any], limit: int = 50) -> dict[
 
         settings, rate_limit = await _load_embedding_settings(config)
         embedding_client = EmbeddingClient(config=settings, rate_limit=rate_limit)
+        vector_client = PgVectorClient(session)
 
         try:
-            # Ensure Milvus collections exist with correct model
-            await milvus_client.ensure_collections(
+            await vector_client.ensure_collections(
                 settings.dimension, settings.provider, settings.model
             )
 
             embedding_service = EmbeddingService(
                 db_session=session,
                 embedding_client=embedding_client,
-                milvus_client=milvus_client,
+                milvus_client=vector_client,
             )
 
             result = await embedding_service.retry_failed(limit=limit)
@@ -262,7 +250,6 @@ async def validate_and_rebuild_embeddings(ctx: dict[str, Any]) -> dict[str, Any]
 
     This task is triggered when vectorization is enabled or config is changed.
     """
-    milvus_client: MilvusClient | None = ctx.get("milvus_client")
     redis = ctx.get("redis")
 
     async with get_session_context() as session:
@@ -272,7 +259,6 @@ async def validate_and_rebuild_embeddings(ctx: dict[str, Any]) -> dict[str, Any]
         if not config.enabled:
             return {"success": False, "error": "Vectorization is not enabled"}
 
-        # Validate provider
         from glean_vector.services import EmbeddingValidationService
 
         validation_service = EmbeddingValidationService()
@@ -286,46 +272,37 @@ async def validate_and_rebuild_embeddings(ctx: dict[str, Any]) -> dict[str, Any]
             )
             return {"success": False, "error": provider_result.message}
 
-        # Validate Milvus
-        if milvus_client:
-            milvus_result = await validation_service.validate_milvus(
-                config.dimension, config.provider, config.model
-            )
-            if not milvus_result.success:
-                await config_service.set_embedding_status(
-                    VectorizationStatus.ERROR.value,
-                    error=f"Milvus validation failed: {milvus_result.message}",
-                )
-                return {"success": False, "error": milvus_result.message}
-        else:
+        # Validate pgvector
+        pgvector_result = await validation_service.validate_pgvector(
+            session, config.dimension, config.provider, config.model
+        )
+        if not pgvector_result.success:
             await config_service.set_embedding_status(
                 VectorizationStatus.ERROR.value,
-                error="Milvus client not available",
+                error=f"pgvector validation failed: {pgvector_result.message}",
             )
-            return {"success": False, "error": "Milvus client not available"}
+            return {"success": False, "error": pgvector_result.message}
 
-        # Validation passed, check if rebuild is actually needed
-        # If collections already exist with the same model signature, skip rebuild
-        is_compatible, reason = milvus_client.check_model_compatibility(
+        # Check if rebuild is actually needed
+        vector_client = PgVectorClient(session)
+        is_compatible, reason = await vector_client.check_model_compatibility(
             config.dimension, config.provider, config.model
         )
 
-        if is_compatible and milvus_client.collections_exist():
-            # Collections exist and are compatible - no rebuild needed
+        if is_compatible and await vector_client.collections_exist():
             logger.info(
-                "Collections already compatible with config, skipping rebuild. "
+                "pgvector tables already compatible with config, skipping rebuild. "
                 f"model={config.provider}:{config.model}, dimension={config.dimension}"
             )
             await config_service.update(EmbeddingConfig, status=VectorizationStatus.IDLE)
             return {
                 "success": True,
-                "message": "Collections already compatible, no rebuild needed",
+                "message": "Tables already compatible, no rebuild needed",
                 "skipped_rebuild": True,
             }
 
-        # Rebuild needed: either collections don't exist or model changed
         logger.info(
-            f"Rebuild required: {reason or 'collections do not exist'}. Triggering rebuild..."
+            f"Rebuild required: {reason or 'no model signature found'}. Triggering rebuild..."
         )
 
         if redis:

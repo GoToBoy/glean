@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Entry, UserPreferenceStats
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.services.score_service import ScoreService
 
 
@@ -19,8 +19,8 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_milvus_client():
-    """Create a mock Milvus client."""
-    client = MagicMock(spec=MilvusClient)
+    """Create a mock pgvector client."""
+    client = MagicMock(spec=PgVectorClient)
     return client
 
 

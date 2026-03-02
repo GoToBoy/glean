@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Entry, UserPreferenceStats
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.config import preference_config
 
 
@@ -22,14 +22,14 @@ class ScoreService:
     def __init__(
         self,
         db_session: AsyncSession,
-        milvus_client: MilvusClient,
+        milvus_client: PgVectorClient,
     ) -> None:
         """
         Initialize score service.
 
         Args:
             db_session: Database session
-            milvus_client: Milvus vector database client
+            milvus_client: pgvector client (parameter name kept for compatibility)
         """
         self.db = db_session
         self.milvus = milvus_client

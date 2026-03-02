@@ -223,7 +223,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 new_entries += 1
 
                 # M3: Queue embedding task for new entry (only if vectorization enabled)
-                if ctx.get("milvus_client") and await _is_vectorization_enabled(session):
+                if await _is_vectorization_enabled(session):
                     await ctx["redis"].enqueue_job("generate_entry_embedding", entry.id)
                     logger.debug(
                         "Queued embedding task for entry",

@@ -11,7 +11,7 @@ from glean_core.services import TypedConfigService
 from glean_core.services.system_config_service import SystemConfigService
 from glean_database.models import Entry, UserPreferenceStats
 from glean_database.session import get_session_context
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.config import EmbeddingConfig as EmbeddingSettings
 from glean_vector.config import embedding_config as env_embedding_config
 
@@ -27,16 +27,12 @@ async def rebuild_embeddings(
     Steps:
       1) Load embedding config (payload passed or system config / env fallback)
       2) Update status to REBUILDING
-      3) Recreate Milvus collections if dimension changed
+      3) Clear pgvector tables (drop all embeddings + preferences)
       4) Mark all entries pending
       5) Enqueue embedding jobs in batches
       6) Enqueue user preference rebuild jobs
       7) Keep status as REBUILDING (will be set to IDLE when all done)
     """
-    milvus_client: MilvusClient | None = ctx.get("milvus_client")
-    if not milvus_client:
-        return {"success": False, "error": "Milvus unavailable"}
-
     redis = ctx.get("redis")
     if not redis:
         return {"success": False, "error": "Redis unavailable"}
@@ -48,9 +44,7 @@ async def rebuild_embeddings(
             EmbeddingConfigSchema,
             status=VectorizationStatus.REBUILDING,
         )
-        # Commit status change BEFORE modifying Milvus to prevent inconsistent state
-        # If recreate_collections succeeds but later operations fail,
-        # we need the REBUILDING status to be persisted so that retries work correctly
+        # Commit status change BEFORE clearing vectors to prevent inconsistent state
         await session.commit()
 
         # Load config
@@ -75,12 +69,11 @@ async def rebuild_embeddings(
         )
         dimension = settings.dimension
 
-        # Recreate Milvus collections (drop + create) for new model
-        # This also drops user_preferences collection, so we need to rebuild them
-        # NOTE: This is a point of no return - if this succeeds, old embeddings are gone.
-        # The REBUILDING status is already committed, so retries will work correctly.
-        await milvus_client.recreate_collections(dimension, settings.provider, settings.model)
-        logger.info(f"Recreated Milvus collections with dimension={dimension}")
+        # Clear all pgvector embeddings and preferences, update model signature
+        # NOTE: This is a point of no return - old embeddings are gone after this.
+        vector_client = PgVectorClient(session)
+        await vector_client.recreate_collections(dimension, settings.provider, settings.model)
+        logger.info(f"Cleared pgvector tables for rebuild, dimension={dimension}")
 
         # Mark all entries pending for new model (new transaction)
         await session.execute(
@@ -101,8 +94,6 @@ async def rebuild_embeddings(
         logger.info(f"Enqueued {len(entry_ids)} embedding jobs")
 
         # Enqueue user preference rebuild jobs for all users with preference data
-        # User preference vectors were deleted when collections were recreated,
-        # so we need to rebuild them from historical feedback
         users_result = await session.execute(select(UserPreferenceStats.user_id).distinct())
         user_ids = [row[0] for row in users_result.all()]
 
@@ -110,10 +101,6 @@ async def rebuild_embeddings(
             await redis.enqueue_job("rebuild_user_preference", user_id=user_id)
 
         logger.info(f"Enqueued {len(user_ids)} preference rebuild jobs")
-
-        # Keep status as REBUILDING - the status API will automatically
-        # update to IDLE when all pending entries are processed
-        # Note: We don't set to IDLE here because tasks are still in queue
 
         return {
             "success": True,

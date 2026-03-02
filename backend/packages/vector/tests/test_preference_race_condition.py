@@ -8,7 +8,7 @@ import pytest
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_vector.clients.milvus_client import MilvusClient
+from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.services.preference_service import PreferenceService
 
 
@@ -20,8 +20,8 @@ def mock_db_session():
 
 @pytest.fixture
 def mock_milvus_client():
-    """Create a mock Milvus client."""
-    client = MagicMock(spec=MilvusClient)
+    """Create a mock pgvector client."""
+    client = MagicMock(spec=PgVectorClient)
 
     # Mock get_user_preferences to return initial state
     # This will be called multiple times during concurrent updates

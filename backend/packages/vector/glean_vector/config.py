@@ -31,24 +31,6 @@ class EmbeddingConfig(BaseSettings):
     rate_limit_providers: dict[str, int] = {}
 
 
-class MilvusConfig(BaseSettings):
-    """Milvus configuration."""
-
-    model_config = SettingsConfigDict(
-        env_prefix="MILVUS_",
-        env_file=str(_env_file) if _env_file.exists() else None,
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    host: str = "localhost"
-    port: int = 19530
-    user: str = ""
-    password: str = ""
-    entries_collection: str = "entries"
-    prefs_collection: str = "user_preferences"
-
-
 class PreferenceConfig(BaseSettings):
     """Preference calculation configuration."""
 
@@ -84,7 +66,6 @@ class ScoreConfig(BaseSettings):
 
 # Global config instances
 embedding_config = EmbeddingConfig()
-milvus_config = MilvusConfig()
 preference_config = PreferenceConfig()
 score_config = ScoreConfig()
 

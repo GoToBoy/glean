@@ -1,12 +1,17 @@
 """
 Embedding validation service.
 
-Provides validation for embedding providers and Milvus connections
+Provides validation for embedding providers and pgvector availability
 before enabling vectorization.
 """
 
+from typing import TYPE_CHECKING
+
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, ValidationResult
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = get_logger(__name__)
 
@@ -165,127 +170,73 @@ class EmbeddingValidationService:
                 },
             )
 
-    async def validate_milvus(
+    async def validate_pgvector(
         self,
+        session: "AsyncSession",
         dimension: int | None = None,
         provider: str | None = None,
         model: str | None = None,
     ) -> ValidationResult:
         """
-        Test Milvus connection (read-only, does not modify collections).
-
-        This validation only tests the connection to Milvus and checks if
-        collections exist. It does NOT create or modify collections to avoid
-        accidental data loss during validation.
+        Check that the pgvector extension is installed and tables exist.
 
         Args:
-            dimension: Optional dimension (for informational purposes only).
-            provider: Optional embedding provider (for informational purposes only).
-            model: Optional model name (for informational purposes only).
+            session: Async database session.
+            dimension: Optional dimension (informational).
+            provider: Optional embedding provider (informational).
+            model: Optional model name (informational).
 
         Returns:
             ValidationResult with success status and details.
         """
         try:
-            from pymilvus import connections, utility
+            from sqlalchemy import text
 
-            from glean_vector.config import milvus_config
-
-            try:
-                # Test connection
-                connections.connect(  # type: ignore[reportUnknownMemberType]
-                    alias="validation",
-                    host=milvus_config.host,
-                    port=str(milvus_config.port),
-                    user=milvus_config.user or "",
-                    password=milvus_config.password or "",
-                )
-
-                # Check if collections exist (read-only)
-                entries_exists: bool = utility.has_collection(  # type: ignore[reportUnknownVariableType]
-                    milvus_config.entries_collection, using="validation"
-                )
-                prefs_exists: bool = utility.has_collection(  # type: ignore[reportUnknownVariableType]
-                    milvus_config.prefs_collection, using="validation"
-                )
-
-                logger.info("Milvus validation successful")
+            # Check extension
+            result = await session.execute(
+                text("SELECT 1 FROM pg_extension WHERE extname = 'vector'")
+            )
+            ext_row = result.fetchone()
+            if not ext_row:
                 return ValidationResult(
-                    success=True,
-                    message="Milvus connection successful",
-                    details={
-                        "host": milvus_config.host,
-                        "port": milvus_config.port,
-                        "entries_collection": milvus_config.entries_collection,
-                        "entries_collection_exists": entries_exists,
-                        "prefs_collection": milvus_config.prefs_collection,
-                        "prefs_collection_exists": prefs_exists,
-                        "dimension": dimension,
-                        "provider": provider,
-                        "model": model,
-                    },
+                    success=False,
+                    message="pgvector extension is not installed in the database",
+                    details={"error": "extension 'vector' not found"},
                 )
 
-            finally:
-                import contextlib
+            # Check tables exist
+            result = await session.execute(text("SELECT 1 FROM entry_embeddings LIMIT 0"))
+            entries_ok = True
 
-                with contextlib.suppress(Exception):
-                    connections.disconnect("validation")
+            result = await session.execute(
+                text("SELECT 1 FROM user_preference_vectors LIMIT 0")
+            )
+            prefs_ok = True
 
-        except ImportError as e:
-            logger.error(f"Milvus import error: {e}")
+            logger.info("pgvector validation successful")
             return ValidationResult(
-                success=False,
-                message=f"Milvus client not available: {str(e)}",
-                details={"error": str(e)},
+                success=True,
+                message="pgvector connection successful",
+                details={
+                    "extension": "vector",
+                    "entry_embeddings_table": entries_ok,
+                    "user_preference_vectors_table": prefs_ok,
+                    "dimension": dimension,
+                    "provider": provider,
+                    "model": model,
+                },
             )
 
         except Exception as e:
-            logger.error(f"Milvus validation failed: {e}")
+            logger.error(f"pgvector validation failed: {e}")
             return ValidationResult(
                 success=False,
-                message=f"Milvus connection failed: {str(e)}",
+                message=f"pgvector check failed: {str(e)}",
                 details={
                     "error": str(e),
                     "error_type": type(e).__name__,
                 },
             )
-
-    async def validate_full(self, config: EmbeddingConfig) -> ValidationResult:
-        """
-        Perform full validation of provider and Milvus.
-
-        Args:
-            config: Embedding configuration to validate.
-
-        Returns:
-            ValidationResult with combined status.
-        """
-        # Validate provider first
-        provider_result = await self.validate_provider(config)
-        if not provider_result.success:
-            return provider_result
-
-        # Validate Milvus
-        milvus_result = await self.validate_milvus(config.dimension)
-        if not milvus_result.success:
-            return ValidationResult(
-                success=False,
-                message=f"Milvus validation failed: {milvus_result.message}",
-                details={
-                    "provider_validation": provider_result.details,
-                    "milvus_validation": milvus_result.details,
-                },
-            )
-
-        return ValidationResult(
-            success=True,
-            message="Full validation successful",
-            details={
-                "provider": provider_result.details,
-                "milvus": milvus_result.details,
-            },
-        )
 
     async def check_provider_health(self, config: EmbeddingConfig) -> bool:
         """
@@ -298,14 +249,4 @@ class EmbeddingValidationService:
             True if provider is healthy, False otherwise.
         """
         result = await self.validate_provider(config)
-        return result.success
-
-    async def check_milvus_health(self) -> bool:
-        """
-        Quick health check for Milvus.
-
-        Returns:
-            True if Milvus is healthy, False otherwise.
-        """
-        result = await self.validate_milvus()
         return result.success

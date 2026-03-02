@@ -14,7 +14,6 @@ from arq.cron import CronJob
 
 from glean_core import get_logger, init_logging
 from glean_database.session import init_database
-from glean_vector.clients.milvus_client import MilvusClient
 
 from .config import settings
 from .tasks import (
@@ -54,34 +53,10 @@ async def startup(ctx: dict[str, Any]) -> None:
     )
     init_database(settings.database_url)
     logger.info("Database initialized")
+    logger.info("Vector storage: pgvector (uses existing PostgreSQL database)")
 
     # Store Redis client for distributed locks (arq provides it via ctx['redis'])
-    # The redis client is automatically available in the worker context
     logger.info("Redis client available for distributed locks")
-
-    # Initialize Milvus client (M3) - optional for embedding/preference features
-    from glean_vector.config import milvus_config
-
-    # Check if Milvus is explicitly configured (not just default localhost)
-    milvus_configured = milvus_config.host and milvus_config.host != "localhost"
-
-    if milvus_configured or milvus_config.host == "localhost":
-        # Try to connect even for localhost (might be intentional dev setup)
-        logger.info(f"Attempting to connect to Milvus at {milvus_config.host}:{milvus_config.port}")
-        milvus_client = MilvusClient()
-        try:
-            milvus_client.connect()
-            ctx["milvus_client"] = milvus_client
-            logger.info("✓ Milvus client connected successfully")
-        except Exception as e:
-            logger.warning(f"✗ Failed to connect to Milvus: {e}")
-            logger.info(
-                "Worker will continue without Milvus - embedding and preference tasks will be skipped"
-            )
-            ctx["milvus_client"] = None
-    else:
-        logger.info("Milvus not configured - embedding and preference features disabled")
-        ctx["milvus_client"] = None
 
     # Dynamically log registered task functions
     logger.info("Registered task functions:")
@@ -110,13 +85,6 @@ async def shutdown(ctx: dict[str, Any]) -> None:
     """
     logger.info("=" * 60)
     logger.info("Shutting down Glean Worker")
-
-    # Disconnect Milvus client
-    milvus_client = ctx.get("milvus_client")
-    if milvus_client:
-        milvus_client.disconnect()
-        logger.info("Milvus client disconnected")
-
     logger.info("=" * 60)
 
 
