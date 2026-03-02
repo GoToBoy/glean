@@ -77,6 +77,7 @@ export default {
         'fade-in': 'fadeIn 0.4s ease-out forwards',
         'slide-in': 'slideIn 0.3s ease-out forwards',
         'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'progress-indeterminate': 'progress-indeterminate 1.4s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -90,6 +91,10 @@ export default {
         'pulse-glow': {
           '0%, 100%': { boxShadow: '0 0 0 0 hsl(var(--primary) / 0.4)' },
           '50%': { boxShadow: '0 0 20px 4px hsl(var(--primary) / 0.2)' },
+        },
+        'progress-indeterminate': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(500%)' },
         },
       },
     },

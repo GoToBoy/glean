@@ -4,10 +4,15 @@ RSS feed discovery.
 Discovers RSS/Atom feeds from websites.
 """
 
+import asyncio
+
 import httpx
 from bs4 import BeautifulSoup
 
 from .parser import parse_feed
+
+# Realistic RSS reader User-Agent to avoid bot detection on CDN-protected sites
+_USER_AGENT = "Mozilla/5.0 (compatible; GleanRSSReader/1.0; +https://github.com/glean)"
 
 
 async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
@@ -15,8 +20,10 @@ async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
     Discover RSS feed URL from a given URL.
 
     Tries to:
-    1. Parse URL directly as RSS
+    1. Parse URL directly as RSS (when content-type indicates XML/RSS/Atom)
     2. Find RSS link in HTML page
+    3. Fallback: try parsing response as RSS regardless of content-type
+       (handles cases where CDN or servers return wrong content-type)
 
     Args:
         url: URL to discover feed from.
@@ -29,7 +36,7 @@ async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
         ValueError: If no feed found or request fails.
     """
     async with httpx.AsyncClient(
-        timeout=timeout, follow_redirects=True, headers={"User-Agent": "Glean/1.0"}
+        timeout=timeout, follow_redirects=True, headers={"User-Agent": _USER_AGENT}
     ) as client:
         try:
             response = await client.get(url)
@@ -77,6 +84,15 @@ async def discover_feed(url: str, timeout: int = 30) -> tuple[str, str]:
                     except (httpx.HTTPError, ValueError):
                         continue
 
+        # Fallback: try parsing response body as RSS regardless of content-type.
+        # Some CDNs (e.g. Substack, Cloudflare) return incorrect content-type on
+        # first access or when the URL is a direct feed link without proper headers.
+        try:
+            feed = await parse_feed(response.text, url)
+            return url, str(feed.title)
+        except ValueError:
+            pass
+
         raise ValueError("No RSS feed found at this URL")
 
 
@@ -85,6 +101,9 @@ async def fetch_feed(
 ) -> tuple[str, dict[str, str]] | None:
     """
     Fetch feed content with conditional request support.
+
+    Retries once on server errors (5xx) to handle CDN warmup issues where the
+    first request may return a non-standard response (e.g. Substack, Cloudflare).
 
     Args:
         url: Feed URL.
@@ -95,32 +114,43 @@ async def fetch_feed(
         Tuple of (content, headers) if modified, None if not modified (304).
 
     Raises:
-        ValueError: If request fails.
+        ValueError: If request fails after retry.
     """
-    headers = {"User-Agent": "Glean/1.0"}
+    headers = {"User-Agent": _USER_AGENT}
     if etag:
         headers["If-None-Match"] = etag
     if last_modified:
         headers["If-Modified-Since"] = last_modified
 
     async with httpx.AsyncClient(timeout=30, follow_redirects=True, headers=headers) as client:
-        try:
-            response = await client.get(url)
+        last_error: Exception | None = None
+        for attempt in range(2):
+            try:
+                response = await client.get(url)
 
-            if response.status_code == 304:
-                # Not modified
-                return None
+                if response.status_code == 304:
+                    # Not modified
+                    return None
 
-            response.raise_for_status()
+                # Retry once on server errors (5xx) — CDN may need warming up
+                if response.status_code >= 500 and attempt == 0:
+                    await asyncio.sleep(1)
+                    continue
 
-            # Extract caching headers
-            cache_headers: dict[str, str] = {}
-            if "etag" in response.headers:
-                cache_headers["etag"] = response.headers["etag"]
-            if "last-modified" in response.headers:
-                cache_headers["last-modified"] = response.headers["last-modified"]
+                response.raise_for_status()
 
-            return response.text, cache_headers
+                # Extract caching headers
+                cache_headers: dict[str, str] = {}
+                if "etag" in response.headers:
+                    cache_headers["etag"] = response.headers["etag"]
+                if "last-modified" in response.headers:
+                    cache_headers["last-modified"] = response.headers["last-modified"]
 
-        except httpx.HTTPError as e:
-            raise ValueError(f"Failed to fetch feed: {e}") from e
+                return response.text, cache_headers
+
+            except httpx.HTTPError as e:
+                last_error = e
+                if attempt == 0:
+                    await asyncio.sleep(1)
+
+        raise ValueError(f"Failed to fetch feed: {last_error}") from last_error

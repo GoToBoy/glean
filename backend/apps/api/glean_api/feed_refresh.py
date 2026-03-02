@@ -1,7 +1,5 @@
 """Shared helpers for feed refresh enqueue/status APIs."""
 
-from typing import Any
-
 from arq.connections import ArqRedis
 from arq.jobs import Job
 
@@ -35,6 +33,7 @@ async def build_refresh_status_item(
     result_status: str | None = None
     result_message: str | None = None
     result_new_entries: int | None = None
+    result_total_entries: int | None = None
 
     try:
         status_info = await job.status()
@@ -53,6 +52,8 @@ async def build_refresh_status_item(
                     result_message = str(job_result["message"])
                 if isinstance(job_result.get("new_entries"), int):
                     result_new_entries = int(job_result["new_entries"])
+                if isinstance(job_result.get("total_entries"), int):
+                    result_total_entries = int(job_result["total_entries"])
             elif job_result is not None and not result_message:
                 result_message = str(job_result)
         except Exception as e:
@@ -65,6 +66,7 @@ async def build_refresh_status_item(
         "status": status_value,
         "result_status": result_status,
         "new_entries": result_new_entries,
+        "total_entries": result_total_entries,
         "message": result_message,
         "last_fetch_attempt_at": feed.last_fetch_attempt_at.isoformat()
         if feed and feed.last_fetch_attempt_at

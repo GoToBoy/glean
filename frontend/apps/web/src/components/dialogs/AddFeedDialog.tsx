@@ -4,6 +4,15 @@ import { Button, Alert, AlertDescription, Input, Label } from '@glean/ui'
 import { Sparkles, X, Plus, Loader2, AlertCircle } from 'lucide-react'
 import { useDiscoverFeed } from '../../hooks/useSubscriptions'
 
+function getErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) return String(error)
+  const msg = error.message
+  if (msg === 'Network Error' || msg.includes('ECONNREFUSED') || msg.includes('ERR_NETWORK')) {
+    return '网络连接失败，请检查网络后重试'
+  }
+  return msg
+}
+
 interface AddFeedDialogProps {
   onClose: () => void
 }
@@ -56,7 +65,7 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
           {discoverMutation.error && (
             <Alert variant="error">
               <AlertCircle />
-              <AlertDescription>{(discoverMutation.error as Error).message}</AlertDescription>
+              <AlertDescription>{getErrorMessage(discoverMutation.error)}</AlertDescription>
             </Alert>
           )}
 

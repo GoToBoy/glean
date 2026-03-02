@@ -121,7 +121,8 @@
     "next": "下一页",
     "unsubscribeConfirm": "取消订阅此源？",
     "unsubscribeDescription": "确定要取消订阅此源吗？此操作无法撤销。",
-    "cancel": "取消"
+    "cancel": "取消",
+    "importing": "正在导入订阅..."
   },
   "preferences": {
     "title": "偏好",

@@ -42,6 +42,7 @@ type FeedRefreshState = {
   status: string
   resultStatus: string | null
   newEntries: number | null
+  totalEntries: number | null
   message: string | null
   lastFetchAttemptAt: string | null
   lastFetchSuccessAt: string | null
@@ -70,6 +71,7 @@ export function SubscriptionsTab() {
   const [searchQuery, setSearchQuery] = useState('')
   const [refreshingId, setRefreshingId] = useState<string | null>(null)
   const [feedRefreshState, setFeedRefreshState] = useState<Record<string, FeedRefreshState>>({})
+  const [refreshError, setRefreshError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [perPage] = useState(10)
 
@@ -99,6 +101,7 @@ export function SubscriptionsTab() {
 
   const handleRefresh = async (id: string) => {
     setRefreshingId(id)
+    setRefreshError(null)
     try {
       const result = await refreshMutation.mutateAsync(id)
       setFeedRefreshState((prev) => ({
@@ -108,6 +111,7 @@ export function SubscriptionsTab() {
           status: 'queued',
           resultStatus: null,
           newEntries: null,
+          totalEntries: null,
           message: null,
           lastFetchAttemptAt: null,
           lastFetchSuccessAt: null,
@@ -117,33 +121,41 @@ export function SubscriptionsTab() {
           updatedAt: new Date().toISOString(),
         },
       }))
+    } catch (err) {
+      setRefreshError((err as Error).message)
     } finally {
       setRefreshingId(null)
     }
   }
 
   const handleRefreshAll = async () => {
-    const result = await refreshAllMutation.mutateAsync()
-    const now = new Date().toISOString()
-    setFeedRefreshState((prev) => {
-      const next = { ...prev }
-      for (const job of result.jobs) {
-        next[job.feed_id] = {
-          jobId: job.job_id,
-          status: 'queued',
-          resultStatus: null,
-          newEntries: null,
-          message: null,
-          lastFetchAttemptAt: null,
-          lastFetchSuccessAt: null,
-          lastFetchedAt: null,
-          errorCount: 0,
-          fetchErrorMessage: null,
-          updatedAt: now,
+    setRefreshError(null)
+    try {
+      const result = await refreshAllMutation.mutateAsync()
+      const now = new Date().toISOString()
+      setFeedRefreshState((prev) => {
+        const next = { ...prev }
+        for (const job of result.jobs) {
+          next[job.feed_id] = {
+            jobId: job.job_id,
+            status: 'queued',
+            resultStatus: null,
+            newEntries: null,
+            totalEntries: null,
+            message: null,
+            lastFetchAttemptAt: null,
+            lastFetchSuccessAt: null,
+            lastFetchedAt: null,
+            errorCount: 0,
+            fetchErrorMessage: null,
+            updatedAt: now,
+          }
         }
-      }
-      return next
-    })
+        return next
+      })
+    } catch (err) {
+      setRefreshError((err as Error).message)
+    }
   }
 
   const handleImport = () => {
@@ -176,6 +188,7 @@ export function SubscriptionsTab() {
           status: item.status,
           resultStatus: item.result_status,
           newEntries: item.new_entries,
+          totalEntries: item.total_entries,
           message: item.message,
           lastFetchAttemptAt: item.last_fetch_attempt_at,
           lastFetchSuccessAt: item.last_fetch_success_at,
@@ -256,6 +269,17 @@ export function SubscriptionsTab() {
 
   return (
     <div className="stagger-children flex h-full min-h-0 w-full flex-col gap-4">
+      {/* Refresh error banner */}
+      {refreshError && (
+        <div className="text-destructive border-destructive/30 bg-destructive/10 flex items-center gap-2 rounded-lg border px-4 py-2 text-sm">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{refreshError}</span>
+          <button onClick={() => setRefreshError(null)} className="hover:text-destructive/70 shrink-0">
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Actions Bar */}
       <div className="animate-fade-in flex w-full shrink-0 items-center justify-between gap-4">
         <div className="relative flex-1 sm:max-w-48">
@@ -307,6 +331,17 @@ export function SubscriptionsTab() {
         </div>
       </div>
 
+      {/* Import progress banner */}
+      {importMutation.isPending && (
+        <div className="border-border bg-muted/30 flex items-center gap-3 rounded-lg border px-4 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <span className="flex-1">{t('manageFeeds.importing')}</span>
+          <div className="bg-muted h-1 w-32 overflow-hidden rounded-full">
+            <div className="bg-primary h-full w-1/4 animate-progress-indeterminate rounded-full" />
+          </div>
+        </div>
+      )}
+
       {/* Hidden file input */}
       <input
         ref={fileInputRef}
@@ -355,14 +390,10 @@ export function SubscriptionsTab() {
                 const refreshState = feedRefreshState[subscription.feed_id]
                 const isRefreshingRow =
                   refreshState && isPendingRefreshStatus(refreshState.status)
-                const progressMap: Record<string, number> = {
-                  queued: 20,
-                  deferred: 40,
-                  in_progress: 65,
-                  complete: 100,
-                  not_found: 100,
-                }
-                const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
+                const isError = refreshState?.resultStatus === 'error'
+                const isDone =
+                  refreshState?.status === 'complete' || refreshState?.status === 'not_found'
+                const isPendingRow = refreshState ? isPendingRefreshStatus(refreshState.status) : false
                 const statusLabelMap: Record<string, string> = {
                   queued: t('manageFeeds.refreshStatus.queued'),
                   deferred: t('manageFeeds.refreshStatus.deferred'),
@@ -420,12 +451,12 @@ export function SubscriptionsTab() {
                         </p>
                         {refreshState && (
                           <div className="mt-2 space-y-1">
-                            <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                            <div className={`flex items-center gap-2 text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}>
                               <span>
                                 {statusLabel}
                                 {resultStatusLabel ? ` · ${resultStatusLabel}` : ''}
                                 {refreshState.newEntries !== null
-                                  ? ` · +${refreshState.newEntries} ${t('manageFeeds.entriesSuffix')}`
+                                  ? ` · +${refreshState.newEntries}${refreshState.totalEntries !== null ? ` / ${refreshState.totalEntries}` : ''} ${t('manageFeeds.entriesSuffix')}`
                                   : ''}
                               </span>
                               <span>
@@ -441,15 +472,25 @@ export function SubscriptionsTab() {
                               </p>
                             )}
                             <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-                              <div
-                                className="bg-primary h-full transition-all duration-300"
-                                style={{ width: `${progress}%` }}
-                              />
+                              {isPendingRow && (
+                                <div className="bg-primary h-full w-1/4 animate-progress-indeterminate rounded-full" />
+                              )}
+                              {isDone && !isError && (
+                                <div className="bg-primary h-full w-full transition-all duration-500 rounded-full" />
+                              )}
+                              {isError && (
+                                <div className="bg-destructive h-full w-full rounded-full" />
+                              )}
                             </div>
                             {rowLogMessage && (
-                              <p className="text-muted-foreground line-clamp-2 text-xs">
-                                Log: {rowLogMessage}
-                              </p>
+                              <div
+                                className={`flex items-start gap-1 text-xs ${isError ? 'text-destructive' : 'text-muted-foreground'}`}
+                              >
+                                {isError && (
+                                  <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                                )}
+                                <p className="line-clamp-2">{rowLogMessage}</p>
+                              </div>
                             )}
                           </div>
                         )}

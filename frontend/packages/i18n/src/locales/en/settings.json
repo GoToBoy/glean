@@ -121,7 +121,8 @@
     "next": "Next",
     "unsubscribeConfirm": "Unsubscribe from feed?",
     "unsubscribeDescription": "Are you sure you want to unsubscribe from this feed? This action cannot be undone.",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "importing": "Importing subscriptions..."
   },
   "preferences": {
     "title": "Preferences",

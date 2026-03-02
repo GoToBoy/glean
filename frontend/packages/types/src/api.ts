@@ -188,6 +188,7 @@ export interface RefreshStatusItem {
   status: string
   result_status: string | null
   new_entries: number | null
+  total_entries: number | null
   message: string | null
   last_fetch_attempt_at: string | null
   last_fetch_success_at: string | null

@@ -98,6 +98,9 @@ export class ApiClient {
 
         // If error is not 401 or request already retried, reject
         if (error.response?.status !== 401 || originalRequest._retry) {
+          // Unwrap FastAPI `detail` string so callers get a human-readable message
+          const detail = (error.response?.data as Record<string, unknown>)?.detail
+          if (typeof detail === 'string') return Promise.reject(new Error(detail))
           return Promise.reject(error)
         }
 
