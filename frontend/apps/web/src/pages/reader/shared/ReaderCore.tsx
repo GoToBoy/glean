@@ -30,6 +30,9 @@ const ENTRY_ROW_ESTIMATED_HEIGHT = 144
 const VIRTUALIZATION_THRESHOLD = 80
 const VIRTUALIZATION_OVERSCAN = 8
 const ENTRY_FADE_ANIMATION_LIMIT = 24
+const RESUME_PERSIST_DEBOUNCE_MS = 1500
+const RESUME_PERSIST_MIN_INTERVAL_MS = 15000
+const RESUME_PERSIST_MIN_INDEX_DELTA = 5
 
 /**
  * Reader page.
@@ -104,6 +107,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const anchorPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingAnchorRef = useRef<{ scopeKey: string; entryId: string; index: number } | null>(null)
   const lastPersistedAnchorRef = useRef<string | null>(null)
+  const lastPersistMetaRef = useRef<{ scopeKey: string; index: number; at: number } | null>(null)
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
@@ -354,6 +358,16 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
       const marker = `${scopeKey}|${anchorEntryId}|${anchorIndex}`
       if (lastPersistedAnchorRef.current === marker) return
+      const now = Date.now()
+      const lastPersistMeta = lastPersistMetaRef.current
+      if (
+        lastPersistMeta &&
+        lastPersistMeta.scopeKey === scopeKey &&
+        now - lastPersistMeta.at < RESUME_PERSIST_MIN_INTERVAL_MS &&
+        Math.abs(anchorIndex - lastPersistMeta.index) < RESUME_PERSIST_MIN_INDEX_DELTA
+      ) {
+        return
+      }
 
       const nowIso = new Date().toISOString()
       const currentSettings = useAuthStore.getState().user?.settings
@@ -396,6 +410,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
       await updateSettingsSilently({ reader_list_resume_positions: pruned })
       lastPersistedAnchorRef.current = marker
+      lastPersistMetaRef.current = { scopeKey, index: anchorIndex, at: now }
     },
     [updateSettingsSilently]
   )
@@ -410,7 +425,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         const pending = pendingAnchorRef.current
         if (!pending) return
         void persistResumeAnchor(pending.scopeKey, pending.entryId, pending.index)
-      }, 1200)
+      }, RESUME_PERSIST_DEBOUNCE_MS)
     },
     [persistResumeAnchor]
   )
