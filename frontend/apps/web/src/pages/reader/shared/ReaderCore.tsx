@@ -548,29 +548,49 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     setTranslatedEntryTexts({})
   }, [isListTranslationActive])
 
-  const translateListEntry = useCallback(
-    async (entryId: string) => {
+  // Batch-translate multiple visible list entries in a single API call.
+  const translateListEntries = useCallback(
+    async (entryIds: string[]) => {
       if (!isListTranslationActive) return
-      if (pendingTranslationEntryIdsRef.current.has(entryId)) return
-      if (translatedEntryIdsRef.current.has(entryId)) return
-      const entry = entriesById.get(entryId)
-      if (!entry) return
 
-      const summaryPlain = stripHtmlTags(entry.summary || '').trim()
-      const sourceTexts = [entry.title, summaryPlain]
-        .filter((text) => text.length > 0)
-        .filter((text) => shouldAutoTranslate(text, preferredTargetLanguage))
-      if (sourceTexts.length === 0) return
+      // Filter to entries that haven't been translated or are pending
+      const toTranslate = entryIds.filter(
+        (id) =>
+          !translatedEntryIdsRef.current.has(id) && !pendingTranslationEntryIdsRef.current.has(id)
+      )
+      if (toTranslate.length === 0) return
 
-      const uncachedTexts = sourceTexts.filter((text) => !translationCacheRef.current.has(text))
-      pendingTranslationEntryIdsRef.current.add(entryId)
+      // Build per-entry text lists and collect all uncached texts
+      type EntryTexts = { entry: EntryWithState; title: string; summaryPlain: string }
+      const entryTexts: EntryTexts[] = []
+      for (const id of toTranslate) {
+        const entry = entriesById.get(id)
+        if (!entry) continue
+        const summaryPlain = stripHtmlTags(entry.summary || '').trim()
+        const hasTranslatableText =
+          [entry.title, summaryPlain]
+            .filter((t) => t.length > 0)
+            .some((t) => shouldAutoTranslate(t, preferredTargetLanguage))
+        if (!hasTranslatableText) continue
+        entryTexts.push({ entry, title: entry.title, summaryPlain })
+        pendingTranslationEntryIdsRef.current.add(id)
+      }
+
+      if (entryTexts.length === 0) return
+
+      // Collect all unique uncached texts across all entries
+      const allTexts = entryTexts.flatMap(({ title, summaryPlain }) =>
+        [title, summaryPlain].filter((t) => t.length > 0)
+      )
+      const uncachedTexts = [...new Set(allTexts.filter((t) => !translationCacheRef.current.has(t)))]
+
       try {
         if (uncachedTexts.length > 0) {
+          // Single API call for all entries
           const response = await entryService.translateTexts(
             uncachedTexts,
             listTranslationTargetLanguage,
-            'auto',
-            entry.id
+            'auto'
           )
           uncachedTexts.forEach((text, index) => {
             const translated = response.translations[index]
@@ -580,18 +600,24 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           })
         }
 
-        setTranslatedEntryTexts((prev) => ({
-          ...prev,
-          [entryId]: {
-            title: translationCacheRef.current.get(entry.title),
-            summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
-          },
-        }))
-        translatedEntryIdsRef.current.add(entryId)
+        // Apply results to all entries at once
+        setTranslatedEntryTexts((prev) => {
+          const updates: Record<string, { title?: string; summary?: string }> = {}
+          for (const { entry, title, summaryPlain } of entryTexts) {
+            updates[entry.id] = {
+              title: translationCacheRef.current.get(title),
+              summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
+            }
+            translatedEntryIdsRef.current.add(entry.id)
+          }
+          return { ...prev, ...updates }
+        })
       } catch (error) {
-        console.error('Failed to translate list entry:', error)
+        console.error('Failed to translate list entries:', error)
       } finally {
-        pendingTranslationEntryIdsRef.current.delete(entryId)
+        for (const { entry } of entryTexts) {
+          pendingTranslationEntryIdsRef.current.delete(entry.id)
+        }
       }
     },
     [
@@ -624,9 +650,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         timer = setTimeout(() => {
           const unique = Array.from(new Set(pendingIds))
           pendingIds = []
-          unique.forEach((id) => {
-            void translateListEntry(id)
-          })
+          // Batch all visible entries into a single API call
+          void translateListEntries(unique)
         }, 120)
       },
       { root: container, rootMargin: '0px 0px 220px 0px', threshold: 0.1 }
@@ -645,7 +670,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     virtualizedList.startIndex,
     virtualizedList.endIndex,
     isListTranslationActive,
-    translateListEntry,
+    translateListEntries,
     visibleEntries.length,
   ])
 

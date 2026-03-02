@@ -3,6 +3,10 @@ import { isAxiosError } from 'axios'
 import type { User, UserSettings } from '@glean/types'
 import { authService } from '@glean/api-client'
 
+function isAuthError(error: unknown): boolean {
+  return isAxiosError(error) && error.response?.status === 401
+}
+
 interface AuthState {
   user: User | null
   isAuthenticated: boolean
@@ -91,13 +95,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadUser: async () => {
+    // Prevent concurrent calls
+    if (get().isLoading) return
+
+    set({ isLoading: true, error: null })
+
     const isAuthenticated = await authService.isAuthenticated()
     if (!isAuthenticated) {
-      set({ isAuthenticated: false, user: null })
+      set({ isAuthenticated: false, user: null, isLoading: false })
       return
     }
 
-    set({ isLoading: true, error: null })
     try {
       const user = await authService.getCurrentUser()
       set({
@@ -105,14 +113,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       })
-    } catch {
-      await authService.clearTokens()
-      set({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: 'Failed to load user',
-      })
+    } catch (error) {
+      // Only clear tokens on explicit auth rejection (401).
+      // Network errors and timeouts mean the server is slow — do not log the user out.
+      if (isAuthError(error)) {
+        await authService.clearTokens()
+        set({ user: null, isAuthenticated: false, isLoading: false, error: 'Session expired' })
+      } else {
+        set({ isLoading: false, error: 'Failed to load user' })
+      }
     }
   },
 

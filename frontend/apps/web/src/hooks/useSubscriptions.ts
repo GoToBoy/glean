@@ -139,8 +139,8 @@ export function useAllSubscriptions() {
       }
       return undefined
     },
-    staleTime: 1000 * 60 * 2, // Consider data stale after 2 minutes
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 60 * 5, // Consider data stale after 5 minutes
+    refetchOnWindowFocus: false,
   })
 
   // Function to force refresh (clear cache and refetch)

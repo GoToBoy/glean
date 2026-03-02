@@ -6,8 +6,19 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-glean}
       POSTGRES_USER: ${POSTGRES_USER:-glean}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glean}
+    # Enable CSV slow-query logging: queries > 1s written to /var/log/postgresql/
+    command: >
+      postgres
+      -c logging_collector=on
+      -c log_directory=/var/log/postgresql
+      -c log_filename=postgresql-%Y-%m-%d.log
+      -c log_rotation_age=1d
+      -c log_min_duration_statement=1000
+      -c log_line_prefix='%t [%p] %u@%d '
+      -c log_statement=none
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ${LOGS_DIR:-./logs}/postgres:/var/log/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-glean}"]
       interval: 10s
@@ -16,13 +27,23 @@ services:
     networks:
       - glean-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   redis:
     image: redis:8-alpine
     container_name: glean-redis
-    command: redis-server --appendonly yes
+    command: >
+      redis-server
+      --appendonly yes
+      --loglevel notice
+      --logfile /data/logs/redis.log
     volumes:
       - redis_data:/data
+      - ${LOGS_DIR:-./logs}/redis:/data/logs
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -31,6 +52,11 @@ services:
     networks:
       - glean-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   mtranserver:
     image: xxnuo/mtranserver
@@ -41,6 +67,11 @@ services:
     networks:
       - glean-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   backend:
     image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
@@ -81,6 +112,11 @@ services:
       - glean-network
     restart: unless-stopped
     command: ["uv", "run", "--no-sync", "uvicorn", "glean_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
 
   worker:
     image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
@@ -110,28 +146,47 @@ services:
       - glean-network
     restart: unless-stopped
     command: ["uv", "run", "--no-sync", "arq", "glean_worker.main.WorkerSettings"]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
 
   web:
     image: ghcr.io/gotoboy/glean-web:${IMAGE_TAG:-latest}
     container_name: glean-web
     ports:
       - "${WEB_PORT:-8800}:80"
+    volumes:
+      - ${LOGS_DIR:-./logs}/nginx-web:/var/log/nginx
     depends_on:
       - backend
     networks:
       - glean-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   admin:
     image: ghcr.io/gotoboy/glean-admin:${IMAGE_TAG:-latest}
     container_name: glean-admin
     ports:
       - "${ADMIN_PORT:-3001}:80"
+    volumes:
+      - ${LOGS_DIR:-./logs}/nginx-admin:/var/log/nginx
     depends_on:
       - backend
     networks:
       - glean-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
 volumes:
   postgres_data:

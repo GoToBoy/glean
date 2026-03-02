@@ -47,45 +47,31 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             user_agent=user_agent,
         )
 
-        # Log request start
-        context_logger.info("Request started")
+        path = request.url.path
 
         # Process request
         try:
             response = await call_next(request)
 
-            # Calculate processing time
             process_time = time.time() - start_time
+            status = response.status_code
 
-            # Bind response information
-            response_logger = context_logger.bind(
-                status_code=response.status_code,
-                process_time=f"{process_time:.4f}s",
-            )
-
-            # Log request completion
-            if response.status_code < 400:
-                response_logger.info("Request completed")
+            # Include method, path, status and duration in the message so they
+            # are searchable in plain-text log files (grep "slow" / grep "POST /entries").
+            msg = f"{request.method} {path} {status} {process_time:.3f}s"
+            if process_time >= 3.0:
+                context_logger.warning(f"SLOW {msg}")
+            elif status >= 400:
+                context_logger.warning(msg)
             else:
-                response_logger.warning("Request completed with error status")
+                context_logger.info(msg)
 
-            # Add request ID to response headers
             response.headers["X-Request-ID"] = request_id
-
             return response
 
         except Exception as e:
-            # Calculate processing time
             process_time = time.time() - start_time
-
-            # Bind error information
-            error_logger = context_logger.bind(
-                process_time=f"{process_time:.4f}s",
-                error=str(e),
+            context_logger.exception(
+                f"EXCEPTION {request.method} {path} {process_time:.3f}s error={e}"
             )
-
-            # Log error
-            error_logger.exception("Request failed with exception")
-
-            # Re-raise exception
             raise
