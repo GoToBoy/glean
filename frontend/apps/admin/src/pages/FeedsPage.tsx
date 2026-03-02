@@ -458,13 +458,10 @@ export default function FeedsPage() {
                       feed.last_fetched_at
                     const effectiveLastFetchSuccessAt =
                       refreshState?.lastFetchSuccessAt ?? feed.last_fetch_success_at
-                    const progressMap: Record<string, number> = {
-                      queued: 20,
-                      deferred: 40,
-                      in_progress: 65,
-                      complete: 100,
-                      not_found: 100,
-                    }
+                    const isRowError = refreshState?.resultStatus === 'error'
+                    const isRowDone =
+                      refreshState?.status === 'complete' || refreshState?.status === 'not_found'
+                    const isRowPending = !!refreshState && isPendingRefreshStatus(refreshState.status)
                     const statusLabelMap: Record<string, string> = {
                       queued: t('admin:feeds.refreshStatus.queued'),
                       deferred: t('admin:feeds.refreshStatus.deferred'),
@@ -477,7 +474,6 @@ export default function FeedsPage() {
                       not_modified: t('admin:feeds.refreshResult.notModified'),
                       error: t('admin:feeds.refreshResult.failed'),
                     }
-                    const progress = refreshState ? (progressMap[refreshState.status] ?? 0) : 0
                     const rowLogMessage =
                       refreshState?.message || refreshState?.fetchErrorMessage || feed.fetch_error_message
                     const baseStatusText = refreshState
@@ -509,7 +505,7 @@ export default function FeedsPage() {
                             </a>
                             {refreshState && (
                               <div className="mt-2 space-y-1">
-                                <div className="text-muted-foreground flex items-center gap-2 text-xs">
+                                <div className={`flex items-center gap-2 text-xs ${isRowError ? 'text-destructive' : 'text-muted-foreground'}`}>
                                   <span>{statusText}</span>
                                   <span>
                                     {format(
@@ -529,15 +525,25 @@ export default function FeedsPage() {
                                   </div>
                                 )}
                                 <div className="bg-muted h-1.5 w-full overflow-hidden rounded-full">
-                                  <div
-                                    className="bg-primary h-full transition-all duration-300"
-                                    style={{ width: `${progress}%` }}
-                                  />
+                                  {isRowPending && (
+                                    <div className="bg-primary h-full w-1/4 animate-progress-indeterminate rounded-full" />
+                                  )}
+                                  {isRowDone && !isRowError && (
+                                    <div className="bg-primary h-full w-full transition-all duration-500 rounded-full" />
+                                  )}
+                                  {isRowError && (
+                                    <div className="bg-destructive h-full w-full rounded-full" />
+                                  )}
                                 </div>
                                 {rowLogMessage && (
-                                  <p className="text-muted-foreground line-clamp-2 text-xs">
-                                    {t('admin:feeds.logLabel')}: {rowLogMessage}
-                                  </p>
+                                  <div
+                                    className={`flex items-start gap-1 text-xs ${isRowError ? 'text-destructive' : 'text-muted-foreground'}`}
+                                  >
+                                    {isRowError && (
+                                      <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                                    )}
+                                    <p className="line-clamp-2">{rowLogMessage}</p>
+                                  </div>
                                 )}
                               </div>
                             )}

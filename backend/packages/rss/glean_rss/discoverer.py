@@ -153,4 +153,4 @@ async def fetch_feed(
                 if attempt == 0:
                     await asyncio.sleep(1)
 
-        raise ValueError(f"Failed to fetch feed: {last_error}") from last_error
+        raise ValueError(f"Failed to fetch feed: {last_error!r}") from last_error

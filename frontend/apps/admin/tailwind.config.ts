@@ -9,6 +9,15 @@ export default {
         sans: ['system-ui', 'sans-serif'],
         mono: ['ui-monospace', 'monospace'],
       },
+      animation: {
+        'progress-indeterminate': 'progress-indeterminate 1.4s ease-in-out infinite',
+      },
+      keyframes: {
+        'progress-indeterminate': {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(500%)' },
+        },
+      },
     },
   },
   plugins: [],
