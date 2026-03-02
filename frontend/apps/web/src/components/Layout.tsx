@@ -191,23 +191,18 @@ export function Layout() {
   const currentBookmarkFolderId = isBookmarksPage ? searchParams.get('folder') : undefined
   const currentBookmarkTagId = isBookmarksPage ? searchParams.get('tag') : undefined
 
-  // Fetch folders and tags on mount
+  // Refresh sidebar data when authenticated user changes.
+  // Do not depend on the full user object to avoid refetch storms when
+  // user settings are updated frequently (e.g. reader scroll position sync).
   useEffect(() => {
+    if (!user?.id) return
+
+    clearSubscriptionCache()
+    queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
     fetchFolders('feed')
     fetchFolders('bookmark')
     fetchTags()
-  }, [fetchFolders, fetchTags])
-
-  // Refresh all data when user logs in
-  useEffect(() => {
-    if (user) {
-      clearSubscriptionCache()
-      queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
-      fetchFolders('feed')
-      fetchFolders('bookmark')
-      fetchTags()
-    }
-  }, [user?.id, user, queryClient, fetchFolders, fetchTags])
+  }, [user?.id, queryClient, fetchFolders, fetchTags])
 
   // Handle sidebar resize
   useEffect(() => {
