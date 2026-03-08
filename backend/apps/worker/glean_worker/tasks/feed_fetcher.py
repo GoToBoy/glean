@@ -9,6 +9,7 @@ from typing import Any
 
 from arq import Retry
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import get_logger
@@ -167,16 +168,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             latest_entry_time = feed.last_entry_at
 
             for parsed_entry in parsed_feed.entries:
-                # Check if entry already exists
-                stmt = select(Entry).where(
-                    Entry.feed_id == feed.id, Entry.guid == parsed_entry.guid
-                )
-                result = await session.execute(stmt)
-                existing_entry = result.scalar_one_or_none()
-
-                if existing_entry:
-                    continue
-
                 # Determine content: fetch full text if feed only provides summary
                 entry_content = parsed_entry.content
                 if not parsed_entry.has_full_content and parsed_entry.url:
@@ -212,27 +203,36 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                             entry_content, base_url=parsed_entry.url
                         )
 
-                # Create new entry
-                entry = Entry(
-                    feed_id=feed.id,
-                    guid=parsed_entry.guid,
-                    url=parsed_entry.url,
-                    title=parsed_entry.title,
-                    author=parsed_entry.author,
-                    content=entry_content,
-                    summary=parsed_entry.summary,
-                    published_at=parsed_entry.published_at,
+                # Insert atomically to avoid duplicate-key failures under concurrent fetches.
+                insert_stmt = (
+                    pg_insert(Entry)
+                    .values(
+                        feed_id=feed.id,
+                        guid=parsed_entry.guid,
+                        url=parsed_entry.url,
+                        title=parsed_entry.title,
+                        author=parsed_entry.author,
+                        content=entry_content,
+                        summary=parsed_entry.summary,
+                        published_at=parsed_entry.published_at,
+                    )
+                    .on_conflict_do_nothing(index_elements=["feed_id", "guid"])
+                    .returning(Entry.id)
                 )
-                session.add(entry)
-                await session.flush()  # Get entry ID
+                insert_result = await session.execute(insert_stmt)
+                inserted_entry_id = insert_result.scalar_one_or_none()
+
+                if not inserted_entry_id:
+                    continue
+
                 new_entries += 1
 
                 # M3: Queue embedding task for new entry (only if vectorization enabled)
                 if await _is_vectorization_enabled(session):
-                    await ctx["redis"].enqueue_job("generate_entry_embedding", entry.id)
+                    await ctx["redis"].enqueue_job("generate_entry_embedding", inserted_entry_id)
                     logger.debug(
                         "Queued embedding task for entry",
-                        extra={"feed_id": feed_id, "entry_id": entry.id},
+                        extra={"feed_id": feed_id, "entry_id": inserted_entry_id},
                     )
 
                 # Track latest entry time
