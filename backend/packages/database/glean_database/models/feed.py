@@ -7,7 +7,7 @@ This module defines the Feed model for storing RSS feed information.
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_uuid
@@ -68,7 +68,7 @@ class Feed(Base, TimestampMixin):
         String(20), default=FeedStatus.ACTIVE, nullable=False
     )
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    fetch_error_message: Mapped[str | None] = mapped_column(String(1000))
+    fetch_error_message: Mapped[str | None] = mapped_column(Text)
     last_fetch_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_fetch_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

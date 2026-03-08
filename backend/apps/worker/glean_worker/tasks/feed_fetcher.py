@@ -88,6 +88,11 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                             "Feed not modified (304)",
                             extra={"feed_id": feed_id, "url": attempt_url},
                         )
+                        # 304 means the feed was fetched successfully and unchanged.
+                        # Clear previous fetch error state so admin "error" list is accurate.
+                        feed.status = FeedStatus.ACTIVE
+                        feed.error_count = 0
+                        feed.fetch_error_message = None
                         feed.last_fetch_attempt_at = fetch_attempt_at
                         feed.last_fetch_success_at = fetch_attempt_at
                         feed.last_fetched_at = fetch_attempt_at
