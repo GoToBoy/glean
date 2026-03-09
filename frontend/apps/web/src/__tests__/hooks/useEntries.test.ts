@@ -62,7 +62,10 @@ describe('useEntries', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.data).toEqual(response)
-    expect(entryService.getEntries).toHaveBeenCalledWith({ feed_id: 'f1' })
+    expect(entryService.getEntries).toHaveBeenCalledWith(
+      { feed_id: 'f1' },
+      expect.objectContaining({ signal: expect.any(Object) })
+    )
   })
 
   it('should fetch entries without filters', async () => {
@@ -79,7 +82,10 @@ describe('useEntries', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
-    expect(entryService.getEntries).toHaveBeenCalledWith(undefined)
+    expect(entryService.getEntries).toHaveBeenCalledWith(
+      undefined,
+      expect.objectContaining({ signal: expect.any(Object) })
+    )
   })
 })
 
@@ -98,6 +104,10 @@ describe('useEntry', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.data).toEqual(entry)
+    expect(entryService.getEntry).toHaveBeenCalledWith(
+      'e1',
+      expect.objectContaining({ signal: expect.any(Object) })
+    )
   })
 
   it('should not fetch when entryId is empty', () => {

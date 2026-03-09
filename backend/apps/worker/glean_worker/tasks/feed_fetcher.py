@@ -28,6 +28,18 @@ def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
     return "uq_feed_guid" in str(error.orig)
 
 
+def _is_duplicate_feed_guid_exception(error: Exception) -> bool:
+    """Return True when exception text indicates entries(feed_id,guid) duplicate violation."""
+    error_text = str(error)
+    return "uq_feed_guid" in error_text and "duplicate key value" in error_text
+
+
+def _is_entries_url_index_corrupted(error: Exception) -> bool:
+    """Return True when PostgreSQL reports ix_entries_url index corruption."""
+    error_text = str(error)
+    return "IndexCorruptedError" in error_text and 'index "ix_entries_url"' in error_text
+
+
 async def _is_vectorization_enabled(session: AsyncSession) -> bool:
     """Check if vectorization is enabled and healthy."""
     config_service = TypedConfigService(session)
@@ -303,10 +315,40 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
             if feed:
                 fetch_attempt_at = datetime.now(UTC)
-                feed.error_count += 1
-                feed.fetch_error_message = str(e)
                 feed.last_fetch_attempt_at = fetch_attempt_at
                 feed.last_fetched_at = fetch_attempt_at
+
+                # Duplicate guid is a benign idempotency race/path issue; do not count as feed failure.
+                if _is_duplicate_feed_guid_exception(e):
+                    logger.warning(
+                        "Duplicate guid surfaced at task boundary, treating as non-fatal",
+                        extra={"feed_id": feed_id},
+                    )
+                    feed.status = FeedStatus.ACTIVE
+                    feed.error_count = 0
+                    feed.fetch_error_message = None
+                    feed.last_fetch_success_at = fetch_attempt_at
+                    feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    await session.commit()
+                    return {"status": "success", "feed_id": feed_id, "new_entries": 0, "total_entries": 0}
+
+                # DB index corruption is an infrastructure incident, not a per-feed content failure.
+                # Keep feed enabled and avoid incrementing error_count to prevent false disablement.
+                if _is_entries_url_index_corrupted(e):
+                    logger.error(
+                        "Detected ix_entries_url corruption; preserving feed status",
+                        extra={"feed_id": feed_id},
+                    )
+                    feed.status = FeedStatus.ACTIVE
+                    feed.fetch_error_message = (
+                        "Database index ix_entries_url is corrupted. Run REINDEX INDEX CONCURRENTLY ix_entries_url."
+                    )
+                    feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    await session.commit()
+                    return {"status": "error", "message": "database_index_corrupted"}
+
+                feed.error_count += 1
+                feed.fetch_error_message = str(e)
 
                 # Disable feed after 10 consecutive errors
                 if feed.error_count >= 10:

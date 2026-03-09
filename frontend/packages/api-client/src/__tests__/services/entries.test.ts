@@ -18,7 +18,7 @@ describe('EntryService', () => {
 
     const result = await service.getEntries()
 
-    expect(mockClient.get).toHaveBeenCalledWith('/entries', { params: undefined })
+    expect(mockClient.get).toHaveBeenCalledWith('/entries', { params: undefined, signal: undefined })
     expect(result).toEqual(response)
   })
 
@@ -29,7 +29,7 @@ describe('EntryService', () => {
     const params = { feed_id: 'f1', is_read: false, page: 1, per_page: 20 }
     const result = await service.getEntries(params)
 
-    expect(mockClient.get).toHaveBeenCalledWith('/entries', { params })
+    expect(mockClient.get).toHaveBeenCalledWith('/entries', { params, signal: undefined })
     expect(result).toEqual(response)
   })
 
@@ -38,7 +38,10 @@ describe('EntryService', () => {
 
     await service.getEntries({ view: 'smart' })
 
-    expect(mockClient.get).toHaveBeenCalledWith('/entries', { params: { view: 'smart' } })
+    expect(mockClient.get).toHaveBeenCalledWith('/entries', {
+      params: { view: 'smart' },
+      signal: undefined,
+    })
   })
 
   it('should get a single entry', async () => {
@@ -47,7 +50,7 @@ describe('EntryService', () => {
 
     const result = await service.getEntry('e1')
 
-    expect(mockClient.get).toHaveBeenCalledWith('/entries/e1')
+    expect(mockClient.get).toHaveBeenCalledWith('/entries/e1', { signal: undefined })
     expect(result).toEqual(entry)
   })
 

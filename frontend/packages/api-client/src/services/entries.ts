@@ -31,15 +31,15 @@ export class EntryService {
     page?: number
     per_page?: number
     view?: 'timeline' | 'smart'
-  }): Promise<EntryListResponse> {
-    return this.client.get<EntryListResponse>('/entries', { params })
+  }, options?: { signal?: AbortSignal }): Promise<EntryListResponse> {
+    return this.client.get<EntryListResponse>('/entries', { params, signal: options?.signal })
   }
 
   /**
    * Get a specific entry.
    */
-  async getEntry(entryId: string): Promise<EntryWithState> {
-    return this.client.get<EntryWithState>(`/entries/${entryId}`)
+  async getEntry(entryId: string, options?: { signal?: AbortSignal }): Promise<EntryWithState> {
+    return this.client.get<EntryWithState>(`/entries/${entryId}`, { signal: options?.signal })
   }
 
   /**

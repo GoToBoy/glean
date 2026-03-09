@@ -1,4 +1,5 @@
 import axios, {
+  type GenericAbortSignal,
   type AxiosInstance,
   type AxiosRequestConfig,
   type InternalAxiosRequestConfig,
@@ -21,6 +22,7 @@ import { logger } from '@glean/logger'
 export class ApiClient {
   private client: AxiosInstance
   private isRefreshing = false
+  private readonly maxRateLimitRetries = 2
   private failedQueue: Array<{
     resolve: (token: string) => void
     reject: (error: unknown) => void
@@ -88,12 +90,30 @@ export class ApiClient {
         return response
       },
       async (error) => {
-        const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean }
+        const originalRequest = error.config as InternalAxiosRequestConfig & {
+          _retry?: boolean
+          _rateLimitRetryCount?: number
+        }
 
         // Log error (but not for 304 Not Modified, which is a normal caching response)
         const status = error.response?.status
         if (status !== 304) {
           logger.error(`API Error: ${status || 'Network Error'} ${originalRequest?.url}`, error)
+        }
+
+        // Handle 429 with bounded retry for idempotent GET requests.
+        if (status === 429 && originalRequest?.method?.toUpperCase() === 'GET') {
+          const retryCount = originalRequest._rateLimitRetryCount ?? 0
+          if (retryCount < this.maxRateLimitRetries) {
+            const retryAfterHeader = error.response?.headers?.['retry-after']
+            const delayMs = this.getRateLimitDelayMs(retryAfterHeader, retryCount)
+            originalRequest._rateLimitRetryCount = retryCount + 1
+            logger.warn(
+              `Rate limited on ${originalRequest.url}; retry ${retryCount + 1}/${this.maxRateLimitRetries} in ${delayMs}ms`
+            )
+            await this.sleep(delayMs, originalRequest.signal)
+            return this.client(originalRequest)
+          }
         }
 
         // If error is not 401 or request already retried, reject
@@ -251,6 +271,44 @@ export class ApiClient {
       }
     })
     this.failedQueue = []
+  }
+
+  private getRateLimitDelayMs(retryAfterHeader: unknown, retryCount: number): number {
+    const fallback = Math.min(5000, 800 * 2 ** retryCount)
+    if (typeof retryAfterHeader !== 'string' || !retryAfterHeader.trim()) return fallback
+
+    const seconds = Number(retryAfterHeader)
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      return Math.max(0, Math.round(seconds * 1000))
+    }
+
+    const retryAt = Date.parse(retryAfterHeader)
+    if (Number.isFinite(retryAt)) {
+      return Math.max(0, retryAt - Date.now())
+    }
+
+    return fallback
+  }
+
+  private sleep(ms: number, signal?: GenericAbortSignal): Promise<void> {
+    if (signal?.aborted) {
+      return Promise.reject(new Error('Request aborted'))
+    }
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        signal?.removeEventListener?.('abort', onAbort)
+        resolve()
+      }, ms)
+
+      const onAbort = () => {
+        clearTimeout(timer)
+        signal?.removeEventListener?.('abort', onAbort)
+        reject(new Error('Request aborted'))
+      }
+
+      signal?.addEventListener?.('abort', onAbort, { once: true })
+    })
   }
 
   /**
