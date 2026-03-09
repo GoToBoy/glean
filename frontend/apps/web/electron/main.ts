@@ -28,15 +28,16 @@ function isValidApiUrl(url: string): boolean {
   }
 }
 
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
+const DEV_MOCK_API_URL = 'http://192.168.31.19:8800'
+
 const store = new Store<StoreType>({
   defaults: {
-    apiUrl: 'http://localhost:8000',
+    apiUrl: isDev ? DEV_MOCK_API_URL : 'http://localhost:8000',
   },
 })
 
 let mainWindow: BrowserWindow | null = null
-
-const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged
 
 // Auto-updater configuration
 autoUpdater.autoDownload = false

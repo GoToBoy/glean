@@ -13,6 +13,7 @@ vi.mock('@glean/api-client', () => ({
 
 import {
   entryKeys,
+  getInfiniteEntriesQueryOptions,
   useEntries,
   useEntry,
   useUpdateEntryState,
@@ -36,6 +37,13 @@ describe('entryKeys', () => {
 
   it('should generate correct detail key', () => {
     expect(entryKeys.detail('e1')).toEqual(['entries', 'detail', 'e1'])
+  })
+})
+
+describe('getInfiniteEntriesQueryOptions', () => {
+  it('does not cap pages with maxPages so long scrolling keeps prior items', () => {
+    const options = getInfiniteEntriesQueryOptions({ view: 'timeline' })
+    expect(options.maxPages).toBeUndefined()
   })
 })
 

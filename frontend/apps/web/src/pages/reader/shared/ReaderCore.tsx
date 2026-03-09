@@ -34,11 +34,28 @@ const RESUME_PERSIST_DEBOUNCE_MS = 1500
 const RESUME_PERSIST_MIN_INTERVAL_MS = 15000
 const RESUME_PERSIST_MIN_INDEX_DELTA = 5
 
+export function calculateVirtualWindow(params: {
+  totalCount: number
+  scrollTop: number
+  viewportHeight: number
+  rowHeight: number
+  overscan: number
+}) {
+  const { totalCount, scrollTop, viewportHeight, rowHeight, overscan } = params
+  const visibleCount = Math.ceil(viewportHeight / rowHeight)
+  const rawStartIndex = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan)
+  const windowSize = visibleCount + overscan * 2
+  const maxStartIndex = Math.max(0, totalCount - windowSize)
+  const startIndex = Math.min(rawStartIndex, maxStartIndex)
+  const endIndex = Math.min(totalCount, startIndex + windowSize)
+  return { startIndex, endIndex, visibleCount, windowSize }
+}
+
 /**
  * Reader page.
  *
  * Main reading interface with entry list, filters, and reading pane.
- */
+*/
 export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { t } = useTranslation('reader')
   const queryClient = useQueryClient()
@@ -296,15 +313,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
 
     const viewportHeight = listViewportHeight > 0 ? listViewportHeight : 720
-    const visibleCount = Math.ceil(viewportHeight / ENTRY_ROW_ESTIMATED_HEIGHT)
-    const startIndex = Math.max(
-      0,
-      Math.floor(listScrollTop / ENTRY_ROW_ESTIMATED_HEIGHT) - VIRTUALIZATION_OVERSCAN
-    )
-    const endIndex = Math.min(
-      visibleEntries.length,
-      startIndex + visibleCount + VIRTUALIZATION_OVERSCAN * 2
-    )
+    const { startIndex, endIndex } = calculateVirtualWindow({
+      totalCount: visibleEntries.length,
+      scrollTop: listScrollTop,
+      viewportHeight,
+      rowHeight: ENTRY_ROW_ESTIMATED_HEIGHT,
+      overscan: VIRTUALIZATION_OVERSCAN,
+    })
 
     return {
       startIndex,
@@ -512,13 +527,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     const onScroll = () => {
       const currentScrollTop = container.scrollTop
       setListScrollTop(currentScrollTop)
-
-      if (hasNextPage && !isFetchingNextPage) {
-        const remaining = container.scrollHeight - container.scrollTop - container.clientHeight
-        if (remaining < 480) {
-          fetchNextPage()
-        }
-      }
       if (currentScrollTop <= 4) {
         setNewEntriesAboveCount((prev) => (prev > 0 ? 0 : prev))
       }
@@ -539,11 +547,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       container.removeEventListener('scroll', onScroll)
     }
   }, [
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
     isLoading,
-    entryIndexById,
     listTrackingScopeKey,
     schedulePersistAnchor,
     flushPersistAnchor,

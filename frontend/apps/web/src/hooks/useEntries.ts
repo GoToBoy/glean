@@ -43,7 +43,6 @@ export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
     initialPageParam: 1,
     staleTime: 45 * 1000,
     gcTime: 30 * 60 * 1000,
-    maxPages: 30,
     refetchOnWindowFocus: false,
   }
 }

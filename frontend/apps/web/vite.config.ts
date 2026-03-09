@@ -33,6 +33,7 @@ const appVersion = getAppVersion()
 
 export default defineConfig(({ mode }) => {
   const isElectron = mode === 'electron'
+  const devApiTarget = process.env.VITE_DEV_API_TARGET || 'http://192.168.31.19:8800'
 
   return {
     define: {
@@ -68,7 +69,7 @@ export default defineConfig(({ mode }) => {
       proxy: {
         // Proxy API requests to backend server (for web mode)
         '/api': {
-          target: 'http://localhost:8000',
+          target: devApiTarget,
           changeOrigin: true,
         },
       },
