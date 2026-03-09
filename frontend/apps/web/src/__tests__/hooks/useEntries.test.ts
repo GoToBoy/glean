@@ -43,7 +43,7 @@ describe('entryKeys', () => {
 describe('getInfiniteEntriesQueryOptions', () => {
   it('does not cap pages with maxPages so long scrolling keeps prior items', () => {
     const options = getInfiniteEntriesQueryOptions({ view: 'timeline' })
-    expect(options.maxPages).toBeUndefined()
+    expect('maxPages' in options).toBe(false)
   })
 })
 
