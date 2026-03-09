@@ -10,6 +10,7 @@ from typing import Any
 from arq import Retry
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import get_logger
@@ -20,6 +21,11 @@ from glean_database.session import get_session_context
 from glean_rss import fetch_and_extract_fulltext, fetch_feed, parse_feed, postprocess_html
 
 logger = get_logger(__name__)
+
+
+def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
+    """Return True when IntegrityError is the entries(feed_id,guid) unique violation."""
+    return "uq_feed_guid" in str(error.orig)
 
 
 async def _is_vectorization_enabled(session: AsyncSession) -> bool:
@@ -166,8 +172,19 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             # Process entries
             new_entries = 0
             latest_entry_time = feed.last_entry_at
+            seen_guids: set[str] = set()
 
             for parsed_entry in parsed_feed.entries:
+                guid = (parsed_entry.guid or "").strip()
+                if guid:
+                    if guid in seen_guids:
+                        logger.debug(
+                            "Skipping duplicate guid in feed payload",
+                            extra={"feed_id": feed_id, "guid": guid},
+                        )
+                        continue
+                    seen_guids.add(guid)
+
                 # Determine content: fetch full text if feed only provides summary
                 entry_content = parsed_entry.content
                 if not parsed_entry.has_full_content and parsed_entry.url:
@@ -208,7 +225,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                     pg_insert(Entry)
                     .values(
                         feed_id=feed.id,
-                        guid=parsed_entry.guid,
+                        guid=guid,
                         url=parsed_entry.url,
                         title=parsed_entry.title,
                         author=parsed_entry.author,
@@ -216,10 +233,19 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         summary=parsed_entry.summary,
                         published_at=parsed_entry.published_at,
                     )
-                    .on_conflict_do_nothing(index_elements=["feed_id", "guid"])
+                    .on_conflict_do_nothing(constraint="uq_feed_guid")
                     .returning(Entry.id)
                 )
-                insert_result = await session.execute(insert_stmt)
+                try:
+                    insert_result = await session.execute(insert_stmt)
+                except IntegrityError as insert_error:
+                    if _is_duplicate_feed_guid_error(insert_error):
+                        logger.debug(
+                            "Skipping duplicate entry due to guid unique constraint",
+                            extra={"feed_id": feed_id, "guid": guid},
+                        )
+                        continue
+                    raise
                 inserted_entry_id = insert_result.scalar_one_or_none()
 
                 if not inserted_entry_id:
