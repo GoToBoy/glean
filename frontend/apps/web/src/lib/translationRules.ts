@@ -32,6 +32,12 @@ const STRUCTURED_BLOCK_TAGS = new Set([
   'DD',
 ])
 
+function hasStructuredDescendant(el: Element): boolean {
+  return Array.from(el.querySelectorAll('*')).some((child) =>
+    STRUCTURED_BLOCK_TAGS.has(child.tagName),
+  )
+}
+
 export function hasSkipAncestor(el: Element): boolean {
   let current = el.parentElement
   while (current) {
@@ -51,6 +57,10 @@ export function collectTranslatableBlocks(
     const elements = root.querySelectorAll(tagName.toLowerCase())
     elements.forEach((el) => {
       if (el.tagName === 'ARTICLE' && el.children.length > 0) return
+      // Avoid overlapping translation ranges:
+      // when <blockquote> contains paragraph/list blocks, translating both parent and
+      // children causes repeated bilingual insertion on re-activation.
+      if (el.tagName === 'BLOCKQUOTE' && hasStructuredDescendant(el)) return
       if (el.tagName === 'PRE') {
         const preClass = classifyPreElement(el)
         if (preClass === 'code') return
