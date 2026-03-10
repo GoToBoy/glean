@@ -248,9 +248,9 @@ async def discover_feed_url(
             data.rsshub_path,
         )
 
-        # Immediately enqueue feed fetch task only if feed has never been fetched
-        if subscription.feed.last_fetched_at is None:
-            await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+        # Always enqueue one fetch for each new subscription so first-time subscribers
+        # can sync current feed entries even when the shared feed was fetched before.
+        await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
 
         return subscription
     except ValueError as e:
@@ -597,9 +597,8 @@ async def import_opml(
                     desired_title_by_url[feed_url],
                     folder_id,
                 )
-                # Immediately enqueue feed fetch task only if feed has never been fetched
-                if subscription.feed.last_fetched_at is None:
-                    await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+                # Same behavior as single subscribe: enqueue one fetch per new subscription.
+                await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
                 success_count += 1
             except ValueError:
                 # Invalid feed or other create failure
