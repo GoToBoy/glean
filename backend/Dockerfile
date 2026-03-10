@@ -7,6 +7,8 @@ FROM python:3.12-slim
 ARG TARGETPLATFORM
 ARG BUILDPLATFORM
 ARG APP_VERSION=dev
+ARG APT_MIRROR=deb.debian.org
+ARG UV_INDEX_URL=https://pypi.org/simple
 
 # Set version as environment variable
 ENV APP_VERSION=${APP_VERSION}
@@ -15,7 +17,10 @@ ENV APP_VERSION=${APP_VERSION}
 WORKDIR /app
 
 # Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Allow overriding Debian mirror for faster regional builds.
+RUN (sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list || true) \
+    && (sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRROR}|g" /etc/apt/sources.list.d/*.sources || true) \
+    && apt-get update && apt-get install -y \
     curl \
     openssl \
     && rm -rf /var/lib/apt/lists/*
@@ -25,6 +30,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Keep uv artifacts across builds to avoid re-downloading large wheels.
 ENV UV_CACHE_DIR=/root/.cache/uv
+ENV UV_INDEX_URL=${UV_INDEX_URL}
 
 # Copy dependency declarations first (changes less often → better cache)
 COPY pyproject.toml uv.lock ./

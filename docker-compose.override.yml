@@ -18,7 +18,11 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-mirrors.tuna.tsinghua.edu.cn}
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     image: glean-backend:local
+    pull_policy: never
     ports:
       - "8000:8000"
 
@@ -26,13 +30,18 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      args:
+        APT_MIRROR: ${APT_MIRROR:-mirrors.tuna.tsinghua.edu.cn}
+        UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     image: glean-backend:local
+    pull_policy: never
 
   admin:
     build:
       context: ./frontend
       dockerfile: apps/admin/Dockerfile
     image: glean-admin:local
+    pull_policy: never
 
 volumes:
   postgres_test_data:

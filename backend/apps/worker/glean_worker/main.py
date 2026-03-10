@@ -54,6 +54,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     init_database(settings.database_url)
     logger.info("Database initialized")
     logger.info("Vector storage: pgvector (uses existing PostgreSQL database)")
+    logger.info(f"Worker job timeout: {settings.worker_job_timeout_seconds}s")
 
     # Store Redis client for distributed locks (arq provides it via ctx['redis'])
     logger.info("Redis client available for distributed locks")
@@ -141,5 +142,5 @@ class WorkerSettings:
 
     # Worker settings
     max_jobs = 20
-    job_timeout = 300
+    job_timeout = settings.worker_job_timeout_seconds
     keep_result = 3600

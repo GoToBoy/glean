@@ -45,10 +45,12 @@ function groupByDesiredCount(parts: string[], desiredCount: number): string[] {
     const part = parts[i]
     const remainingParts = parts.length - i
     const remainingGroups = desiredCount - grouped.length
+    const mustFlushForRemainingGroups = current.length > 0 && remainingParts < remainingGroups
     const shouldFlush =
-      current.length > 0 &&
-      currentLength + part.length > targetLength &&
-      remainingParts >= remainingGroups - 1
+      mustFlushForRemainingGroups ||
+      (current.length > 0 &&
+        currentLength + part.length > targetLength &&
+        remainingParts >= remainingGroups)
 
     if (shouldFlush) {
       grouped.push(joinSentencesForParagraph(current))

@@ -4,6 +4,7 @@ Feed fetcher tasks.
 Background tasks for fetching and parsing RSS feeds.
 """
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -21,6 +22,8 @@ from glean_database.session import get_session_context
 from glean_rss import fetch_and_extract_fulltext, fetch_feed, parse_feed, postprocess_html
 
 logger = get_logger(__name__)
+MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
+ENTRY_COMMIT_BATCH_SIZE = 20
 
 
 def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
@@ -38,6 +41,14 @@ def _is_entries_url_index_corrupted(error: Exception) -> bool:
     """Return True when PostgreSQL reports ix_entries_url index corruption."""
     error_text = str(error)
     return "IndexCorruptedError" in error_text and 'index "ix_entries_url"' in error_text
+
+
+def _truncate_feed_error_message(message: str, max_length: int = MAX_FEED_ERROR_MESSAGE_LENGTH) -> str:
+    """Truncate long error messages to fit feeds.fetch_error_message column."""
+    if len(message) <= max_length:
+        return message
+    suffix = "... [truncated]"
+    return f"{message[: max_length - len(suffix)]}{suffix}"
 
 
 async def _is_vectorization_enabled(session: AsyncSession) -> bool:
@@ -74,6 +85,10 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             if not feed:
                 logger.error("Feed not found", extra={"feed_id": feed_id})
                 return {"status": "error", "message": "Feed not found"}
+
+            # Persist attempt timestamp early so long-running first syncs are visible in UI.
+            feed.last_fetch_attempt_at = fetch_attempt_at
+            await session.commit()
 
             logger.info("Fetching feed", extra={"feed_id": feed_id, "url": feed.url})
 
@@ -185,6 +200,8 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             new_entries = 0
             latest_entry_time = feed.last_entry_at
             seen_guids: set[str] = set()
+            pending_inserts_since_commit = 0
+            vectorization_enabled = await _is_vectorization_enabled(session)
 
             for parsed_entry in parsed_feed.entries:
                 guid = (parsed_entry.guid or "").strip()
@@ -264,9 +281,10 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                     continue
 
                 new_entries += 1
+                pending_inserts_since_commit += 1
 
                 # M3: Queue embedding task for new entry (only if vectorization enabled)
-                if await _is_vectorization_enabled(session):
+                if vectorization_enabled:
                     await ctx["redis"].enqueue_job("generate_entry_embedding", inserted_entry_id)
                     logger.debug(
                         "Queued embedding task for entry",
@@ -278,6 +296,10 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                     latest_entry_time is None or parsed_entry.published_at > latest_entry_time
                 ):
                     latest_entry_time = parsed_entry.published_at
+
+                if pending_inserts_since_commit >= ENTRY_COMMIT_BATCH_SIZE:
+                    await session.commit()
+                    pending_inserts_since_commit = 0
 
             # Update last_entry_at and schedule next fetch
             if latest_entry_time:
@@ -302,10 +324,21 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 "total_entries": len(parsed_feed.entries),
             }
 
+        except asyncio.CancelledError:
+            # arq cancels the task when job_timeout is reached.
+            # Log an explicit UTC timestamp to make timeout incidents easier to trace.
+            logger.error(
+                "Feed fetch cancelled (likely job timeout)",
+                extra={
+                    "feed_id": feed_id,
+                    "cancelled_at_utc": datetime.now(UTC).isoformat(),
+                },
+            )
+            raise
         except Exception as e:
             logger.exception(
                 "Failed to fetch feed",
-                extra={"feed_id": feed_id},
+                extra={"feed_id": feed_id, "failed_at_utc": datetime.now(UTC).isoformat()},
             )
             await session.rollback()
             # Update feed error status
@@ -348,7 +381,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                     return {"status": "error", "message": "database_index_corrupted"}
 
                 feed.error_count += 1
-                feed.fetch_error_message = str(e)
+                feed.fetch_error_message = _truncate_feed_error_message(str(e))
 
                 # Disable feed after 10 consecutive errors
                 if feed.error_count >= 10:

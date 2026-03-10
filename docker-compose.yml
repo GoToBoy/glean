@@ -17,7 +17,7 @@
 
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
     container_name: glean-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-glean}
@@ -110,6 +110,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
       MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
+      WORKER_JOB_TIMEOUT_SECONDS: ${WORKER_JOB_TIMEOUT_SECONDS:-1800}
       # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: ${WORKER_LOG_FILE:-/app/logs/glean-worker.log}
