@@ -622,6 +622,9 @@ export default function FeedsPage() {
                     const isRowDone =
                       refreshState?.status === 'complete' || refreshState?.status === 'not_found'
                     const isRowPending = !!refreshState && isPendingRefreshStatus(refreshState.status)
+                    const effectiveLastFetchDisplayAt =
+                      effectiveLastFetchAttemptAt ??
+                      (isRowPending ? refreshState?.updatedAt ?? null : null)
                     const statusLabelMap: Record<string, string> = {
                       queued: t('admin:feeds.refreshStatus.queued'),
                       deferred: t('admin:feeds.refreshStatus.deferred'),
@@ -732,8 +735,8 @@ export default function FeedsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-muted-foreground text-sm">
-                          {effectiveLastFetchAttemptAt
-                            ? format(new Date(effectiveLastFetchAttemptAt), 'MMM d, yyyy HH:mm')
+                          {effectiveLastFetchDisplayAt
+                            ? format(new Date(effectiveLastFetchDisplayAt), 'MMM d, yyyy HH:mm')
                             : t('admin:feeds.neverFetched')}
                         </p>
                       </td>

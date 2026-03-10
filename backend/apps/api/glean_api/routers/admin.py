@@ -611,6 +611,7 @@ async def refresh_feed_now(
     current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
     admin_service: Annotated[AdminService, Depends(get_admin_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str]:
     """Manually enqueue a refresh task for one feed."""
     feed = await admin_service.get_feed(feed_id)
@@ -622,6 +623,10 @@ async def refresh_feed_now(
         feed_id=feed_id,
         feed_title=feed.get("title") or feed.get("url") or feed_id,
     )
+    db_feed = await session.get(Feed, feed_id)
+    if db_feed:
+        db_feed.last_fetch_attempt_at = datetime.now(UTC)
+        await session.commit()
     return {"status": "queued", **job_payload}
 
 
@@ -637,12 +642,21 @@ async def refresh_all_feeds_now(
     feeds = list(result.scalars().all())
 
     jobs: list[dict[str, str]] = []
+    queued_feed_ids: set[str] = set()
     for feed in feeds:
         jobs.append(
             await enqueue_feed_refresh_job(
                 redis=redis, feed_id=feed.id, feed_title=feed.title or feed.url
             )
         )
+        queued_feed_ids.add(feed.id)
+
+    if queued_feed_ids:
+        attempt_at = datetime.now(UTC)
+        for feed in feeds:
+            if feed.id in queued_feed_ids:
+                feed.last_fetch_attempt_at = attempt_at
+        await session.commit()
 
     return {"status": "queued", "queued_count": len(jobs), "jobs": jobs}
 
@@ -660,12 +674,21 @@ async def refresh_errored_feeds_now(
     feeds = list(result.scalars().all())
 
     jobs: list[dict[str, str]] = []
+    queued_feed_ids: set[str] = set()
     for feed in feeds:
         jobs.append(
             await enqueue_feed_refresh_job(
                 redis=redis, feed_id=feed.id, feed_title=feed.title or feed.url
             )
         )
+        queued_feed_ids.add(feed.id)
+
+    if queued_feed_ids:
+        attempt_at = datetime.now(UTC)
+        for feed in feeds:
+            if feed.id in queued_feed_ids:
+                feed.last_fetch_attempt_at = attempt_at
+        await session.commit()
 
     return {"status": "queued", "queued_count": len(jobs), "jobs": jobs}
 

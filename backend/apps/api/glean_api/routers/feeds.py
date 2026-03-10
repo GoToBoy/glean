@@ -5,6 +5,7 @@ Provides endpoints for feed discovery, subscription management, and OPML import/
 """
 
 import logging
+from datetime import UTC, datetime
 from uuid import UUID
 from typing import Annotated
 
@@ -12,6 +13,7 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas import (
     BatchDeleteSubscriptionsRequest,
@@ -28,10 +30,16 @@ from glean_core.schemas import (
 from glean_core.services import FeedService, FolderService, RSSHubService
 from glean_core.services.feed_service import UNSET
 from glean_database.models import Feed, Subscription
+from glean_database.session import get_session
 from glean_rss import discover_feed, fetch_feed, generate_opml, parse_feed, parse_opml_with_folders
 
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
-from ..dependencies import get_current_user, get_feed_service, get_folder_service, get_redis_pool
+from ..dependencies import (
+    get_current_user,
+    get_feed_service,
+    get_folder_service,
+    get_redis_pool,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -386,6 +394,7 @@ async def refresh_feed(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, str | int]:
     """
     Manually trigger a feed refresh.
@@ -409,6 +418,10 @@ async def refresh_feed(
             feed_id=subscription.feed.id,
             feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
         )
+        feed = await session.get(Feed, subscription.feed.id)
+        if feed:
+            feed.last_fetch_attempt_at = datetime.now(UTC)
+            await session.commit()
         return {"status": "queued", **job_payload}
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
@@ -419,6 +432,7 @@ async def refresh_all_feeds(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, int | str | list[dict[str, str]]]:
     """
     Manually trigger a refresh for all user's subscribed feeds.
@@ -434,6 +448,7 @@ async def refresh_all_feeds(
     subscriptions = await feed_service.get_user_subscriptions(current_user.id)
     queued_count = 0
     jobs: list[dict[str, str]] = []
+    queued_feed_ids: set[str] = set()
 
     for subscription in subscriptions:
         jobs.append(
@@ -445,6 +460,14 @@ async def refresh_all_feeds(
             )
         )
         queued_count += 1
+        queued_feed_ids.add(subscription.feed.id)
+
+    if queued_feed_ids:
+        attempt_at = datetime.now(UTC)
+        result = await session.execute(select(Feed).where(Feed.id.in_(queued_feed_ids)))
+        for feed in result.scalars().all():
+            feed.last_fetch_attempt_at = attempt_at
+        await session.commit()
 
     return {"status": "queued", "queued_count": queued_count, "jobs": jobs}
 
