@@ -17,27 +17,6 @@ export const TRANSLATABLE_BLOCKS = new Set([
 
 export const SKIP_TAGS = new Set(['CODE', 'PRE', 'SCRIPT', 'STYLE', 'KBD', 'SAMP'])
 
-const STRUCTURED_BLOCK_TAGS = new Set([
-  'P',
-  'H1',
-  'H2',
-  'H3',
-  'H4',
-  'H5',
-  'H6',
-  'LI',
-  'BLOCKQUOTE',
-  'FIGCAPTION',
-  'DT',
-  'DD',
-])
-
-function hasStructuredDescendant(el: Element): boolean {
-  return Array.from(el.querySelectorAll('*')).some((child) =>
-    STRUCTURED_BLOCK_TAGS.has(child.tagName),
-  )
-}
-
 export function hasSkipAncestor(el: Element): boolean {
   let current = el.parentElement
   while (current) {
@@ -57,10 +36,6 @@ export function collectTranslatableBlocks(
     const elements = root.querySelectorAll(tagName.toLowerCase())
     elements.forEach((el) => {
       if (el.tagName === 'ARTICLE' && el.children.length > 0) return
-      // Avoid overlapping translation ranges:
-      // when <blockquote> contains paragraph/list blocks, translating both parent and
-      // children causes repeated bilingual insertion on re-activation.
-      if (el.tagName === 'BLOCKQUOTE' && hasStructuredDescendant(el)) return
       if (el.tagName === 'PRE') {
         const preClass = classifyPreElement(el)
         if (preClass === 'code') return
@@ -71,19 +46,23 @@ export function collectTranslatableBlocks(
       }
     })
   }
-  return blocks
+
+  // Keep only leaf-most translatable blocks. This prevents parent/child overlap
+  // (e.g. blockquote + p, li + p) from being translated twice.
+  const uniqueBlocks = Array.from(new Set(blocks))
+  return uniqueBlocks.filter(
+    (el) => !uniqueBlocks.some((other) => other !== el && el.contains(other)),
+  )
 }
 
 export function normalizeLooseTextNodes(root: HTMLElement, originalHtmlAttr: string): void {
-  const containers = [root, ...Array.from(root.querySelectorAll('div, article, section'))]
+  const containers = [
+    root,
+    ...Array.from(root.querySelectorAll('div, article, section, blockquote, li, dt, dd, figcaption')),
+  ]
 
   for (const container of containers) {
     if (hasSkipAncestor(container)) continue
-
-    const hasStructuredDirectChild = Array.from(container.children).some((child) =>
-      STRUCTURED_BLOCK_TAGS.has(child.tagName),
-    )
-    if (hasStructuredDirectChild) continue
 
     const directNodes = Array.from(container.childNodes)
     const hasLooseText = directNodes.some(
