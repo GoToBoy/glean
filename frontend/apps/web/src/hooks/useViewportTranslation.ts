@@ -78,6 +78,8 @@ export function useViewportTranslation({
   const observerRef = useRef<IntersectionObserver | null>(null)
   // Track active state in ref for use inside observer callback
   const isActiveRef = useRef(false)
+  // Monotonic session version to drop stale async translation writes.
+  const sessionVersionRef = useRef(0)
   const sessionCacheKey = getSessionCacheKey(entryId, targetLanguage ?? 'disabled')
 
   /**
@@ -87,6 +89,7 @@ export function useViewportTranslation({
     async (blocks: Element[]) => {
       // Filter out already-processed or currently-pending blocks
       if (!targetLanguage) return
+      const runVersion = sessionVersionRef.current
       const toTranslate = blocks.filter(
         (b) => !b.hasAttribute(PROCESSED_ATTR) && !pendingBlocksRef.current.has(b),
       )
@@ -128,6 +131,11 @@ export function useViewportTranslation({
             'auto',
             entryId,
           )
+          if (!isActiveRef.current || runVersion !== sessionVersionRef.current) {
+            toTranslate.forEach((b) => pendingBlocksRef.current.delete(b))
+            setIsTranslating(false)
+            return
+          }
           uncached.forEach((text, i) => {
             cacheRef.current.set(text, response.translations[i])
           })
@@ -146,6 +154,10 @@ export function useViewportTranslation({
       // Adding translations makes blocks taller, pushing content DOWN (away from viewport),
       // so no cascade of new blocks entering the viewport.
       for (const { block, sentences } of blockSentences) {
+        if (!isActiveRef.current || runVersion !== sessionVersionRef.current) {
+          pendingBlocksRef.current.delete(block)
+          continue
+        }
         // Save original HTML so we can restore on deactivate
         if (!block.hasAttribute(ORIGINAL_HTML_ATTR)) {
           block.setAttribute(ORIGINAL_HTML_ATTR, block.innerHTML)
@@ -289,12 +301,14 @@ export function useViewportTranslation({
 
   const activate = useCallback(() => {
     if (!targetLanguage) return
+    sessionVersionRef.current += 1
     setIsActive(true)
     isActiveRef.current = true
     setError(null)
   }, [targetLanguage])
 
   const deactivate = useCallback(() => {
+    sessionVersionRef.current += 1
     setIsActive(false)
     isActiveRef.current = false
 
@@ -315,6 +329,7 @@ export function useViewportTranslation({
 
   const retry = useCallback(() => {
     if (!targetLanguage) return
+    sessionVersionRef.current += 1
     // Clear error and pending state
     setError(null)
     pendingBlocksRef.current.clear()
@@ -402,6 +417,7 @@ export function useViewportTranslation({
     }
     setIsActive(false)
     isActiveRef.current = false
+    sessionVersionRef.current += 1
     setIsTranslating(false)
     setError(null)
     pendingBlocksRef.current.clear()

@@ -41,6 +41,7 @@ export function collectTranslatableBlocks(
         if (preClass === 'code') return
         if (preClass === 'unknown' && !translatePreUnknown) return
       }
+      if (el.classList.contains('glean-bilingual-active')) return
       if (!hasSkipAncestor(el) && el.textContent?.trim()) {
         blocks.push(el)
       }
@@ -121,6 +122,14 @@ export function splitBlockByBreaks(block: Element): string[] {
 
     if (el.tagName === 'BR') {
       flush()
+      return
+    }
+
+    // Prevent reusing previously rendered bilingual lines as source sentences.
+    if (
+      el.classList.contains('glean-original-sentence') ||
+      el.classList.contains('glean-translated-sentence')
+    ) {
       return
     }
 

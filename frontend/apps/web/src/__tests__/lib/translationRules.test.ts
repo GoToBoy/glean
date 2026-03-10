@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { collectTranslatableBlocks, normalizeLooseTextNodes } from '@/lib/translationRules'
+import {
+  collectTranslatableBlocks,
+  normalizeLooseTextNodes,
+  splitBlockByBreaks,
+} from '@/lib/translationRules'
 
 describe('translationRules', () => {
   it('skips blockquote wrapper when it contains structured blocks', () => {
@@ -61,5 +65,17 @@ describe('translationRules', () => {
     expect(tags).toEqual(['P', 'P'])
     expect(texts).toContain('Outer text.')
     expect(texts).toContain('Inner paragraph.')
+  })
+
+  it('ignores rendered bilingual sentence spans when splitting text', () => {
+    const block = document.createElement('p')
+    block.innerHTML = `
+      <span class="glean-original-sentence">Original text.</span>
+      <span class="glean-translated-sentence">原文翻译。</span>
+      <span>Fresh text.</span>
+    `
+
+    const parts = splitBlockByBreaks(block)
+    expect(parts).toEqual(['Fresh text.'])
   })
 })
