@@ -78,4 +78,94 @@ describe('translationRules', () => {
     const parts = splitBlockByBreaks(block)
     expect(parts).toEqual(['Fresh text.'])
   })
+
+  it('merges short soft-break fragments into one translatable segment', () => {
+    const block = document.createElement('p')
+    block.innerHTML = `
+      Gemini 3.1 Flash-Lite shipped as fastest endpoint, emphasizing<br>
+      latency<br>
+      and<br>
+      throughput<br>
+      for high-volume workloads.
+    `
+
+    const parts = splitBlockByBreaks(block)
+    expect(parts).toEqual([
+      'Gemini 3.1 Flash-Lite shipped as fastest endpoint, emphasizing latency and throughput for high-volume workloads.',
+    ])
+  })
+
+  it('keeps hard sentence boundaries split across breaks', () => {
+    const block = document.createElement('p')
+    block.innerHTML = `
+      First sentence.<br>
+      Second sentence.
+    `
+
+    const parts = splitBlockByBreaks(block)
+    expect(parts).toEqual(['First sentence.', 'Second sentence.'])
+  })
+
+  it('merges markdown-like emphasis fragments split by breaks', () => {
+    const block = document.createElement('p')
+    block.innerHTML = `
+      <strong>Anthropic's claim</strong>: Anthropic says it detected<br>
+      <strong>industrial-scale</strong><br>
+      Claude distillation by<br>
+      <strong>DeepSeek</strong>,<br>
+      <strong>Moonshot AI</strong>, and<br>
+      <strong>MiniMax</strong>:<br>
+      ~24,000 fraudulent accounts generating<br>
+      <strong>&gt;16M Claude exchanges</strong>, allegedly to extract capabilities.
+    `
+
+    const parts = splitBlockByBreaks(block)
+    expect(parts).toEqual([
+      "Anthropic's claim: Anthropic says it detected industrial-scale Claude distillation by DeepSeek, Moonshot AI, and MiniMax: ~24,000 fraudulent accounts generating >16M Claude exchanges, allegedly to extract capabilities.",
+    ])
+  })
+
+  it('does not split list items with inline emphasis into standalone punctuation/text nodes', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <ul>
+        <li>
+          <strong>Anthropic's claim</strong>: Anthropic says it detected
+          <em>industrial-scale</em> Claude distillation by
+          <strong>DeepSeek</strong>, <strong>Moonshot AI</strong>, and <strong>MiniMax</strong>:
+          <strong>&gt;16M Claude exchanges</strong>.
+        </li>
+      </ul>
+    `
+
+    normalizeLooseTextNodes(root, 'data-original-html')
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+    expect(blocks.map((el) => el.tagName)).toEqual(['P'])
+
+    const parts = splitBlockByBreaks(blocks[0])
+    const normalized = parts.map((part) => part.replace(/\s+/g, ' ').trim())
+    expect(normalized).toEqual([
+      "Anthropic's claim: Anthropic says it detected industrial-scale Claude distillation by DeepSeek, Moonshot AI, and MiniMax: >16M Claude exchanges.",
+    ])
+  })
+
+  it('keeps loose text in mixed list item with nested paragraph translatable', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <ul>
+        <li>
+          Intro text
+          <p>Details paragraph.</p>
+        </li>
+      </ul>
+    `
+
+    normalizeLooseTextNodes(root, 'data-original-html')
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+    const texts = blocks.map((el) => (el.textContent ?? '').replace(/\s+/g, ' ').trim())
+
+    expect(blocks.map((el) => el.tagName)).toEqual(['P', 'P'])
+    expect(texts).toContain('Intro text')
+    expect(texts).toContain('Details paragraph.')
+  })
 })

@@ -7,6 +7,8 @@ API key via user settings; no key falls back to Google free.
 """
 
 import os
+import json
+import re
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -32,6 +34,77 @@ class TranslationProvider(ABC):
     def translate_batch(self, texts: list[str], source: str, target: str) -> list[str]:
         """Translate a list of texts. Default: translate one by one."""
         return [self.translate(t, source, target) for t in texts]
+
+
+def _parse_openai_batch_response(raw: str, expected_count: int) -> list[str] | None:
+    """Parse batch translation output from OpenAI-compatible models."""
+    if expected_count <= 0:
+        return []
+
+    text = raw.strip()
+    if not text:
+        return None
+
+    # Try strict JSON first.
+    def _parse_json_payload(payload: str) -> list[str] | None:
+        try:
+            data = json.loads(payload)
+        except Exception:
+            return None
+
+        if isinstance(data, list) and len(data) == expected_count and all(
+            isinstance(item, str) for item in data
+        ):
+            return [item.strip() for item in data]
+
+        if isinstance(data, dict):
+            items = data.get("translations")
+            if (
+                isinstance(items, list)
+                and len(items) == expected_count
+                and all(isinstance(item, str) for item in items)
+            ):
+                return [item.strip() for item in items]
+        return None
+
+    parsed_json = _parse_json_payload(text)
+    if parsed_json is not None:
+        return parsed_json
+
+    fenced = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text, re.IGNORECASE)
+    if fenced:
+        parsed_json = _parse_json_payload(fenced.group(1).strip())
+        if parsed_json is not None:
+            return parsed_json
+
+    # Parse numbered lines: [1] ... or 1. ... or 1) ...
+    numbered: list[str] = [""] * expected_count
+    matched = 0
+    for line in text.splitlines():
+        item = line.strip()
+        if not item:
+            continue
+        match = re.match(r"^(?:\[(\d+)\]|(\d+)[\).])\s*(.+)$", item)
+        if not match:
+            continue
+        number = match.group(1) or match.group(2)
+        content = (match.group(3) or "").strip()
+        if not number or not content:
+            continue
+        idx = int(number) - 1
+        if 0 <= idx < expected_count:
+            numbered[idx] = content
+            matched += 1
+
+    if matched == expected_count and all(numbered):
+        return numbered
+
+    # Fallback: one translation per non-empty line in order.
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) == expected_count:
+        return lines
+
+    return None
 
 
 class FallbackProvider(TranslationProvider):
@@ -216,8 +289,9 @@ class OpenAIProvider(TranslationProvider):
                     "role": "system",
                     "content": (
                         f"You are a translator. Translate each numbered line from "
-                        f"{source_desc} to {target}. Keep the [N] numbering format. "
-                        f"Output only the translations, one per line."
+                        f"{source_desc} to {target}. Keep each item independent and "
+                        f"do not merge or split entries. Return exactly {len(texts)} lines in "
+                        f"the format [N] translation."
                     ),
                 },
                 {"role": "user", "content": numbered},
@@ -225,25 +299,15 @@ class OpenAIProvider(TranslationProvider):
             temperature=0.3,
         )
         raw = response.choices[0].message.content or ""
+        parsed = _parse_openai_batch_response(raw, len(texts))
+        if parsed is not None:
+            return parsed
 
-        # Parse numbered results
-        results: list[str] = [""] * len(texts)
-        for line in raw.strip().split("\n"):
-            line = line.strip()
-            if not line:
-                continue
-            # Match [N] prefix
-            if line.startswith("["):
-                bracket_end = line.find("]")
-                if bracket_end > 0:
-                    try:
-                        idx = int(line[1:bracket_end]) - 1
-                        if 0 <= idx < len(texts):
-                            results[idx] = line[bracket_end + 1 :].strip()
-                    except ValueError:
-                        pass
-
-        return results
+        logger.warning(
+            "OpenAI batch response unparsable; falling back to single-item translation",
+            extra={"model": self.model, "expected_count": len(texts)},
+        )
+        return [self.translate(text, source, target) for text in texts]
 
 
 class MTranProvider(TranslationProvider):

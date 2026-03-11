@@ -331,3 +331,43 @@ class TestGetTranslation:
         )
 
         assert response.status_code == 401
+
+
+class TestTranslateTexts:
+    """Test POST /entries/translate-texts endpoint."""
+
+    @pytest.mark.asyncio
+    async def test_translate_texts_returns_provider_error(
+        self,
+        client: AsyncClient,
+        auth_headers,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """Provider failures should surface explicit 502 details."""
+
+        class _FailingProvider:
+            def translate_batch(
+                self, texts: list[str], source: str, target: str
+            ) -> list[str]:
+                raise RuntimeError("upstream SSL handshake failed")
+
+        monkeypatch.setattr(
+            "glean_api.routers.entries.create_translation_provider",
+            lambda _settings: _FailingProvider(),
+        )
+
+        response = await client.post(
+            "/api/entries/translate-texts",
+            headers=auth_headers,
+            json={
+                "texts": ["Anthropic says it detected industrial-scale distillation."],
+                "source_language": "auto",
+                "target_language": "zh-CN",
+            },
+        )
+
+        assert response.status_code == 502
+        detail = response.json()["detail"]
+        assert "Translation provider failed" in detail
+        assert "target=zh-CN" in detail
+        assert "upstream SSL handshake failed" in detail

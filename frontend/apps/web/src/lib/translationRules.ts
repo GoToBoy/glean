@@ -16,6 +16,10 @@ export const TRANSLATABLE_BLOCKS = new Set([
 ])
 
 export const SKIP_TAGS = new Set(['CODE', 'PRE', 'SCRIPT', 'STYLE', 'KBD', 'SAMP'])
+const HARD_BREAK_END_RE = /[。！？；.!?;]$/
+const CONTINUATION_START_RE = /^[:：,，)\]}a-z0-9@#&([{'"“‘-]/
+const SOFT_BREAK_LENGTH_THRESHOLD = 80
+const PUNCT_ONLY_RE = /^[\s,，:：;；.!?。！？)\]}>"'”’-]+$/
 
 export function hasSkipAncestor(el: Element): boolean {
   let current = el.parentElement
@@ -61,6 +65,35 @@ export function normalizeLooseTextNodes(root: HTMLElement, originalHtmlAttr: str
     root,
     ...Array.from(root.querySelectorAll('div, article, section, blockquote, li, dt, dd, figcaption')),
   ]
+  const structuralTags = new Set([
+    'P',
+    'DIV',
+    'SECTION',
+    'ARTICLE',
+    'BLOCKQUOTE',
+    'UL',
+    'OL',
+    'LI',
+    'DL',
+    'DT',
+    'DD',
+    'TABLE',
+    'THEAD',
+    'TBODY',
+    'TR',
+    'TD',
+    'TH',
+    'PRE',
+    'FIGURE',
+    'FIGCAPTION',
+    'H1',
+    'H2',
+    'H3',
+    'H4',
+    'H5',
+    'H6',
+    'HR',
+  ])
 
   for (const container of containers) {
     if (hasSkipAncestor(container)) continue
@@ -76,20 +109,84 @@ export function normalizeLooseTextNodes(root: HTMLElement, originalHtmlAttr: str
     }
 
     const fragment = document.createDocumentFragment()
+    let inlineParagraph: HTMLParagraphElement | null = null
+
+    const ensureInlineParagraph = () => {
+      if (!inlineParagraph) inlineParagraph = document.createElement('p')
+      return inlineParagraph
+    }
+
+    const flushInlineParagraph = () => {
+      if (!inlineParagraph) return
+      if ((inlineParagraph.textContent ?? '').trim().length > 0) {
+        fragment.appendChild(inlineParagraph)
+      }
+      inlineParagraph = null
+    }
+
     for (const node of directNodes) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.textContent?.trim()
-        if (!text) continue
-        const p = document.createElement('p')
-        p.textContent = text
-        fragment.appendChild(p)
-      } else {
-        fragment.appendChild(node)
+        const text = node.textContent ?? ''
+        if (!text.trim()) continue
+        ensureInlineParagraph().appendChild(document.createTextNode(text))
+        continue
       }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) continue
+      const el = node as Element
+
+      if (structuralTags.has(el.tagName)) {
+        flushInlineParagraph()
+        fragment.appendChild(el)
+        continue
+      }
+
+      ensureInlineParagraph().appendChild(el)
     }
+
+    flushInlineParagraph()
 
     container.replaceChildren(fragment)
   }
+}
+
+function joinFragments(left: string, right: string): string {
+  if (!left) return right
+  if (!right) return left
+
+  const needsSpace = !/\s$/.test(left) && !/^[\s.,!?;:，。！？；：)\]}]/.test(right)
+  return needsSpace ? `${left} ${right}` : `${left}${right}`
+}
+
+function mergeSoftBreakSegments(parts: string[]): string[] {
+  const merged: string[] = []
+
+  for (const raw of parts) {
+    const part = raw.trim()
+    if (!part) continue
+
+    if (merged.length === 0) {
+      merged.push(part)
+      continue
+    }
+
+    const prev = merged[merged.length - 1]
+    const prevEndsHard = HARD_BREAK_END_RE.test(prev)
+    const punctuationOnly = PUNCT_ONLY_RE.test(part)
+    const hasShortSide =
+      prev.length < SOFT_BREAK_LENGTH_THRESHOLD || part.length < SOFT_BREAK_LENGTH_THRESHOLD
+    const startsAsContinuation = CONTINUATION_START_RE.test(part)
+    const shouldMerge = !prevEndsHard && (punctuationOnly || hasShortSide || startsAsContinuation)
+
+    if (shouldMerge) {
+      merged[merged.length - 1] = joinFragments(prev, part)
+      continue
+    }
+
+    merged.push(part)
+  }
+
+  return merged
 }
 
 /**
@@ -110,7 +207,7 @@ export function splitBlockByBreaks(block: Element): string[] {
       const text = node.textContent ?? ''
       if (!text) return
       // Preserve token boundaries across adjacent text nodes.
-      if (current && !/\s$/.test(current) && !/^\s/.test(text)) {
+      if (current && !/\s$/.test(current) && !/^[\s.,!?;:，。！？；：)\]}]/.test(text)) {
         current += ' '
       }
       current += text
@@ -142,5 +239,5 @@ export function splitBlockByBreaks(block: Element): string[] {
   walk(block)
   flush()
 
-  return parts
+  return mergeSoftBreakSegments(parts)
 }

@@ -6,6 +6,7 @@ from glean_core.services.translation_providers import (
     FallbackProvider,
     GoogleFreeProvider,
     MTranProvider,
+    _parse_openai_batch_response,
     create_translation_provider,
 )
 
@@ -116,3 +117,35 @@ def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-unt
 
     assert result == ["你好", "世界"]
     assert fake_client.calls[0][0] == "http://mtran.local/translate/batch"
+
+
+def test_parse_openai_batch_response_numbered() -> None:
+    raw = """
+    [1] 作为 Google 最快、最具成本效益的端点
+    [2] 强调低延迟和高吞吐
+    """
+    parsed = _parse_openai_batch_response(raw, 2)
+    assert parsed == ["作为 Google 最快、最具成本效益的端点", "强调低延迟和高吞吐"]
+
+
+def test_parse_openai_batch_response_json_array() -> None:
+    raw = '["第一句翻译", "第二句翻译"]'
+    parsed = _parse_openai_batch_response(raw, 2)
+    assert parsed == ["第一句翻译", "第二句翻译"]
+
+
+def test_parse_openai_batch_response_plain_lines_fallback() -> None:
+    raw = """
+    第一行翻译
+    第二行翻译
+    """
+    parsed = _parse_openai_batch_response(raw, 2)
+    assert parsed == ["第一行翻译", "第二行翻译"]
+
+
+def test_parse_openai_batch_response_incomplete_returns_none() -> None:
+    raw = """
+    [1] only one line
+    """
+    parsed = _parse_openai_batch_response(raw, 2)
+    assert parsed is None

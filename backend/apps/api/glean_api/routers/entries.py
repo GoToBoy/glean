@@ -258,15 +258,19 @@ async def translate_texts(
 
     # Translate uncached sentences using user's configured provider
     translated_new: list[str] = []
-    provider_failed = False
     if to_translate:
+        provider_name = "google"
+        if isinstance(current_user.settings, dict):
+            configured_provider = current_user.settings.get("translation_provider")
+            if isinstance(configured_provider, str) and configured_provider.strip():
+                provider_name = configured_provider.strip()
         provider = create_translation_provider(current_user.settings)
         try:
             translated_new = await asyncio.to_thread(
                 provider.translate_batch, to_translate, data.source_language, data.target_language
             )
-        except Exception:
-            provider_failed = True
+        except Exception as exc:
+            error_message = str(exc).strip() or exc.__class__.__name__
             logger.exception(
                 "Translation provider failed in translate-texts",
                 extra={
@@ -274,11 +278,18 @@ async def translate_texts(
                     "source_language": data.source_language,
                     "entry_id": data.entry_id,
                     "user_id": current_user.id,
+                    "provider": provider_name,
                     "count": len(to_translate),
+                    "error": error_message,
                 },
             )
-            # Graceful fallback: keep original text instead of surfacing a 500.
-            translated_new = to_translate
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Translation provider failed "
+                    f"(provider={provider_name}, target={data.target_language}): {error_message}"
+                ),
+            ) from exc
 
     # Merge cached + newly translated results
     merged: list[str] = [""] * len(non_empty_texts)
@@ -293,7 +304,7 @@ async def translate_texts(
         all_results[idx] = merged[i]
 
     # Persist new translations when entry_id is provided
-    if data.entry_id and translated_new and not provider_failed:
+    if data.entry_id and translated_new:
         pairs = {
             text: trans
             for text, trans in zip(to_translate, translated_new, strict=True)
