@@ -48,7 +48,7 @@ describe('translationRules', () => {
     expect(tags).toEqual(['BLOCKQUOTE'])
   })
 
-  it('preserves outer direct text by wrapping it into paragraphs', () => {
+  it('wraps loose text with inline content into paragraphs by default', () => {
     const root = document.createElement('article')
     root.innerHTML = `
       <blockquote>
@@ -207,6 +207,24 @@ describe('translationRules', () => {
     expect(blocks.map((el) => el.tagName)).toEqual(['P'])
     expect(splitBlockByBreaks(blocks[0]).map((part) => part.replace(/\s+/g, ' ').trim())).toEqual([
       '“From those to whom much is given, much is expected.” — Mary Gates',
+    ])
+  })
+
+  it('keeps parser-fragmented blockquote content at blockquote level to preserve quote styling', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <blockquote>
+        <p>At Uber, high availability is non-negotiable.</p>
+        <a href="https://example.com">Source</a>
+        <p>Reliability comes first.</p>
+      </blockquote>
+    `
+
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+
+    expect(blocks.map((el) => el.tagName)).toEqual(['BLOCKQUOTE'])
+    expect(splitBlockByBreaks(blocks[0]).map((part) => part.replace(/\s+/g, ' ').trim())).toEqual([
+      'At Uber, high availability is non-negotiable. Source Reliability comes first.',
     ])
   })
 

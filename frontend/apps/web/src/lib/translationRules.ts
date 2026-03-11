@@ -30,15 +30,45 @@ export function hasSkipAncestor(el: Element): boolean {
   return false
 }
 
+function isFragmentedBlockquote(el: Element): boolean {
+  if (el.tagName !== 'BLOCKQUOTE') return false
+
+  const directChildren = Array.from(el.children)
+  if (directChildren.length === 0) return false
+
+  const hasParagraphChild = directChildren.some((child) => child.tagName === 'P')
+  const hasNonParagraphChild = directChildren.some((child) => child.tagName !== 'P')
+
+  // General rule: when loose text and inline tags are mixed together, we normalize
+  // them into a synthetic <p> so downstream translation works on a single block.
+  // Blockquote is the exception when the DOM is already fragmented into
+  // <p> + inline + <p> siblings: reader typography often styles blockquote <p>
+  // with quote pseudo-elements, so translating those inner <p> nodes produces
+  // duplicated/misaligned quote marks in the UI. In that case the whole
+  // blockquote must be treated as one translation unit.
+  return hasParagraphChild && hasNonParagraphChild
+}
+
 export function collectTranslatableBlocks(
   root: HTMLElement,
   translatePreUnknown: boolean,
   classifyPreElement: (el: Element) => 'text' | 'code' | 'unknown',
 ): Element[] {
   const blocks: Element[] = []
+  const fragmentedBlockquotes = new Set<Element>()
+
+  root.querySelectorAll('blockquote').forEach((el) => {
+    if (isFragmentedBlockquote(el) && !hasSkipAncestor(el) && el.textContent?.trim()) {
+      fragmentedBlockquotes.add(el)
+      blocks.push(el)
+    }
+  })
+
   for (const tagName of TRANSLATABLE_BLOCKS) {
     const elements = root.querySelectorAll(tagName.toLowerCase())
     elements.forEach((el) => {
+      if (fragmentedBlockquotes.has(el)) return
+      if ([...fragmentedBlockquotes].some((blockquote) => blockquote.contains(el))) return
       if (el.tagName === 'ARTICLE' && el.children.length > 0) return
       if (el.tagName === 'PRE') {
         const preClass = classifyPreElement(el)
@@ -112,6 +142,9 @@ export function normalizeLooseTextNodes(root: HTMLElement, originalHtmlAttr: str
     let inlineParagraph: HTMLParagraphElement | null = null
 
     const ensureInlineParagraph = () => {
+      // Default normalization rule:
+      // loose text + inline descendants should become one synthetic <p>, so
+      // translation sees a stable block boundary instead of fragmented text nodes.
       if (!inlineParagraph) inlineParagraph = document.createElement('p')
       return inlineParagraph
     }
