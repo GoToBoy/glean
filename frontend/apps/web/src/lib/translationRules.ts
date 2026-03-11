@@ -158,6 +158,14 @@ function joinFragments(left: string, right: string): string {
   return needsSpace ? `${left} ${right}` : `${left}${right}`
 }
 
+/**
+ * Segment extraction rules for rich article content:
+ * 1. A translatable unit starts as one eligible block element.
+ * 2. Direct text nodes mixed with inline tags are wrapped into a synthetic <p>.
+ * 3. Inline tags such as <a>/<strong>/<em> contribute text to the current unit.
+ * 4. <br> creates a hard boundary, but visually wrapped short fragments are re-merged.
+ * 5. Code-like descendants and previously rendered bilingual spans are ignored.
+ */
 function mergeSoftBreakSegments(parts: string[]): string[] {
   const merged: string[] = []
 
@@ -190,7 +198,11 @@ function mergeSoftBreakSegments(parts: string[]): string[] {
 }
 
 /**
- * Split block text by <br> boundaries so each line/section is translated independently.
+ * Split block text into translation segments.
+ *
+ * The walker preserves inline formatting text as part of the same segment and only
+ * flushes on hard break markers such as <br>. After traversal, nearby short fragments
+ * that were separated only for visual wrapping are merged back together.
  */
 export function splitBlockByBreaks(block: Element): string[] {
   const parts: string[] = []

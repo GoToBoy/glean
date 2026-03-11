@@ -168,4 +168,68 @@ describe('translationRules', () => {
     expect(texts).toContain('Intro text')
     expect(texts).toContain('Details paragraph.')
   })
+
+  it('keeps numbered blockquote lines with inline links and emphasis intact', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <blockquote>
+        1. Support organizations you feel are&nbsp;<a href="https://www.charitynavigator.org/">effectively helping</a>&nbsp;those most in need across America <strong>right now</strong>.<br><br>
+        2. Within the next five years, also contribute&nbsp;<strong>public dedications of time or funds towards longer term efforts&nbsp;</strong>to keep the American Dream fair and attainable for all our children.<br><br>
+        <a href="https://blog.codinghorror.com/stay-gold-america/">Stay gold, America.</a> 💛
+      </blockquote>
+    `
+
+    normalizeLooseTextNodes(root, 'data-original-html')
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+
+    expect(blocks.map((el) => el.tagName)).toEqual(['P'])
+
+    const parts = splitBlockByBreaks(blocks[0]).map((part) => part.replace(/\s+/g, ' ').trim())
+    expect(parts).toEqual([
+      '1. Support organizations you feel are effectively helping those most in need across America right now.',
+      '2. Within the next five years, also contribute public dedications of time or funds towards longer term efforts to keep the American Dream fair and attainable for all our children.',
+      'Stay gold, America. 💛',
+    ])
+  })
+
+  it('keeps blockquote quote text and attribution link in one segment', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <blockquote class="kg-blockquote-alt">
+        “From those to whom much is given, much is expected.” —
+        <a href="https://rgmii.org/mary-gates-philanthropic-quote/">Mary Gates</a>
+      </blockquote>
+    `
+
+    normalizeLooseTextNodes(root, 'data-original-html')
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+
+    expect(blocks.map((el) => el.tagName)).toEqual(['P'])
+    expect(splitBlockByBreaks(blocks[0]).map((part) => part.replace(/\s+/g, ' ').trim())).toEqual([
+      '“From those to whom much is given, much is expected.” — Mary Gates',
+    ])
+  })
+
+  it('keeps mixed ghost-style list item content as complete segments', () => {
+    const root = document.createElement('article')
+    root.innerHTML = `
+      <ul>
+        <li>
+          Almost every
+          <strong>existing UBI/GMI study result data we could find indicates <em>cash generally works</em></strong>.
+          For example, OpenResearch
+          <a href="https://rgmii.org/openresearch-ubi-study-2018-2023-analysis/">data showed</a>
+          the greatest increase in spending among study participants was in meeting basic needs.
+        </li>
+      </ul>
+    `
+
+    normalizeLooseTextNodes(root, 'data-original-html')
+    const blocks = collectTranslatableBlocks(root, false, () => 'text')
+
+    expect(blocks.map((el) => el.tagName)).toEqual(['P'])
+    expect(splitBlockByBreaks(blocks[0]).map((part) => part.replace(/\s+/g, ' ').trim())).toEqual([
+      'Almost every existing UBI/GMI study result data we could find indicates cash generally works. For example, OpenResearch data showed the greatest increase in spending among study participants was in meeting basic needs.',
+    ])
+  })
 })

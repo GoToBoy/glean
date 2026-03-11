@@ -1,6 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { entryService } from '@glean/api-client'
-import { splitIntoSentences } from '../lib/sentenceSplitter'
 import { classifyPreElement } from '../lib/preTranslation'
 import {
   hasSkipAncestor,
@@ -56,8 +55,10 @@ function escapeHtml(text: string): string {
  * Hook for viewport-based sentence-level translation.
  *
  * Translates only the content visible in the scroll container (plus a small buffer).
- * Each block element's text is split into sentences. The block's content is replaced
- * in-place with bilingual pairs (original sentence + translation) — Immersive Translate style.
+ * Each block element's text is split into logical segments based on hard line breaks.
+ * The block's content is replaced in-place with bilingual pairs (original segment +
+ * translation). We intentionally avoid a second sentence-level split here because
+ * inline HTML often bisects the sentence text and causes truncated translations.
  */
 export function useViewportTranslation({
   contentRef,
@@ -101,26 +102,25 @@ export function useViewportTranslation({
       setError(null)
 
       // Collect sentences from all blocks
-      const blockSentences: { block: Element; sentences: string[] }[] = []
+      const blockSegments: { block: Element; segments: string[] }[] = []
       for (const block of toTranslate) {
         if (hasSkipAncestor(block)) continue
         // Treat <br> as hard boundaries so pre/post-br are translated independently.
         const segments = splitBlockByBreaks(block)
-        const sentences = segments.flatMap((segment) => splitIntoSentences(segment))
-        if (sentences.length > 0) {
-          blockSentences.push({ block, sentences })
+        if (segments.length > 0) {
+          blockSegments.push({ block, segments })
         }
       }
 
-      if (blockSentences.length === 0) {
+      if (blockSegments.length === 0) {
         toTranslate.forEach((b) => pendingBlocksRef.current.delete(b))
         setIsTranslating(false)
         return
       }
 
       // Collect all unique uncached sentences
-      const allSentences = blockSentences.flatMap((bs) => bs.sentences)
-      const uncached = [...new Set(allSentences.filter((s) => !cacheRef.current.has(s)))]
+      const allSegments = blockSegments.flatMap((bs) => bs.segments)
+      const uncached = [...new Set(allSegments.filter((segment) => !cacheRef.current.has(segment)))]
 
       // Call API for uncached sentences
       if (uncached.length > 0) {
@@ -149,11 +149,11 @@ export function useViewportTranslation({
         }
       }
 
-      // Replace each block's content in-place with bilingual sentence pairs.
+      // Replace each block's content in-place with bilingual segment pairs.
       // The block element itself stays in the DOM — no layout shift for the observer.
       // Adding translations makes blocks taller, pushing content DOWN (away from viewport),
       // so no cascade of new blocks entering the viewport.
-      for (const { block, sentences } of blockSentences) {
+      for (const { block, segments } of blockSegments) {
         if (!isActiveRef.current || runVersion !== sessionVersionRef.current) {
           pendingBlocksRef.current.delete(block)
           continue
@@ -163,11 +163,11 @@ export function useViewportTranslation({
           block.setAttribute(ORIGINAL_HTML_ATTR, block.innerHTML)
         }
 
-        // Build bilingual HTML: each original sentence followed by its translation
+        // Build bilingual HTML: each original segment followed by its translation.
         let html = ''
-        for (const sentence of sentences) {
-          html += `<span class="glean-original-sentence">${escapeHtml(sentence)}</span>`
-          const translated = cacheRef.current.get(sentence)
+        for (const segment of segments) {
+          html += `<span class="glean-original-sentence">${escapeHtml(segment)}</span>`
+          const translated = cacheRef.current.get(segment)
           if (translated && translated.trim()) {
             html += `<span class="glean-translated-sentence">${escapeHtml(translated.trim())}</span>`
           }
@@ -249,10 +249,9 @@ export function useViewportTranslation({
       if (hasSkipAncestor(block)) continue
 
       const segments = splitBlockByBreaks(block)
-      const sentences = segments.flatMap((segment) => splitIntoSentences(segment))
-      if (sentences.length === 0) continue
+      if (segments.length === 0) continue
 
-      const translations = sentences.map((sentence) => cacheRef.current.get(sentence)?.trim() ?? '')
+      const translations = segments.map((segment) => cacheRef.current.get(segment)?.trim() ?? '')
       const allCached = translations.every((translated) => translated.length > 0)
       if (!allCached) continue
 
@@ -261,8 +260,8 @@ export function useViewportTranslation({
       }
 
       let html = ''
-      for (let i = 0; i < sentences.length; i += 1) {
-        html += `<span class="glean-original-sentence">${escapeHtml(sentences[i])}</span>`
+      for (let i = 0; i < segments.length; i += 1) {
+        html += `<span class="glean-original-sentence">${escapeHtml(segments[i])}</span>`
         html += `<span class="glean-translated-sentence">${escapeHtml(translations[i])}</span>`
       }
 
