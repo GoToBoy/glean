@@ -1124,13 +1124,15 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!url.trim()) return
+    const trimmedUrl = url.trim()
+    const trimmedRsshubPath = rsshubPath.trim()
+    if (!trimmedUrl && !trimmedRsshubPath) return
 
     try {
       await discoverMutation.mutateAsync({
-        url: url.trim(),
+        url: trimmedUrl || undefined,
         folder_id: selectedFolderId,
-        rsshub_path: rsshubPath.trim() || undefined,
+        rsshub_path: trimmedRsshubPath || undefined,
       })
       onClose()
     } catch {
@@ -1211,7 +1213,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
 
           <div className="space-y-2">
             <Label htmlFor="rsshubPath" className="text-foreground">
-              RSSHub Path (Optional)
+              {t('manageSubscriptions.rsshubPath')}
             </Label>
             <Input
               id="rsshubPath"
@@ -1222,7 +1224,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
               className="w-full"
             />
             <p className="text-muted-foreground text-xs">
-              If provided, subscription will use RSSHub conversion with your admin-configured base URL.
+              {t('manageSubscriptions.rsshubDescription')}
             </p>
           </div>
 
@@ -1383,7 +1385,7 @@ function AddFeedDialog({ folders, onClose }: AddFeedDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={discoverMutation.isPending || !url.trim()}
+              disabled={discoverMutation.isPending || (!url.trim() && !rsshubPath.trim())}
               className="btn-glow"
             >
               {discoverMutation.isPending ? (

@@ -6,7 +6,7 @@ Request and response models for feed-related operations.
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, HttpUrl
+from pydantic import BaseModel, ConfigDict, HttpUrl, model_validator
 
 
 class FeedBase(BaseModel):
@@ -56,9 +56,16 @@ class SubscriptionResponse(BaseModel):
 class DiscoverFeedRequest(BaseModel):
     """Discover feed from URL request."""
 
-    url: HttpUrl
+    url: HttpUrl | None = None
     folder_id: str | None = None
     rsshub_path: str | None = None
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "DiscoverFeedRequest":
+        """Require either a URL or an RSSHub path."""
+        if self.url is None and not (self.rsshub_path or "").strip():
+            raise ValueError("Either url or rsshub_path is required")
+        return self
 
 
 class UpdateSubscriptionRequest(BaseModel):

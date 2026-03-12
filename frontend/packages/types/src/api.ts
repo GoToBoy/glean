@@ -61,7 +61,7 @@ export interface RefreshTokenRequest {
 
 /** Discover feed request */
 export interface DiscoverFeedRequest {
-  url: string
+  url?: string | null
   folder_id?: string | null
   rsshub_path?: string | null
 }

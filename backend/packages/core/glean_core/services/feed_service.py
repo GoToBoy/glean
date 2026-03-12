@@ -309,7 +309,7 @@ class FeedService:
     async def create_subscription(
         self,
         user_id: str,
-        feed_url: str,
+        feed_url: str | None,
         feed_title: str | None = None,
         folder_id: str | None = None,
         rsshub_path: str | None = None,
@@ -332,6 +332,8 @@ class FeedService:
         """
         if rsshub_path:
             feed_url = await self._build_rsshub_feed_url(rsshub_path)
+        elif not feed_url:
+            raise ValueError("Either feed_url or rsshub_path is required")
 
         # Check if feed exists
         stmt = select(Feed).where(Feed.url == feed_url)

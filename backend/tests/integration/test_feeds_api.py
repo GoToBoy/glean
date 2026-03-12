@@ -116,6 +116,31 @@ class TestCreateSubscription:
         assert data["feed"]["url"] == test_feed.url
 
     @pytest.mark.asyncio
+    async def test_discover_feed_with_rsshub_path_only(
+        self, client: AsyncClient, auth_headers, monkeypatch: pytest.MonkeyPatch
+    ):
+        """Test subscribing with only an RSSHub path."""
+        from glean_core.services.feed_service import FeedService
+
+        async def mock_build_rsshub_feed_url(self, rsshub_path: str) -> str:
+            assert rsshub_path == "/bilibili/user/dynamic/946974"
+            return "http://rsshub.internal/bilibili/user/dynamic/946974"
+
+        monkeypatch.setattr(FeedService, "_build_rsshub_feed_url", mock_build_rsshub_feed_url)
+
+        response = await client.post(
+            "/api/feeds/discover",
+            headers=auth_headers,
+            json={"rsshub_path": "/bilibili/user/dynamic/946974"},
+        )
+
+        assert response.status_code == 201
+        data = response.json()
+
+        assert "id" in data
+        assert data["feed"]["url"] == "http://rsshub.internal/bilibili/user/dynamic/946974"
+
+    @pytest.mark.asyncio
     async def test_discover_feed_duplicate_subscription(
         self, client: AsyncClient, auth_headers, test_subscription, test_feed
     ):
@@ -135,6 +160,15 @@ class TestCreateSubscription:
         )
 
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_discover_feed_requires_url_or_rsshub_path(
+        self, client: AsyncClient, auth_headers
+    ):
+        """Test creating a subscription without any source input."""
+        response = await client.post("/api/feeds/discover", headers=auth_headers, json={})
+
+        assert response.status_code == 422
 
 
 class TestUpdateSubscription:

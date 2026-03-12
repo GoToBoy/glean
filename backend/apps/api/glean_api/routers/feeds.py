@@ -195,17 +195,24 @@ async def discover_feed_url(
     Raises:
         HTTPException: If feed discovery fails or already subscribed.
     """
-    source_url = str(data.url)
+    source_url = str(data.url) if data.url else None
     feed_url = source_url
     feed_title = None
     source_error: str | None = None
+    rsshub_path = (data.rsshub_path or "").strip() or None
 
     import contextlib
 
-    if data.rsshub_path:
+    if rsshub_path:
         # Manual RSSHub path mode: skip automatic source fallback logic.
         feed_title = None
     else:
+        if not source_url:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="url is required when rsshub_path is not provided",
+            )
+
         with contextlib.suppress(ValueError):
             # Try to discover feed (fetch and parse)
             feed_url, feed_title = await discover_feed(feed_url)
@@ -253,7 +260,7 @@ async def discover_feed_url(
             feed_url,
             feed_title,
             data.folder_id,
-            data.rsshub_path,
+            rsshub_path,
         )
 
         # Always enqueue one fetch for each new subscription so first-time subscribers

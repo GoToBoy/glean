@@ -26,12 +26,14 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!url.trim()) return
+    const trimmedUrl = url.trim()
+    const trimmedRsshubPath = rsshubPath.trim()
+    if (!trimmedUrl && !trimmedRsshubPath) return
 
     try {
       await discoverMutation.mutateAsync({
-        url: url.trim(),
-        rsshub_path: rsshubPath.trim() || undefined,
+        url: trimmedUrl || undefined,
+        rsshub_path: trimmedRsshubPath || undefined,
       })
       onClose()
     } catch {
@@ -87,7 +89,7 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
 
           <div className="space-y-2">
             <Label htmlFor="rsshubPath" className="text-foreground">
-              RSSHub Path (Optional)
+              {t('dialogs.addFeed.rsshubPath')}
             </Label>
             <Input
               id="rsshubPath"
@@ -97,6 +99,9 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
               disabled={discoverMutation.isPending}
               className="w-full"
             />
+            <p className="text-muted-foreground text-xs">
+              {t('dialogs.addFeed.rsshubDescription')}
+            </p>
           </div>
 
           <div className="flex items-center justify-end gap-3 pt-2">
@@ -110,7 +115,7 @@ export function AddFeedDialog({ onClose }: AddFeedDialogProps) {
             </Button>
             <Button
               type="submit"
-              disabled={discoverMutation.isPending || !url.trim()}
+              disabled={discoverMutation.isPending || (!url.trim() && !rsshubPath.trim())}
               className="btn-glow"
             >
               {discoverMutation.isPending ? (
