@@ -3,237 +3,179 @@
 **[English](./README.md)** | **[中文](./README.zh-CN.md)**
 
 > [!IMPORTANT]
-> 加入我们的 [Discord](https://discord.gg/KMKC4sRVSJ) 以获取最新动态和获得支持。
->
-> 该项目仍在开发中，尚未准备好生产使用。
+> 本 README 描述的是当前 `feature/milvus-to-pgvector` 分支，而不是 `main`。
+> 与 `main` 的差异概览请见 [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md)。
 
-一个自托管的 RSS 阅读器和个人知识管理工具。
+> [!NOTE]
+> 欢迎加入我们的 [Discord](https://discord.gg/KMKC4sRVSJ) 获取更新和支持。
+> 项目仍在持续开发中。
 
-> **Glean**（拾灵）帮助重度信息消费者通过智能 RSS 聚合高效管理阅读。
+Glean 是一个面向高密度阅读场景的自托管 RSS 阅读器与个人知识管理工具。
 
 ![Glean](asset/Screenshot.png)
 
-## 功能特性
+## 当前分支包含的能力
 
-### 核心功能
-- 📰 **RSS 订阅** - 订阅和管理 RSS/Atom 源，支持 OPML 导入导出
-- 📚 **智能阅读** - 简洁的阅读体验，支持内容过滤
-- 🔖 **稍后阅读** - 保存文章以便稍后阅读，支持自动清理
-- 📁 **文件夹与标签** - 多层级文件夹和标签组织内容
-- ⭐ **收藏系统** - 收藏订阅文章或外部链接
-- 🔧 **后台同步** - 每 15 分钟自动更新订阅源
-- 🔒 **自托管** - Docker 部署，完全掌控数据
-- 🎨 **现代界面** - 美观的暖色深色主题响应式界面
-- 👨‍💼 **管理后台** - 用户管理和系统监控
-
-### 规划中的功能（WIP）
-- 🧠 **智能推荐** - 基于 AI 的偏好学习和文章评分
-- ⚙️ **规则引擎** - 支持 Jinja2 风格条件的自动化处理
-- 🤖 **AI 功能** - 摘要生成、自动打标、关键词提取（BYOK）
-- 📄 **完整内容获取** - 为仅提供摘要的 RSS 源获取完整正文
-- 🔌 **Chrome 扩展** - 浏览器一键收藏
-- 📱 **移动端 PWA** - 适配移动设备的渐进式 Web 应用
+- RSS/Atom 订阅、嵌套文件夹、OPML 导入导出、订阅刷新状态追踪。
+- RSSHub 管理员配置、自动兜底转换，以及手动 RSSHub 路径订阅。
+- Discover 发现流程，用于寻找新信源并直接转化为订阅。
+- 沉浸式双语阅读、持久化翻译缓存，以及多翻译提供方支持。
+- 收藏、标签、稍后阅读、文件夹整理，以及桌面/移动端阅读流程优化。
+- 管理后台支持订阅批量操作、错误重试、状态轮询和用户管理。
+- 向量存储已迁移到 PostgreSQL + `pgvector`，当前分支不再依赖 Milvus。
 
 ## 快速开始
 
-### 一键部署
+### Docker Compose
 
 ```bash
-# 下载 docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.yml -o docker-compose.yml
+# 从当前分支下载 compose 文件
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/docker-compose.yml -o docker-compose.yml
 
-# 启动 Glean（完整部署，包含 Milvus）
-docker compose up -d
-
-# 访问：
-# - Web 应用: http://localhost
-# - 管理后台: http://localhost:3001（默认：admin/Admin123!）
-```
-
-**默认管理员账号**：系统会自动创建管理员账号：
-- 用户名：`admin`
-- 密码：`Admin123!`
-- ⚠️ **生产环境请立即修改此密码！**
-
-**精简部署**（不包含 Milvus，如果不需要 Phase 3 功能）：
-
-```bash
-# 下载精简版
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.lite.yml -o docker-compose.yml
+# 可选：下载当前分支的示例环境变量文件
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/.env.example -o .env
 
 # 启动 Glean
 docker compose up -d
 
-# 管理后台: http://localhost:3001（默认：admin/Admin123!）
+# 可选：启用本地 MTranServer 翻译服务
+docker compose --profile mtran up -d
 ```
 
-### 自定义管理员账号（可选）
+访问地址：
 
-如需使用自定义管理员凭据而非默认值，在启动**之前**创建 `.env` 文件：
+- Web 应用：`http://localhost`
+- 管理后台：`http://localhost:3001`
+- API 健康检查：`http://localhost:8000/api/health`
 
-```bash
-# 在 .env 中设置自定义管理员凭据
-cat > .env << EOF
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=YourSecurePassword123!
-SECRET_KEY=$(openssl rand -base64 32)
-EOF
+### 默认管理员账号
 
-# 启动服务
-docker compose up -d
-```
+默认会自动创建管理员账号：
 
-如需禁用自动创建并手动创建管理员：
+- 用户名：`admin`
+- 密码：`Admin123!`
 
-```bash
-# 在 .env 中禁用自动创建
-echo "CREATE_ADMIN=false" >> .env
+请在真实部署前修改该密码。
 
-# 启动服务
-docker compose up -d
+## 部署说明
 
-# 手动创建管理员
-docker exec -it glean-backend /app/scripts/create-admin-docker.sh
-```
+当前分支使用单个 PostgreSQL 实例承载 `pgvector` 扩展，不再需要单独的 Milvus 服务。
 
-## 配置说明
+默认服务包括：
 
-对于生产环境，使用环境变量自定义部署。下载示例文件：
+- `postgres` - 带 `pgvector` 的 PostgreSQL 16
+- `redis` - 队列与缓存
+- `backend` - FastAPI API 服务
+- `worker` - 负责抓取、清理、翻译、向量任务的后台 worker
+- `web` - 主阅读器前端
+- `admin` - 管理后台
+- `mtranserver` - 可选翻译服务，通过 `--profile mtran` 启用
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/.env.example -o .env
-```
+预构建镜像位于 GHCR：
 
-**重要配置项（需修改）：**
-
-| 变量                | 说明           | 默认值                            |
-| ------------------- | -------------- | --------------------------------- |
-| `SECRET_KEY`        | JWT 签名密钥   | **生产环境必须修改！**            |
-| `POSTGRES_PASSWORD` | 数据库密码     | `glean`（**生产环境必须修改！**） |
-| `ADMIN_PASSWORD`    | 管理员密码     | `Admin123!`（**必须修改！**）     |
-| `WEB_PORT`          | Web 界面端口   | `80`                              |
-| `ADMIN_PORT`        | 管理后台端口   | `3001`                            |
-| `CREATE_ADMIN`      | 自动创建管理员 | `true`（设为 `false` 可禁用）     |
-
-所有配置选项请参见 [.env.example](.env.example)。
-
-## Docker 镜像
-
-预构建镜像托管在 GitHub Container Registry：
-
-- `ghcr.io/leslieleung/glean-backend:latest` - API 服务器 & Worker
-- `ghcr.io/leslieleung/glean-web:latest` - Web 前端
-- `ghcr.io/leslieleung/glean-admin:latest` - 管理后台
+- `ghcr.io/leslieleung/glean-backend:latest`
+- `ghcr.io/leslieleung/glean-web:latest`
+- `ghcr.io/leslieleung/glean-admin:latest`
 
 支持架构：`linux/amd64`、`linux/arm64`
 
-### 测试预发布版本
+## 配置项
 
-想测试即将发布的新功能？可以使用预发布版本（alpha/beta/rc）：
+重要环境变量：
 
-**方法 1：使用环境变量（推荐）**
+| 变量 | 说明 | 默认值 |
+| --- | --- | --- |
+| `SECRET_KEY` | JWT 签名密钥 | `change-me-in-production-use-a-long-random-string` |
+| `POSTGRES_PASSWORD` | PostgreSQL 密码 | `glean` |
+| `ADMIN_USERNAME` | 默认管理员用户名 | `admin` |
+| `ADMIN_PASSWORD` | 默认管理员密码 | `Admin123!` |
+| `CREATE_ADMIN` | 启动时自动创建管理员 | `true` |
+| `WEB_PORT` | Web 端口 | `80` |
+| `ADMIN_PORT` | 管理后台端口 | `3001` |
+| `IMAGE_TAG` | Docker 镜像标签 | `latest` |
+| `MTRAN_SERVER_URL` | backend/worker 使用的翻译服务地址 | `http://mtranserver:5001` |
+| `WORKER_JOB_TIMEOUT_SECONDS` | 长任务 worker 超时 | `1800` |
 
-```bash
-# 在 .env 文件中设置 IMAGE_TAG
-echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+完整配置见 [.env.example](./.env.example)。
 
-# 或者直接导出环境变量
-export IMAGE_TAG=v0.3.0-alpha.1
+## 当前能力重点
 
-# 使用预发布镜像启动
-docker compose up -d
-```
+### 阅读器与翻译
 
-**方法 2：内联环境变量**
+- 自动将非中文内容翻译成中文。
+- 基于句级/段级规则的双语渲染，并带持久化缓存。
+- 支持多翻译提供方，包括 MTranServer 以及远端翻译服务配置。
+- 改进了移动端阅读器导航、列表恢复和重复翻译控制。
 
-```bash
-IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
-```
+### 订阅与发现
 
-**注意**：预发布版本仅用于测试，不会触发 Electron 应用的自动更新，不推荐在生产环境使用。
+- 支持通过订阅地址、网站地址或 RSSHub 路径添加订阅。
+- 当源地址不能直接订阅时，可自动回退到 RSSHub。
+- 提供 Discover 发现页、候选源反馈和订阅转化链路。
+- 支持抓取尝试/成功时间展示，以及更清晰的错误处理。
 
-在 [Releases 页面](https://github.com/LeslieLeung/glean/releases) 查看可用的预发布版本。
+### 管理与运维
 
-## 部署
-
-默认部署包含所有服务（完整版）：
-- **Web 应用**（端口 80）- 主用户界面
-- **管理后台**（端口 3001）- 用户管理和系统监控
-- **后端 API** - FastAPI 服务器
-- **Worker** - 后台任务处理器（订阅源抓取、清理）
-- **PostgreSQL** - 数据库
-- **Redis** - 任务队列
-- **Milvus** - 向量数据库，用于智能推荐和偏好学习（Phase 3）
-
-**精简部署**（不包含 Milvus）也可使用 `docker-compose.lite.yml`。
-
-详细的部署说明和配置请参见 [DEPLOY.zh-CN.md](DEPLOY.zh-CN.md)。
+- 管理后台支持单条刷新、全部刷新、错误重试等操作。
+- 订阅源列表支持批量管理。
+- 包含用户管理、密码重置、订阅导入等后台能力。
+- 面向 Docker 部署，提供当前分支 compose 文件和可选 MTran profile。
 
 ## 技术栈
 
-**后端：**
-- Python 3.11+ / FastAPI / SQLAlchemy 2.0
-- PostgreSQL / Redis / arq（任务队列）
+### 后端
 
-**前端：**
+- Python 3.11+ / FastAPI / SQLAlchemy 2.0
+- PostgreSQL + `pgvector`
+- Redis + arq worker 队列
+
+### 前端
+
 - React 18 / TypeScript / Vite
 - Tailwind CSS / Zustand / TanStack Query
 
-## 开发指南
+## 开发
 
-完整的开发环境配置请参阅 **[DEVELOPMENT.md](./DEVELOPMENT.md)**。
+完整说明见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
 
 快速开始：
 
 ```bash
-# 克隆并配置
-git clone https://github.com/LeslieLeung/glean.git
+git clone https://github.com/GoToBoy/glean.git
 cd glean
 npm install
 
 # 启动基础设施
 make up
 
-# 初始化数据库（仅首次需要）
+# 执行数据库迁移
 make db-upgrade
 
-# 启动所有服务
+# 启动全部开发服务
 make dev-all
-
-# 访问：
-# - Web: http://localhost:3000
-# - 管理后台: http://localhost:3001
-# - API 文档: http://localhost:8000/api/docs
 ```
 
-## 开发路线图
+开发环境地址：
 
-| 阶段                  | 状态     | 功能                                     |
-| --------------------- | -------- | ---------------------------------------- |
-| **Phase 1: MVP**      | ✅ 完成   | 用户系统、RSS 订阅、阅读器、管理后台     |
-| **Phase 2: 内容组织** | ✅ 完成   | 收藏、文件夹、标签、稍后阅读             |
-| **Phase 3: 偏好系统** | 🚧 进行中 | Embedding 管线、偏好学习、智能推荐       |
-| **Phase 4: 规则引擎** | 📋 计划中 | 规则引擎、Jinja2 条件、自动化动作        |
-| **Phase 5: AI 功能**  | 📋 计划中 | AI 摘要、自动打标、关键词提取、BYOK 支持 |
-| **Phase 6: 扩展功能** | 📋 计划中 | Chrome 扩展、PWA、网页快照               |
+- Web：`http://localhost:3000`
+- Admin：`http://localhost:3001`
+- API 文档：`http://localhost:8000/api/docs`
 
-详细功能规格请参阅 **[产品需求文档](./docs/glean-prd-v1.2.md)**。
+## 分支相关文档
 
-## 文档
-
-- **[开发指南](./DEVELOPMENT.md)** - 搭建开发环境
-- **[部署指南](./DEPLOY.zh-CN.md)** - 生产环境部署详情
+- [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md) - 当前分支相对 `main` 的能力差异概览
+- [docs/feature-change-log.md](./docs/feature-change-log.md) - 功能级变更记录
+- [DEVELOPMENT.md](./DEVELOPMENT.md) - 本地开发指南
 
 ## 参与贡献
 
-欢迎贡献！请先阅读 [开发指南](./DEVELOPMENT.md)。
+欢迎贡献，建议先阅读 [DEVELOPMENT.md](./DEVELOPMENT.md)，然后：
 
-1. Fork 本仓库
-2. 创建功能分支
-3. 提交修改
-4. 运行测试和代码检查
-5. 提交 Pull Request
+1. Fork 仓库。
+2. 创建分支。
+3. 运行测试、lint 和类型检查。
+4. 提交 Pull Request。
 
 ## 许可证
 
-本项目采用 **AGPL-3.0 许可证** - 详见 [LICENSE](LICENSE) 文件。
+本项目采用 [AGPL-3.0](./LICENSE) 许可证。

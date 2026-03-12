@@ -197,9 +197,10 @@ export default function RegistrationSettingsPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>RSSHub Conversion</CardTitle>
+              <CardTitle>RSSHub Auto-Conversion</CardTitle>
               <CardDescription>
-                Configure self-hosted RSSHub for problematic sources that need conversion.
+                Configure URL-to-RSSHub auto-conversion rules for sources that cannot be subscribed
+                to directly. This is not the full RSSHub route catalog.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -207,7 +208,7 @@ export default function RegistrationSettingsPage() {
                 <Label htmlFor="rsshub-enabled" className="flex flex-col items-start space-y-1">
                   <span>Enable RSSHub</span>
                   <span className="text-muted-foreground font-normal">
-                    Allow feed discovery/update to use RSSHub path conversion.
+                    Allow subscription and fetch fallback to convert source URLs into RSSHub paths.
                   </span>
                 </Label>
                 <Switch
@@ -250,7 +251,11 @@ export default function RegistrationSettingsPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Built-in rules</Label>
+                <Label>Built-in auto-conversion rules</Label>
+                <p className="text-muted-foreground text-xs">
+                  These rules only control Glean&apos;s automatic URL mapping. For unsupported sites,
+                  add a custom rule here or subscribe directly with an RSSHub path in the reader UI.
+                </p>
                 <div className="grid gap-2 md:grid-cols-2">
                   {Object.entries(rsshubSettings.builtin_rules || {}).map(([ruleName, enabled]) => (
                     <div
@@ -292,6 +297,10 @@ export default function RegistrationSettingsPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="rsshub-custom-rules">Custom rules (JSON array)</Label>
+                <p className="text-muted-foreground text-xs">
+                  Use custom rules when a site is supported by RSSHub but does not appear in the
+                  built-in auto-conversion list.
+                </p>
                 <textarea
                   id="rsshub-custom-rules"
                   className="border-input bg-background min-h-[140px] w-full rounded-md border p-2 text-sm"

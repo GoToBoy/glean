@@ -234,4 +234,12 @@ class RSSHubService:
             if len(segments) >= 2 and segments[0] == "users" and segments[1].isdigit():
                 candidates.append(f"/pixiv/user/{segments[1]}")
 
+        if toggles.get("xiaoyuzhou_podcast", True) and (
+            host.endswith("xiaoyuzhoufm.com") or host.endswith("xiaoyuzhou.fm")
+        ):
+            if len(segments) >= 2 and segments[0] in {"podcast", "episode"}:
+                podcast_id = segments[1]
+                if podcast_id:
+                    candidates.append(f"/xiaoyuzhou/podcast/{podcast_id}")
+
         return candidates

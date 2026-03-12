@@ -1,262 +1,182 @@
-# Glean 拾灵
+# Glean
 
 **[English](./README.md)** | **[中文](./README.zh-CN.md)**
 
 > [!IMPORTANT]
-> Join our [Discord](https://discord.gg/KMKC4sRVSJ) to stay updated on the latest developments and get support.
->
-> This project is still in development and is not ready for production use.
+> This README describes the current `feature/milvus-to-pgvector` branch, not `main`.
+> For a branch-to-main delta summary, see [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md).
 
-A self-hosted RSS reader and personal knowledge management tool.
+> [!NOTE]
+> Join our [Discord](https://discord.gg/KMKC4sRVSJ) to follow updates and get support.
+> This project is still under active development.
 
-> **Glean** (拾灵) helps information-heavy consumers efficiently manage their reading through intelligent RSS aggregation.
+Glean is a self-hosted RSS reader and personal knowledge management tool for high-volume reading workflows.
 
 ![Glean](asset/Screenshot.png)
 
-## Features
+## What This Branch Includes
 
-### Core Features
-- 📰 **RSS Subscription** - Subscribe and organize RSS/Atom feeds with OPML import/export
-- 📚 **Smart Reading** - Clean reading experience with content filtering
-- 🔖 **Read Later** - Save articles for later reading with auto-cleanup
-- 📁 **Folders & Tags** - Multi-level folders and tags for organization
-- ⭐ **Bookmarks** - Save articles from feeds or external URLs
-- 🔧 **Background Sync** - Automatic feed updates every 15 minutes
-- 🔒 **Self-hosted** - Full data ownership with Docker deployment
-- 🎨 **Modern UI** - Beautiful, responsive warm dark theme interface
-- 👨‍💼 **Admin Dashboard** - User management and system monitoring
-
-### Planned Features (WIP)
-- 🧠 **Smart Recommendations** - AI-powered preference learning and article scoring
-- ⚙️ **Rule Engine** - Automated processing with Jinja2-style conditions
-- 🤖 **AI Features** - Summary generation, auto-tagging, keyword extraction (BYOK)
-- 📄 **Full Content Fetch** - Fetch complete article content for RSS summaries
-- 🔌 **Chrome Extension** - One-click bookmarking from browser
-- 📱 **Mobile PWA** - Progressive Web App for mobile devices
+- RSS/Atom subscriptions with nested folders, OPML import/export, and per-feed refresh state.
+- RSSHub support with admin-configured conversion, auto-fallback, and manual RSSHub-path subscription.
+- Discover workflow for finding new sources and converting candidates into subscriptions.
+- Immersive bilingual reading with persisted translation cache and multiple translation providers.
+- Bookmarks, tags, read-later, folder organization, and responsive desktop/mobile reader flows.
+- Admin dashboard with feed operations, retry/reset actions, batch management, and user administration.
+- PostgreSQL + `pgvector` vector storage. This branch no longer depends on Milvus.
 
 ## Quick Start
 
-### One-Command Deployment
+### Docker Compose
 
 ```bash
-# Download docker-compose.yml
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.yml -o docker-compose.yml
+# Download the compose file from this branch
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/docker-compose.yml -o docker-compose.yml
 
-# Start Glean (full deployment with Milvus)
-docker compose up -d
-
-# Access:
-# - Web App: http://localhost
-# - Admin Dashboard: http://localhost:3001 (default: admin/Admin123!)
-```
-
-**Default Admin Account**: An admin account is automatically created with:
-- Username: `admin`
-- Password: `Admin123!`
-- ⚠️ **Change this password in production!**
-
-**Lite Deployment** (without Milvus, if you don't need Phase 3 features):
-
-```bash
-# Download lite version
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/docker-compose.lite.yml -o docker-compose.yml
+# Optional: download the example env file from this branch
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/.env.example -o .env
 
 # Start Glean
 docker compose up -d
 
-# Admin Dashboard: http://localhost:3001 (default: admin/Admin123!)
+# Optional: enable local MTranServer for translation
+docker compose --profile mtran up -d
 ```
 
-### Customize Admin Account (Optional)
+Access:
 
-To use custom admin credentials instead of the defaults, create a `.env` file **before** starting:
+- Web App: `http://localhost`
+- Admin Dashboard: `http://localhost:3001`
+- API Health: `http://localhost:8000/api/health`
 
-```bash
-# Set custom admin credentials in .env
-cat > .env << EOF
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=YourSecurePassword123!
-SECRET_KEY=$(openssl rand -base64 32)
-EOF
+### Default Admin Account
 
-# Start services
-docker compose up -d
-```
+An admin account is created automatically by default:
 
-To disable auto-creation and create admin manually:
+- Username: `admin`
+- Password: `Admin123!`
 
-```bash
-# Disable auto-creation in .env
-echo "CREATE_ADMIN=false" >> .env
+Change this password before any real deployment.
 
-# Start services
-docker compose up -d
+## Deployment Notes
 
-# Create admin manually
-docker exec -it glean-backend /app/scripts/create-admin-docker.sh
-```
+This branch uses a single PostgreSQL instance with the `pgvector` extension for vector storage.
+There is no separate Milvus service in the default stack.
 
-## Configuration
+Default services:
 
-For production, customize your deployment with environment variables. Download the example file:
+- `postgres` - PostgreSQL 16 with `pgvector`
+- `redis` - task queue / cache
+- `backend` - FastAPI API server
+- `worker` - background jobs for feed fetch, cleanup, translation, embeddings
+- `web` - main reader UI
+- `admin` - admin dashboard
+- `mtranserver` - optional translation service, enabled via `--profile mtran`
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/LeslieLeung/glean/main/.env.example -o .env
-```
+Prebuilt images are available on GHCR:
 
-**Important settings to change:**
-
-| Variable            | Description          | Default                             |
-| ------------------- | -------------------- | ----------------------------------- |
-| `SECRET_KEY`        | JWT signing key      | **Must change in production!**      |
-| `POSTGRES_PASSWORD` | Database password    | `glean` (**Change in production!**) |
-| `ADMIN_PASSWORD`    | Admin password       | `Admin123!` (**Change!**)           |
-| `WEB_PORT`          | Web interface port   | `80`                                |
-| `ADMIN_PORT`        | Admin dashboard port | `3001`                              |
-| `CREATE_ADMIN`      | Auto-create admin    | `true` (set `false` to disable)     |
-
-For all configuration options, see [.env.example](.env.example).
-
-## Docker Images
-
-Pre-built images are available on GitHub Container Registry:
-
-- `ghcr.io/leslieleung/glean-backend:latest` - API server & worker
-- `ghcr.io/leslieleung/glean-web:latest` - Web frontend
-- `ghcr.io/leslieleung/glean-admin:latest` - Admin dashboard
+- `ghcr.io/leslieleung/glean-backend:latest`
+- `ghcr.io/leslieleung/glean-web:latest`
+- `ghcr.io/leslieleung/glean-admin:latest`
 
 Supported architectures: `linux/amd64`, `linux/arm64`
 
-### Testing Pre-release Versions
+## Configuration
 
-Want to test upcoming features? Use pre-release versions (alpha/beta/rc):
+Important environment variables:
 
-**Method 1: Using environment variable (recommended)**
+| Variable | Description | Default |
+| --- | --- | --- |
+| `SECRET_KEY` | JWT signing key | `change-me-in-production-use-a-long-random-string` |
+| `POSTGRES_PASSWORD` | PostgreSQL password | `glean` |
+| `ADMIN_USERNAME` | Default admin username | `admin` |
+| `ADMIN_PASSWORD` | Default admin password | `Admin123!` |
+| `CREATE_ADMIN` | Auto-create admin at startup | `true` |
+| `WEB_PORT` | Web UI port | `80` |
+| `ADMIN_PORT` | Admin UI port | `3001` |
+| `IMAGE_TAG` | Docker image tag | `latest` |
+| `MTRAN_SERVER_URL` | Backend/worker translation endpoint | `http://mtranserver:5001` |
+| `WORKER_JOB_TIMEOUT_SECONDS` | Worker timeout for long-running jobs | `1800` |
 
-```bash
-# Set the IMAGE_TAG in .env file
-echo "IMAGE_TAG=v0.3.0-alpha.1" >> .env
+For all options, see [.env.example](./.env.example).
 
-# Or export it directly
-export IMAGE_TAG=v0.3.0-alpha.1
+## Current Capability Highlights
 
-# Start with pre-release images
-docker compose up -d
-```
+### Reader and Translation
 
-**Method 2: Inline environment variable**
+- Auto-translate non-Chinese content into Chinese.
+- Sentence/paragraph-aware bilingual rendering with persisted cache.
+- Configurable translation providers, including MTranServer and remote-provider setups.
+- Improved mobile reader navigation, list restore, and reduced duplicate translation work.
 
-```bash
-IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
-```
+### Feeds and Discovery
 
-**Note**: Pre-release versions are for testing only. They won't trigger auto-updates for Electron apps and are not recommended for production use.
+- Add feeds by feed URL, website URL, or RSSHub path.
+- RSSHub auto-fallback when a source URL is not directly subscribable.
+- Discover page with candidate feedback and source exploration.
+- Feed refresh tracking with attempt/success timestamps and clearer error handling.
 
-See available pre-release versions on the [Releases page](https://github.com/LeslieLeung/glean/releases).
+### Admin and Operations
 
-## Deployment
-
-The default deployment includes all services (full version):
-- **Web App** (port 80) - Main user interface
-- **Admin Dashboard** (port 3001) - User management and system monitoring
-- **Backend API** - FastAPI server
-- **Worker** - Background task processor (feed fetching, cleanup)
-- **PostgreSQL** - Database
-- **Redis** - Task queue
-- **Milvus** - Vector database for smart recommendations and preference learning (Phase 3)
-
-**Lite deployment** (without Milvus) is also available using `docker-compose.lite.yml`.
-
-For detailed deployment instructions and configuration, see [DEPLOY.md](DEPLOY.md).
+- Feed-level refresh controls plus refresh-all / retry-errored actions.
+- Batch operations in the admin feed list.
+- User management, password reset, and subscription import workflows.
+- Docker-oriented deployment with branch-specific compose files and optional MTran profile.
 
 ## Tech Stack
 
-**Backend:**
-- Python 3.11+ / FastAPI / SQLAlchemy 2.0
-- PostgreSQL / Redis / arq (task queue)
+### Backend
 
-**Frontend:**
+- Python 3.11+ / FastAPI / SQLAlchemy 2.0
+- PostgreSQL + `pgvector`
+- Redis + arq worker queue
+
+### Frontend
+
 - React 18 / TypeScript / Vite
 - Tailwind CSS / Zustand / TanStack Query
 
 ## Development
 
-See **[DEVELOPMENT.md](./DEVELOPMENT.md)** for complete development setup instructions.
+See [DEVELOPMENT.md](./DEVELOPMENT.md) for the full setup.
 
 Quick start:
 
 ```bash
-# Clone and setup
-git clone https://github.com/LeslieLeung/glean.git
+git clone https://github.com/GoToBoy/glean.git
 cd glean
 npm install
 
-# Start infrastructure
+# Start infra
 make up
 
-# Initialize database (first time only)
+# Run migrations
 make db-upgrade
 
-# Install pre-commit hooks (optional but recommended)
-make pre-commit-install
-
-# Start all services
+# Start all dev services
 make dev-all
-
-# Access:
-# - Web: http://localhost:3000
-# - Admin: http://localhost:3001
-# - API Docs: http://localhost:8000/api/docs
 ```
 
-### Pre-commit Hooks
+Development endpoints:
 
-The project uses pre-commit hooks to ensure code quality:
+- Web: `http://localhost:3000`
+- Admin: `http://localhost:3001`
+- API docs: `http://localhost:8000/api/docs`
 
-```bash
-# Install hooks (one-time setup)
-make pre-commit-install
+## Branch-Specific Docs
 
-# Run hooks manually on all files
-make pre-commit-run
-
-# Uninstall hooks (if needed)
-make pre-commit-uninstall
-```
-
-Hooks automatically run on commit and check:
-- Backend: ruff format, ruff linter, pyright type checking
-- Frontend: ESLint, Prettier formatting
-- General: trailing whitespace, file endings, YAML/JSON/TOML validation
-
-## Roadmap
-
-| Phase                     | Status    | Features                                                       |
-| ------------------------- | --------- | -------------------------------------------------------------- |
-| **Phase 1: MVP**          | ✅ Done    | User system, RSS subscription, reader, admin dashboard         |
-| **Phase 2: Organization** | ✅ Done    | Bookmarks, folders, tags, read later                           |
-| **Phase 3: Preferences**  | 🚧 WIP     | Embedding pipeline, preference learning, smart recommendations |
-| **Phase 4: Rules**        | 📋 Planned | Rule engine, Jinja2 conditions, automated actions              |
-| **Phase 5: AI**           | 📋 Planned | AI summaries, auto-tagging, keyword extraction, BYOK support   |
-| **Phase 6: Extensions**   | 📋 Planned | Chrome extension, PWA, web snapshots                           |
-
-See **[Product Requirements](./docs/glean-prd-v1.2.md)** for detailed feature specifications.
-
-## Documentation
-
-- **[Development Guide](./DEVELOPMENT.md)** - Set up your development environment
-- **[Deployment Guide](./deploy/README.md)** - Production deployment details
+- [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md) - summary of what this branch adds over `main`
+- [docs/feature-change-log.md](./docs/feature-change-log.md) - feature-level change log
+- [DEVELOPMENT.md](./DEVELOPMENT.md) - local development guide
 
 ## Contributing
 
-Contributions are welcome! Please read our [Development Guide](./DEVELOPMENT.md) first.
+Contributions are welcome. Start with [DEVELOPMENT.md](./DEVELOPMENT.md), then:
 
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Run tests and linting
-5. Submit a Pull Request
+1. Fork the repository.
+2. Create a branch.
+3. Run tests and lint/type checks.
+4. Open a pull request.
 
 ## License
 
-This project is licensed under the **AGPL-3.0 License** - see the [LICENSE](LICENSE) file for details.
+Licensed under [AGPL-3.0](./LICENSE).

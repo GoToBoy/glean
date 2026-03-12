@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-RSSHUB_RULESET_VERSION = "2026.02.18"
+RSSHUB_RULESET_VERSION = "2026.03.12"
 
 RSSHUB_BUILTIN_RULES_DEFAULTS: dict[str, bool] = {
     "bilibili_space": True,
@@ -21,4 +21,5 @@ RSSHUB_BUILTIN_RULES_DEFAULTS: dict[str, bool] = {
     "medium_user": True,
     "medium_publication": True,
     "pixiv_user": True,
+    "xiaoyuzhou_podcast": True,
 }

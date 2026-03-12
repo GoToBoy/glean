@@ -52,6 +52,24 @@ def test_builtin_github_repo_generates_multiple_candidates() -> None:
     assert "/github/issue/openai/openai-python" in candidates
 
 
+def test_builtin_xiaoyuzhou_podcast_generates_candidate_from_podcast_url() -> None:
+    service = _service()
+    candidates = service._match_builtin_rules(
+        "https://www.xiaoyuzhoufm.com/podcast/5e280f5db6d15b1cddc84e6f",
+        {"xiaoyuzhou_podcast": True},
+    )
+    assert "/xiaoyuzhou/podcast/5e280f5db6d15b1cddc84e6f" in candidates
+
+
+def test_builtin_xiaoyuzhou_podcast_generates_candidate_from_episode_url() -> None:
+    service = _service()
+    candidates = service._match_builtin_rules(
+        "https://www.xiaoyuzhoufm.com/episode/67cc640d13fd28d6dd449355",
+        {"xiaoyuzhou_podcast": True},
+    )
+    assert "/xiaoyuzhou/podcast/67cc640d13fd28d6dd449355" in candidates
+
+
 def test_convert_with_config_prefers_custom_rules_and_deduplicates() -> None:
     service = _service()
     config = RSSHubConfig(
