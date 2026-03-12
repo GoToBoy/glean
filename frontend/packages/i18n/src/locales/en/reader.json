@@ -76,6 +76,7 @@
     "failed": "Translation failed",
     "retry": "Retry",
     "sentenceMode": "Sentence translation active",
+    "translatingVisible": "Translating visible content",
     "hideTranslation": "Hide Translation",
     "preToggleTitle": "Preformatted blocks detected",
     "preToggleDesc": "Some blocks may be commands or logs. Translate them?",

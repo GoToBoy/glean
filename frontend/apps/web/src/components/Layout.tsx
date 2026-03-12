@@ -69,7 +69,7 @@ const SIDEBAR_COLLAPSED_WIDTH = 72
 const SIDEBAR_STORAGE_KEY = 'glean-sidebar-width'
 
 export function Layout() {
-  const { t } = useTranslation('feeds')
+  const { t } = useTranslation(['feeds', 'reader'])
   const { user, logout } = useAuthStore()
   const { reset: resetBookmarks } = useBookmarkStore()
   const { reset: resetFolders } = useFolderStore()
@@ -80,6 +80,11 @@ export function Layout() {
   const [searchParams] = useSearchParams()
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
+  const [isMobileListTranslationActive, setIsMobileListTranslationActive] = useState(false)
+  const [isMobileListTranslationLoading, setIsMobileListTranslationLoading] = useState(false)
+  const [mobileListTranslationLoadingPhase, setMobileListTranslationLoadingPhase] = useState<
+    'idle' | 'start' | 'settled'
+  >('idle')
 
   // Fetch all subscriptions for sidebar (with ETag-based caching)
   const { data: subscriptions = [] } = useAllSubscriptions()
@@ -102,6 +107,22 @@ export function Layout() {
       }
     }
     checkPlatform()
+  }, [])
+
+  useEffect(() => {
+    const handleReaderListTranslationState = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { active?: boolean; loading?: boolean; phase?: 'idle' | 'start' | 'settled' }
+        | undefined
+      setIsMobileListTranslationActive(Boolean(detail?.active))
+      setIsMobileListTranslationLoading(Boolean(detail?.loading))
+      setMobileListTranslationLoadingPhase(detail?.phase ?? 'idle')
+    }
+
+    window.addEventListener('readerMobileListActions:state', handleReaderListTranslationState)
+    return () => {
+      window.removeEventListener('readerMobileListActions:state', handleReaderListTranslationState)
+    }
   }, [])
 
   // Sidebar resize state
@@ -693,11 +714,34 @@ export function Layout() {
               onClick={() =>
                 window.dispatchEvent(new CustomEvent('readerMobileListActions:toggleTranslation'))
               }
-              className="text-muted-foreground hover:bg-accent flex h-8 w-8 items-center justify-center rounded-md transition-colors"
-              aria-label="Toggle translation"
-              title="Translation"
+              className={cn(
+                'list-translation-toggle hover:bg-accent flex h-8 w-8 items-center justify-center rounded-md transition-colors',
+                isMobileListTranslationActive ? 'text-primary' : 'text-muted-foreground',
+                isMobileListTranslationLoading && 'list-translation-toggle-loading',
+                mobileListTranslationLoadingPhase === 'start' &&
+                  'list-translation-toggle-loading-start',
+                mobileListTranslationLoadingPhase === 'settled' &&
+                  'list-translation-toggle-loading-settled'
+              )}
+              aria-label={
+                isMobileListTranslationLoading
+                  ? t('reader:translation.translating')
+                  : isMobileListTranslationActive
+                    ? t('reader:translation.hideTranslation')
+                    : t('reader:translation.translate')
+              }
+              title={
+                isMobileListTranslationLoading
+                  ? t('reader:translation.translating')
+                  : isMobileListTranslationActive
+                    ? t('reader:translation.hideTranslation')
+                    : t('reader:translation.translate')
+              }
             >
-              <Languages className="h-4 w-4" />
+              <span className="list-translation-toggle__icon-wrap">
+                <span className="list-translation-toggle__ring" aria-hidden="true" />
+                <Languages className="list-translation-toggle__icon h-4 w-4" />
+              </span>
             </button>
             <DropdownMenu>
               <DropdownMenuTrigger

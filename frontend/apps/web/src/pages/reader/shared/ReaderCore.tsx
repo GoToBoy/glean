@@ -9,7 +9,7 @@ import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
 import type { EntryWithState, ReaderListResumeMap, TranslationTargetLanguage } from '@glean/types'
 import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
-import { Alert, AlertTitle, AlertDescription } from '@glean/ui'
+import { Alert, AlertTitle, AlertDescription, cn } from '@glean/ui'
 import { useReaderController, type FilterType } from './useReaderController'
 import {
   BookOpenIcon,
@@ -110,12 +110,17 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const translationCacheRef = useRef<Map<string, string>>(new Map())
   const pendingTranslationEntryIdsRef = useRef<Set<string>>(new Set())
   const translatedEntryIdsRef = useRef<Set<string>>(new Set())
+  const listTranslationSessionRef = useRef(0)
   const [isListTranslationActive, setIsListTranslationActive] = useState(
     user?.settings?.list_translation_auto_enabled ?? false
   )
   const [translatedEntryTexts, setTranslatedEntryTexts] = useState<
     Record<string, { title?: string; summary?: string }>
   >({})
+  const [listTranslationBatchCount, setListTranslationBatchCount] = useState(0)
+  const [listTranslationLoadingPhase, setListTranslationLoadingPhase] = useState<
+    'idle' | 'start' | 'settled'
+  >('idle')
   const [listScrollTop, setListScrollTop] = useState(0)
   const [listViewportHeight, setListViewportHeight] = useState(0)
   const [newEntriesAboveCount, setNewEntriesAboveCount] = useState(0)
@@ -333,6 +338,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const preferredTargetLanguage = (user?.settings?.translation_target_language ??
     'zh-CN') as TranslationTargetLanguage
   const listTranslationTargetLanguage = preferredTargetLanguage
+  const isListTranslationLoading = isListTranslationActive && listTranslationBatchCount > 0
 
   // Handle filter change with slide direction
   const handleFilterChange = (newFilter: FilterType) => {
@@ -561,16 +567,48 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   useEffect(() => {
     if (isListTranslationActive) return
+    listTranslationSessionRef.current += 1
     translatedEntryIdsRef.current.clear()
     pendingTranslationEntryIdsRef.current.clear()
     translationCacheRef.current.clear()
+    setListTranslationBatchCount(0)
+    setListTranslationLoadingPhase('idle')
     setTranslatedEntryTexts({})
   }, [isListTranslationActive])
+
+  useEffect(() => {
+    if (!isListTranslationLoading) {
+      setListTranslationLoadingPhase('idle')
+      return
+    }
+
+    setListTranslationLoadingPhase('start')
+    const timer = window.setTimeout(() => {
+      setListTranslationLoadingPhase('settled')
+    }, 1000)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [isListTranslationLoading])
+
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent('readerMobileListActions:state', {
+        detail: {
+          active: isListTranslationActive,
+          loading: isListTranslationLoading,
+          phase: listTranslationLoadingPhase,
+        },
+      })
+    )
+  }, [isListTranslationActive, isListTranslationLoading, listTranslationLoadingPhase])
 
   // Batch-translate multiple visible list entries in a single API call.
   const translateListEntries = useCallback(
     async (entryIds: string[]) => {
       if (!isListTranslationActive) return
+      const sessionId = listTranslationSessionRef.current
 
       // Filter to entries that haven't been translated or are pending
       const toTranslate = entryIds.filter(
@@ -602,6 +640,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         [title, summaryPlain].filter((t) => t.length > 0)
       )
       const uncachedTexts = [...new Set(allTexts.filter((t) => !translationCacheRef.current.has(t)))]
+      setListTranslationBatchCount((count) => count + 1)
 
       try {
         if (uncachedTexts.length > 0) {
@@ -611,6 +650,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             listTranslationTargetLanguage,
             'auto'
           )
+          if (sessionId !== listTranslationSessionRef.current) return
           uncachedTexts.forEach((text, index) => {
             const translated = response.translations[index]
             if (translated && translated.trim()) {
@@ -618,6 +658,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             }
           })
         }
+        if (sessionId !== listTranslationSessionRef.current) return
 
         // Apply results to all entries at once
         setTranslatedEntryTexts((prev) => {
@@ -634,6 +675,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       } catch (error) {
         console.error('Failed to translate list entries:', error)
       } finally {
+        if (sessionId !== listTranslationSessionRef.current) return
+        setListTranslationBatchCount((count) => Math.max(0, count - 1))
         for (const { entry } of entryTexts) {
           pendingTranslationEntryIdsRef.current.delete(entry.id)
         }
@@ -1024,15 +1067,33 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                       <button
                         onClick={() => setIsListTranslationActive((v) => !v)}
                         title={
-                          isListTranslationActive
-                            ? t('translation.hideTranslation')
-                            : t('translation.translate')
+                          isListTranslationLoading
+                            ? t('translation.translating')
+                            : isListTranslationActive
+                              ? t('translation.hideTranslation')
+                              : t('translation.translate')
                         }
-                        className={`hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                          isListTranslationActive ? 'text-primary' : 'text-muted-foreground'
-                        }`}
+                        aria-label={
+                          isListTranslationLoading
+                            ? t('translation.translating')
+                            : isListTranslationActive
+                              ? t('translation.hideTranslation')
+                              : t('translation.translate')
+                        }
+                        className={cn(
+                          'list-translation-toggle hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
+                          isListTranslationActive ? 'text-primary' : 'text-muted-foreground',
+                          isListTranslationLoading && 'list-translation-toggle-loading',
+                          listTranslationLoadingPhase === 'start' &&
+                            'list-translation-toggle-loading-start',
+                          listTranslationLoadingPhase === 'settled' &&
+                            'list-translation-toggle-loading-settled'
+                        )}
                       >
-                        <Languages className="h-4 w-4" />
+                        <span className="list-translation-toggle__icon-wrap">
+                          <span className="list-translation-toggle__ring" aria-hidden="true" />
+                          <Languages className="list-translation-toggle__icon h-4 w-4" />
+                        </span>
                       </button>
 
                       {/* Mark all read button */}

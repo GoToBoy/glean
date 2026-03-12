@@ -231,6 +231,7 @@ export function ArticleReader({
   const isMobile = useIsMobile()
   const barsVisible = useMobileBarsVisibility(scrollContainerRef, entry.id)
   const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
+  const [translationLoadingPhase, setTranslationLoadingPhase] = useState<'idle' | 'start' | 'settled'>('idle')
   const { showPrompt, dismissPrompt } = useEndOfArticleFeedbackPrompt({
     entryId: entry.id,
     isLiked: entry.is_liked,
@@ -273,6 +274,22 @@ export function ArticleReader({
       }
     }
   }, [canTranslate, activateTranslation, entry.id])
+
+  useEffect(() => {
+    if (!isTranslating) {
+      setTranslationLoadingPhase('idle')
+      return
+    }
+
+    setTranslationLoadingPhase('start')
+    const timer = window.setTimeout(() => {
+      setTranslationLoadingPhase('settled')
+    }, 1000)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [isTranslating])
 
   // Reset outline state when entry changes
   useEffect(() => {
@@ -358,6 +375,16 @@ export function ArticleReader({
   const handleOpenExternal = useCallback(() => {
     window.open(entry.url, '_blank', 'noopener,noreferrer')
   }, [entry.url])
+
+  const translationButtonClassName = [
+    'action-btn translate-action-btn',
+    showTranslation ? 'text-primary' : 'text-muted-foreground',
+    isTranslating ? 'translate-action-btn-loading' : '',
+    translationLoadingPhase === 'start' ? 'translate-action-btn-loading-start' : '',
+    translationLoadingPhase === 'settled' ? 'translate-action-btn-loading-settled' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -453,9 +480,13 @@ export function ArticleReader({
                 variant="ghost"
                 size="sm"
                 onClick={toggleTranslation}
-                className="action-btn text-primary"
+                className={translationButtonClassName}
               >
-                <Languages className="h-4 w-4" />
+                <span className="translate-action-btn__icon-wrap">
+                  <span className="translate-action-btn__ring" aria-hidden="true" />
+                  <span className="translate-action-btn__dot" aria-hidden="true" />
+                  <Languages className="translate-action-btn__icon h-4 w-4" />
+                </span>
                 <span>{t('translation.hideTranslation')}</span>
               </Button>
             ) : canTranslate ? (
@@ -463,14 +494,13 @@ export function ArticleReader({
                 variant="ghost"
                 size="sm"
                 onClick={activateTranslation}
-                disabled={isTranslating}
-                className="action-btn text-muted-foreground"
+                className={translationButtonClassName}
               >
-                {isTranslating ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Languages className="h-4 w-4" />
-                )}
+                <span className="translate-action-btn__icon-wrap">
+                  <span className="translate-action-btn__ring" aria-hidden="true" />
+                  <span className="translate-action-btn__dot" aria-hidden="true" />
+                  <Languages className="translate-action-btn__icon h-4 w-4" />
+                </span>
                 <span>
                   {isTranslating ? t('translation.translating') : t('translation.translate')}
                 </span>
@@ -551,10 +581,9 @@ export function ArticleReader({
                 {canTranslate && showTranslation && (
                   <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
                     <span className="text-muted-foreground text-xs">
-                      {t('translation.sentenceMode')}
-                      {isTranslating && (
-                        <Loader2 className="ml-1.5 inline h-3 w-3 animate-spin" />
-                      )}
+                      {isTranslating
+                        ? t('translation.translatingVisible')
+                        : t('translation.sentenceMode')}
                     </span>
                     <button
                       onClick={toggleTranslation}
@@ -710,19 +739,28 @@ export function ArticleReader({
 
             {canTranslate && (
               <button
-                onClick={toggleTranslation}
-                disabled={isTranslating}
-                className={`action-btn action-btn-mobile flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
+                onClick={showTranslation ? toggleTranslation : activateTranslation}
+                className={`action-btn action-btn-mobile translate-action-btn flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
                   showTranslation ? 'text-primary' : 'text-muted-foreground'
+                } ${isTranslating ? 'translate-action-btn-loading' : ''} ${
+                  translationLoadingPhase === 'start' ? 'translate-action-btn-loading-start' : ''
+                } ${
+                  translationLoadingPhase === 'settled'
+                    ? 'translate-action-btn-loading-settled'
+                    : ''
                 }`}
               >
-                {isTranslating ? (
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                ) : (
-                  <Languages className="h-5 w-5" />
-                )}
+                <span className="translate-action-btn__icon-wrap">
+                  <span className="translate-action-btn__ring" aria-hidden="true" />
+                  <span className="translate-action-btn__dot" aria-hidden="true" />
+                  <Languages className="translate-action-btn__icon h-5 w-5" />
+                </span>
                 <span className="text-[10px]">
-                  {showTranslation ? t('translation.hideTranslation') : t('translation.translate')}
+                  {showTranslation
+                    ? t('translation.hideTranslation')
+                    : isTranslating
+                      ? t('translation.translating')
+                      : t('translation.translate')}
                 </span>
               </button>
             )}

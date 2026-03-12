@@ -1763,6 +1763,171 @@ body {
   opacity: 1;
 }
 
+.list-translation-toggle {
+  position: relative;
+}
+
+.list-translation-toggle__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.list-translation-toggle__icon {
+  position: relative;
+  z-index: 1;
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.list-translation-toggle__ring {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.85);
+}
+
+.list-translation-toggle-loading .list-translation-toggle__icon {
+  animation: listTranslationIconBreath 1.4s ease-in-out infinite;
+}
+
+.list-translation-toggle-loading .list-translation-toggle__ring {
+  animation: listTranslationRingBreath 1.4s ease-in-out infinite;
+}
+
+.list-translation-toggle__dot {
+  position: absolute;
+  top: -1px;
+  right: -1px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform: scale(0.6);
+}
+
+.list-translation-toggle-loading-start .list-translation-toggle__ring {
+  animation-duration: 0.95s;
+}
+
+.list-translation-toggle-loading-settled .list-translation-toggle__icon {
+  animation: none;
+}
+
+.list-translation-toggle-loading-settled .list-translation-toggle__ring {
+  animation: listTranslationRingSoftPulse 2.4s ease-in-out infinite;
+}
+
+.list-translation-toggle-loading-settled .list-translation-toggle__dot {
+  animation: translationStatusDotBlink 1.8s ease-in-out infinite;
+}
+
+@keyframes listTranslationIconBreath {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.72;
+    transform: scale(0.92);
+  }
+}
+
+@keyframes listTranslationRingBreath {
+  0%, 100% {
+    opacity: 0.12;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 0.48;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes listTranslationRingSoftPulse {
+  0%, 100% {
+    opacity: 0.1;
+    transform: scale(0.96);
+  }
+  50% {
+    opacity: 0.24;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes translationStatusDotBlink {
+  0%, 100% {
+    opacity: 0.18;
+    transform: scale(0.75);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+
+.translate-action-btn {
+  position: relative;
+}
+
+.translate-action-btn__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.translate-action-btn__icon {
+  position: relative;
+  z-index: 1;
+  transition: transform 220ms ease, opacity 220ms ease;
+}
+
+.translate-action-btn__ring {
+  position: absolute;
+  inset: -4px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.88);
+}
+
+.translate-action-btn__dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0;
+  transform: scale(0.65);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--background) 72%, transparent);
+}
+
+.translate-action-btn-loading-start .translate-action-btn__icon {
+  animation: listTranslationIconBreath 1s ease-in-out infinite;
+}
+
+.translate-action-btn-loading-start .translate-action-btn__ring {
+  animation: listTranslationRingBreath 1s ease-in-out infinite;
+}
+
+.translate-action-btn-loading-settled .translate-action-btn__ring {
+  animation: listTranslationRingSoftPulse 2.3s ease-in-out infinite;
+}
+
+.translate-action-btn-loading-settled .translate-action-btn__dot {
+  animation: translationStatusDotBlink 1.7s ease-in-out infinite;
+}
+
+.translate-action-btn-loading-settled.action-btn-mobile .translate-action-btn__icon {
+  animation: listTranslationIconBreath 2.2s ease-in-out infinite;
+}
+
 @theme inline {
   --animate-skeleton: skeleton 2s -1s infinite linear;
   --color-warning-foreground: var(--warning-foreground);
