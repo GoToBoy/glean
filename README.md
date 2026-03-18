@@ -3,7 +3,7 @@
 **[English](./README.md)** | **[中文](./README.zh-CN.md)**
 
 > [!IMPORTANT]
-> This README describes the current `feature/milvus-to-pgvector` branch, not `main`.
+> This README describes the fork's primary branch `personal-main`, not upstream `main`.
 > For a branch-to-main delta summary, see [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md).
 
 > [!NOTE]
@@ -14,7 +14,7 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 
 ![Glean](asset/Screenshot.png)
 
-## What This Branch Includes
+## What This Fork Includes
 
 - RSS/Atom subscriptions with nested folders, OPML import/export, and per-feed refresh state.
 - RSSHub support with admin-configured conversion, auto-fallback, and manual RSSHub-path subscription.
@@ -22,7 +22,22 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 - Immersive bilingual reading with persisted translation cache and multiple translation providers.
 - Bookmarks, tags, read-later, folder organization, and responsive desktop/mobile reader flows.
 - Admin dashboard with feed operations, retry/reset actions, batch management, and user administration.
-- PostgreSQL + `pgvector` vector storage. This branch no longer depends on Milvus.
+- PostgreSQL + `pgvector` vector storage. This fork no longer depends on Milvus.
+- Playwright-enabled worker fallback for RSS sites that block plain HTTP article extraction.
+
+## Why This Fork Uses Its Own Primary Branch
+
+This fork is intentionally moving faster than upstream and is not waiting on upstream merge cadence.
+The intended primary branch is `personal-main`, which serves as this repo's release line.
+
+Compared with upstream `main`, this fork currently adds:
+
+- `pgvector` as the default vector backend, removing the need for a separate Milvus deployment.
+- A full translation pipeline with persisted bilingual reading state and multiple providers.
+- Discover + RSSHub conversion flow for source discovery and fallback subscription.
+- Stronger feed ingestion behavior, including better retry/error handling and fetch observability.
+- Admin-side bulk operations and deployment/ops improvements.
+- A dedicated `glean-worker` image with Playwright-based browser fallback for summary-only or challenge-protected RSS sources.
 
 ## Quick Start
 
@@ -30,10 +45,10 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 
 ```bash
 # Download the compose file from this branch
-curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/docker-compose.yml -o docker-compose.yml
 
 # Optional: download the example env file from this branch
-curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/.env.example -o .env
 
 # Start Glean
 docker compose up -d
@@ -59,7 +74,7 @@ Change this password before any real deployment.
 
 ## Deployment Notes
 
-This branch uses a single PostgreSQL instance with the `pgvector` extension for vector storage.
+This fork uses a single PostgreSQL instance with the `pgvector` extension for vector storage.
 There is no separate Milvus service in the default stack.
 
 Default services:
@@ -67,7 +82,7 @@ Default services:
 - `postgres` - PostgreSQL 16 with `pgvector`
 - `redis` - task queue / cache
 - `backend` - FastAPI API server
-- `worker` - background jobs for feed fetch, cleanup, translation, embeddings
+- `worker` - background jobs for feed fetch, browser-based full-text extraction, cleanup, translation, embeddings
 - `web` - main reader UI
 - `admin` - admin dashboard
 - `mtranserver` - optional translation service, enabled via `--profile mtran`
@@ -164,8 +179,9 @@ Development endpoints:
 
 ## Branch-Specific Docs
 
-- [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md) - summary of what this branch adds over `main`
+- [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md) - summary of what `personal-main` adds over upstream `main`
 - [docs/feature-change-log.md](./docs/feature-change-log.md) - feature-level change log
+- [docs/rss-browser-extraction-plan.md](./docs/rss-browser-extraction-plan.md) - browser fallback plan for blocked RSS article pages
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - local development guide
 
 ## Contributing

@@ -1,12 +1,12 @@
-# Glean Branch Comparison README (`main` vs `feature/milvus-to-pgvector`)
+# Glean Branch Comparison README (`main` vs `personal-main`)
 
 ## 1. Comparison Scope
 
-- Compared branches: `main...feature/milvus-to-pgvector`
+- Compared branches: `main...personal-main`
 - Baseline date: `2026-03-10` (based on latest local `main`, and `main == origin/main`)
 - Branch status: feature is `102` commits ahead (`main` is behind by `0`)
 - Diff size: `186 files changed`, `+17148 / -3589`
-- Diff method: `git diff main...feature/milvus-to-pgvector`
+- Diff method: `git diff main...personal-main`
 
 > This document focuses on two things:
 > 1) what this feature branch adds compared with `main`;
@@ -105,7 +105,7 @@ Key locations:
 ### 3.5 Boundary note against latest `main`
 
 - OIDC already exists in latest `main`, so it is not counted as a branch addition here.
-- This document only captures real residual differences in `main...feature/milvus-to-pgvector`.
+- This document only captures real residual differences in `main...personal-main`.
 
 ---
 

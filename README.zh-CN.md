@@ -3,7 +3,7 @@
 **[English](./README.md)** | **[中文](./README.zh-CN.md)**
 
 > [!IMPORTANT]
-> 本 README 描述的是当前 `feature/milvus-to-pgvector` 分支，而不是 `main`。
+> 本 README 描述的是此 fork 的主分支 `personal-main`，而不是上游 `main`。
 > 与 `main` 的差异概览请见 [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md)。
 
 > [!NOTE]
@@ -14,7 +14,7 @@ Glean 是一个面向高密度阅读场景的自托管 RSS 阅读器与个人知
 
 ![Glean](asset/Screenshot.png)
 
-## 当前分支包含的能力
+## 当前 Fork 包含的能力
 
 - RSS/Atom 订阅、嵌套文件夹、OPML 导入导出、订阅刷新状态追踪。
 - RSSHub 管理员配置、自动兜底转换，以及手动 RSSHub 路径订阅。
@@ -22,7 +22,22 @@ Glean 是一个面向高密度阅读场景的自托管 RSS 阅读器与个人知
 - 沉浸式双语阅读、持久化翻译缓存，以及多翻译提供方支持。
 - 收藏、标签、稍后阅读、文件夹整理，以及桌面/移动端阅读流程优化。
 - 管理后台支持订阅批量操作、错误重试、状态轮询和用户管理。
-- 向量存储已迁移到 PostgreSQL + `pgvector`，当前分支不再依赖 Milvus。
+- 向量存储已迁移到 PostgreSQL + `pgvector`，当前 fork 不再依赖 Milvus。
+- 对纯 HTTP 无法抓取正文的 RSS 站点，提供基于 Playwright 的 worker 浏览器回退抓取。
+
+## 为什么此 Fork 使用独立主分支
+
+这个 fork 的迭代速度和方向与上游不同，不再以等待上游合并作为发布节奏。
+仓库的主要发布分支预期为 `personal-main`。
+
+相对上游 `main`，这个 fork 目前主要新增：
+
+- 默认使用 `pgvector`，不再依赖单独的 Milvus 服务。
+- 完整翻译链路与沉浸式双语阅读。
+- Discover + RSSHub 自动转换与回退订阅流程。
+- 更稳健的 feed 抓取、重试与错误可观测性。
+- 更完整的管理端批量操作与部署运维增强。
+- 独立 `glean-worker` 镜像，并对受挑战页保护的 RSS 正文抓取提供 Playwright 浏览器回退。
 
 ## 快速开始
 
@@ -30,10 +45,10 @@ Glean 是一个面向高密度阅读场景的自托管 RSS 阅读器与个人知
 
 ```bash
 # 从当前分支下载 compose 文件
-curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/docker-compose.yml -o docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/docker-compose.yml -o docker-compose.yml
 
 # 可选：下载当前分支的示例环境变量文件
-curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/feature/milvus-to-pgvector/.env.example -o .env
+curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/.env.example -o .env
 
 # 启动 Glean
 docker compose up -d
@@ -59,14 +74,14 @@ docker compose --profile mtran up -d
 
 ## 部署说明
 
-当前分支使用单个 PostgreSQL 实例承载 `pgvector` 扩展，不再需要单独的 Milvus 服务。
+当前 fork 使用单个 PostgreSQL 实例承载 `pgvector` 扩展，不再需要单独的 Milvus 服务。
 
 默认服务包括：
 
 - `postgres` - 带 `pgvector` 的 PostgreSQL 16
 - `redis` - 队列与缓存
 - `backend` - FastAPI API 服务
-- `worker` - 负责抓取、清理、翻译、向量任务的后台 worker
+- `worker` - 负责抓取、浏览器正文回退、清理、翻译、向量任务的后台 worker
 - `web` - 主阅读器前端
 - `admin` - 管理后台
 - `mtranserver` - 可选翻译服务，通过 `--profile mtran` 启用
@@ -163,8 +178,9 @@ make dev-all
 
 ## 分支相关文档
 
-- [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md) - 当前分支相对 `main` 的能力差异概览
+- [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md) - `personal-main` 相对上游 `main` 的能力差异概览
 - [docs/feature-change-log.md](./docs/feature-change-log.md) - 功能级变更记录
+- [docs/rss-browser-extraction-plan.md](./docs/rss-browser-extraction-plan.md) - RSS 正文浏览器回退抓取方案
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 本地开发指南
 
 ## 参与贡献

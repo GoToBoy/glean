@@ -1,12 +1,12 @@
-# Glean 分支对比 README（`main` vs `feature/milvus-to-pgvector`）
+# Glean 分支对比 README（`main` vs `personal-main`）
 
 ## 1. 对比范围
 
-- 对比分支：`main...feature/milvus-to-pgvector`
+- 对比分支：`main...personal-main`
 - 基线时间：`2026-03-10`（已基于最新本地 `main`，且 `main == origin/main`）
 - 当前分支领先：`102` commits（`main` 落后 `0`）
 - 代码差异规模：`186 files changed`，`+17148 / -3589`
-- 对比方式：`git diff main...feature/milvus-to-pgvector`
+- 对比方式：`git diff main...personal-main`
 
 > 本文档聚焦两件事：  
 > 1) 这个 feature 分支新增了哪些能力；  
@@ -105,7 +105,7 @@
 ### 3.5 与最新 `main` 的边界说明
 
 - OIDC 已在最新 `main` 中存在，因此不计入本分支“相对 main 的新增”。
-- 本文档仅统计 `main...feature/milvus-to-pgvector` 真实剩余差异。
+- 本文档仅统计 `main...personal-main` 真实剩余差异。
 
 ---
 
