@@ -248,6 +248,7 @@ class BookmarkService:
             entry = result.scalar_one_or_none()
             if not entry:
                 raise ValueError("Entry not found")
+            url = url or entry.url
             title = title or entry.title
             # Use same logic as article list: content first, then summary
             if not excerpt:

@@ -8,10 +8,11 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models.admin import AdminRole, AdminUser
+from glean_database.models.bookmark import Bookmark
 from glean_database.models.entry import Entry
 from glean_database.models.feed import Feed, FeedStatus
 from glean_database.models.subscription import Subscription
@@ -33,6 +34,22 @@ class AdminService:
         """
         self.session = session
         self.system_config = SystemConfigService(session)
+
+    async def _preserve_entry_bookmark_urls_for_feeds(self, feed_ids: list[str]) -> None:
+        """Backfill bookmark URLs before deleting feed entries."""
+        if not feed_ids:
+            return
+
+        entry_url_subquery = (
+            select(Entry.url).where(Entry.id == Bookmark.entry_id).scalar_subquery()
+        )
+        feed_entry_ids = select(Entry.id).where(Entry.feed_id.in_(feed_ids))
+
+        await self.session.execute(
+            update(Bookmark)
+            .where(Bookmark.entry_id.in_(feed_entry_ids), Bookmark.url.is_(None))
+            .values(url=entry_url_subquery)
+        )
 
     @staticmethod
     def _normalize_feed_status(status: str) -> FeedStatus:
@@ -493,6 +510,9 @@ class AdminService:
         if not feed:
             return False
 
+        # Preserve existing entry-based bookmarks as URL bookmarks before
+        # entry deletion clears their foreign key.
+        await self._preserve_entry_bookmark_urls_for_feeds([feed_id])
         await self.session.delete(feed)
         await self.session.commit()
         return True
@@ -512,6 +532,10 @@ class AdminService:
         feeds = list(result.scalars().all())
 
         count = 0
+        delete_feed_ids = [feed.id for feed in feeds if action == "delete"]
+        if delete_feed_ids:
+            await self._preserve_entry_bookmark_urls_for_feeds(delete_feed_ids)
+
         for feed in feeds:
             if action == "enable":
                 feed.status = FeedStatus.ACTIVE
