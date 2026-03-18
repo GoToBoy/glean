@@ -96,7 +96,7 @@ api:
 
 worker:
 	@echo "⚙️  Starting background worker..."
-	@cd backend && uv run arq glean_worker.main.WorkerSettings
+	@cd backend && uv run python scripts/run-arq-worker.py glean_worker.main.WorkerSettings
 
 web:
 	@echo "🌐 Starting web app on http://localhost:3000"

@@ -17,7 +17,7 @@ git push + git tag v0.x.x    →    GitHub Actions 自动构建     →     绿�
                                    └── glean-admin   (amd64+arm64)        │
                                    │                                      │
                                    ▼                                      ▼
-                              ghcr.io/gotoboy/glean-*:tag    ←    docker-compose.yml
+ghcr.io/gotoboy/glean-*:tag    ←    docker-compose.yml
 ```
 
 ---
@@ -134,6 +134,7 @@ image: ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
 2. 创建数据库
 3. 运行数据库迁移
 4. 创建管理员账号
+5. 使用兼容 Python 3.14 的 worker 启动包装脚本启动 `arq`
 
 ---
 

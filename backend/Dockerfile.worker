@@ -42,4 +42,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 RUN chmod +x scripts/*.sh 2>/dev/null || true
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/app/scripts/entrypoint.sh"]
-CMD ["uv", "run", "--no-sync", "arq", "glean_worker.main.WorkerSettings"]
+CMD ["uv", "run", "--no-sync", "python", "scripts/run-arq-worker.py", "glean_worker.main.WorkerSettings"]

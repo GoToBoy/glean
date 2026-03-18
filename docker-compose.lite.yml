@@ -135,7 +135,7 @@ services:
     networks:
       - glean-network
     restart: unless-stopped
-    command: ["uv", "run", "--no-sync", "arq", "glean_worker.main.WorkerSettings"]
+    command: ["uv", "run", "--no-sync", "python", "scripts/run-arq-worker.py", "glean_worker.main.WorkerSettings"]
 
   web:
     image: ghcr.io/leslieleung/glean-web:${IMAGE_TAG:-latest}
