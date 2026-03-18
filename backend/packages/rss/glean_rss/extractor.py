@@ -45,6 +45,10 @@ CHALLENGE_MARKERS = (
     "cf-chl-",
     "attention required!",
 )
+CLIENT_ERROR_MARKERS = (
+    "application error: a client-side exception has occurred while loading",
+    "see the browser console for more information",
+)
 BLOCKED_STATUS_CODES = {401, 403, 429, 503}
 
 logger = logging.getLogger(__name__)
@@ -121,8 +125,17 @@ def _looks_like_challenge_page(html: str, status_code: int | None = None) -> boo
     return any(marker in lowered for marker in CHALLENGE_MARKERS)
 
 
+def _looks_like_client_error_page(html: str) -> bool:
+    """Detect client-rendered error pages returned instead of article content."""
+    lowered = html.lower()
+    return all(marker in lowered for marker in CLIENT_ERROR_MARKERS)
+
+
 def _looks_like_shell_page(html: str) -> bool:
     """Detect thin shell pages that likely need browser rendering."""
+    if _looks_like_client_error_page(html):
+        return True
+
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
@@ -443,7 +456,11 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
         Structured extraction result or None if all strategies fail.
     """
     http_result = await _fetch_html_http(url)
-    if http_result is not None and not http_result.challenge_detected:
+    if (
+        http_result is not None
+        and not http_result.challenge_detected
+        and not _looks_like_client_error_page(http_result.html)
+    ):
         extracted = await extract_fulltext(http_result.html, url=http_result.fetched_url)
         if extracted:
             return ExtractionResult(
@@ -460,10 +477,15 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
         http_result is None
         or http_result.challenge_detected
         or http_result.status_code in BLOCKED_STATUS_CODES
+        or _looks_like_client_error_page(http_result.html)
         or _looks_like_shell_page(http_result.html)
     ):
         browser_result = await _fetch_html_browser(url)
-        if browser_result is not None and not browser_result.challenge_detected:
+        if (
+            browser_result is not None
+            and not browser_result.challenge_detected
+            and not _looks_like_client_error_page(browser_result.html)
+        ):
             extracted = await extract_fulltext(browser_result.html, url=browser_result.fetched_url)
             if extracted:
                 return ExtractionResult(

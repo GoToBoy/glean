@@ -16,6 +16,7 @@ from glean_rss.extractor import (
     ExtractionResult,
     FetchResult,
     _convert_backticks_to_code,
+    _looks_like_client_error_page,
     _extract_semantic_html,
     _looks_like_challenge_page,
     extract_fulltext,
@@ -476,6 +477,22 @@ class TestBrowserFallback:
         html = "<html><body>Enable JavaScript and cookies to continue</body></html>"
         assert _looks_like_challenge_page(html, 403) is True
 
+    def test_detects_client_error_page(self) -> None:
+        """Client-side exception pages should be recognized as extraction failures."""
+        html = """
+        <html>
+            <body>
+                <div>
+                    <h2>
+                        Application error: a client-side exception has occurred while loading
+                        openai.com (see the browser console for more information).
+                    </h2>
+                </div>
+            </body>
+        </html>
+        """
+        assert _looks_like_client_error_page(html) is True
+
     @pytest.mark.asyncio
     async def test_fetch_and_extract_uses_http_when_available(self) -> None:
         """Successful HTTP extraction should not invoke the browser."""
@@ -536,3 +553,42 @@ class TestBrowserFallback:
         assert isinstance(result, ExtractionResult)
         assert result.method == "browser"
         assert result.used_browser is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_rejects_client_error_browser_page(self) -> None:
+        """Browser fallback should fail if rendering only returns a client-side exception page."""
+        http_result = FetchResult(
+            html="<html><body>Enable JavaScript and cookies to continue</body></html>",
+            fetched_url="https://openai.com/index/post",
+            status_code=403,
+            challenge_detected=True,
+        )
+        browser_result = FetchResult(
+            html="""
+            <html>
+                <body>
+                    <h2>
+                        Application error: a client-side exception has occurred while loading
+                        openai.com (see the browser console for more information).
+                    </h2>
+                </body>
+            </html>
+            """,
+            fetched_url="https://openai.com/index/post",
+            status_code=200,
+            used_browser=True,
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=browser_result),
+            )
+
+            result = await fetch_and_extract_fulltext("https://openai.com/index/post")
+
+        assert result is None
