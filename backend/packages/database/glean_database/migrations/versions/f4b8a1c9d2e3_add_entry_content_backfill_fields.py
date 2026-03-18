@@ -61,28 +61,12 @@ def upgrade() -> None:
         "('feed_fulltext', 'feed_summary_only', 'backfill_http', 'backfill_browser')",
     )
 
-    op.execute(
-        """
-        UPDATE entries
-        SET
-            content_source = CASE
-                WHEN content IS NULL THEN NULL
-                WHEN summary IS NOT NULL AND btrim(content) = btrim(summary) THEN 'feed_summary_only'
-                ELSE 'feed_fulltext'
-            END,
-            content_backfill_status = CASE
-                WHEN content IS NULL THEN 'pending'
-                WHEN summary IS NOT NULL AND btrim(content) = btrim(summary) THEN 'pending'
-                ELSE 'done'
-            END,
-            content_backfill_at = CASE
-                WHEN content IS NOT NULL
-                     AND (summary IS NULL OR btrim(content) <> btrim(summary))
-                THEN updated_at
-                ELSE NULL
-            END
-        """
-    )
+    # Keep the migration schema-only.
+    #
+    # A previous full-table UPDATE here caused startup migration failures on
+    # real datasets due to unique constraint conflicts surfacing while the
+    # table was being rewritten. Existing rows can safely start with the new
+    # defaults and be normalized later through the application backfill flows.
 
     op.alter_column("entries", "content_backfill_status", server_default=None)
     op.alter_column("entries", "content_backfill_attempts", server_default=None)

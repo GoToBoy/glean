@@ -158,6 +158,10 @@ logger.info(f"Feed {feed_id} fetched: {new_entries} new entries")
 
 ## Testing
 
+Local workspace note:
+- In this repo's local Codex environment, backend tests may not be runnable because `uv` can fail to fetch Python dependencies from PyPI.
+- If that happens, record the exact verification gap in the change summary instead of claiming local test coverage.
+
 ```bash
 # Run all tests
 cd backend && uv run pytest
