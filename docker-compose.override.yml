@@ -29,11 +29,11 @@ services:
   worker:
     build:
       context: ./backend
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.worker
       args:
         APT_MIRROR: ${APT_MIRROR:-mirrors.tuna.tsinghua.edu.cn}
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
-    image: glean-backend:local
+    image: glean-worker:local
     pull_policy: never
     mem_limit: ${WORKER_MEMORY_LIMIT:-2g}
     mem_reservation: ${WORKER_MEMORY_RESERVATION:-1g}

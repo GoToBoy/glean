@@ -103,7 +103,7 @@ services:
     command: ["uv", "run", "--no-sync", "uvicorn", "glean_api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
   worker:
-    image: ghcr.io/leslieleung/glean-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/leslieleung/glean-worker:${IMAGE_TAG:-latest}
     container_name: glean-worker
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
