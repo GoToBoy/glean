@@ -222,14 +222,19 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         extra={"feed_id": feed_id, "url": parsed_entry.url},
                     )
                     try:
-                        extracted_content = await fetch_and_extract_fulltext(parsed_entry.url)
-                        if extracted_content:
-                            entry_content = extracted_content
+                        extraction_result = await fetch_and_extract_fulltext(parsed_entry.url)
+                        if extraction_result:
+                            entry_content = extraction_result.content
                             logger.info(
                                 "Successfully extracted full text",
                                 extra={
                                     "feed_id": feed_id,
-                                    "content_length": len(extracted_content),
+                                    "content_length": len(extraction_result.content),
+                                    "method": extraction_result.method,
+                                    "used_browser": extraction_result.used_browser,
+                                    "fetched_url": extraction_result.fetched_url,
+                                    "status_code": extraction_result.status_code,
+                                    "challenge_detected": extraction_result.challenge_detected,
                                 },
                             )
                         else:

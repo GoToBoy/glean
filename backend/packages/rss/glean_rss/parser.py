@@ -10,7 +10,41 @@ from typing import Any
 from urllib.parse import urlparse
 
 import feedparser
+from bs4 import BeautifulSoup
 from feedparser import FeedParserDict
+
+MIN_FULL_CONTENT_TEXT_LENGTH = 200
+
+
+def _extract_text_content(value: Any) -> str:
+    """Return normalized visible text from an HTML fragment or plain string."""
+    if value is None:
+        return ""
+
+    soup = BeautifulSoup(str(value), "html.parser")
+    return " ".join(soup.get_text(" ", strip=True).split())
+
+
+def _looks_like_full_content(content: Any, summary: Any) -> bool:
+    """
+    Heuristically determine whether feed-provided content is likely a full article.
+
+    Some publishers expose a `content` field that only contains a teaser sentence.
+    Treat those entries as incomplete so the worker can fetch the article URL and
+    extract the full body instead of storing the teaser as the article content.
+    """
+    content_text = _extract_text_content(content)
+    if not content_text:
+        return False
+
+    summary_text = _extract_text_content(summary)
+    if summary_text and content_text == summary_text:
+        return False
+
+    if len(content_text) < MIN_FULL_CONTENT_TEXT_LENGTH:
+        return False
+
+    return not (summary_text and len(content_text) <= len(summary_text) + 20)
 
 
 def _get_favicon_url(site_url: str | None) -> str | None:
@@ -94,7 +128,7 @@ class ParsedEntry:
         content_list = data.get("content", [])
         if content_list:
             self.content = content_list[0].get("value")
-            self.has_full_content = True  # Feed provides content field
+            self.has_full_content = _looks_like_full_content(self.content, self.summary)
         else:
             self.content = data.get("summary")
             self.has_full_content = (

@@ -5,7 +5,12 @@ Uses readability-lxml (Mozilla's Readability algorithm) to extract main content 
 """
 
 import asyncio
-from typing import cast
+import json
+import logging
+import os
+from contextlib import suppress
+from dataclasses import dataclass
+from typing import Any, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -13,16 +18,199 @@ from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 from readability import Document
 
+try:
+    from playwright.async_api import Browser, Playwright, Route, async_playwright
+except ImportError:  # pragma: no cover - exercised in environments without Playwright installed
+    Browser = Any  # type: ignore[assignment]
+    Playwright = Any  # type: ignore[assignment]
+    Route = Any  # type: ignore[assignment]
+    async_playwright = None
+
 # Minimum content length threshold for successful extraction.
 # 100 characters is chosen as a reasonable minimum to avoid storing
 # snippets from failed extractions while still capturing short-form content.
 MIN_CONTENT_LENGTH = 100
+DEFAULT_TIMEOUT_SECONDS = 30
+DEFAULT_BROWSER_MAX_CONCURRENCY = 2
+DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; GleanBot/1.0)"
+SEMANTIC_CONTENT_SELECTORS = (
+    "article",
+    "main article",
+    "[role='main'] article",
+    "main",
+)
+CHALLENGE_MARKERS = (
+    "enable javascript and cookies to continue",
+    "challenge-error-text",
+    "cf-chl-",
+    "attention required!",
+)
+BLOCKED_STATUS_CODES = {401, 403, 429, 503}
+
+logger = logging.getLogger(__name__)
+_playwright_instance: Playwright | None = None
+_browser_instance: Browser | None = None
+_browser_lock = asyncio.Lock()
+_browser_semaphore: asyncio.Semaphore | None = None
+
+
+@dataclass
+class FetchResult:
+    """HTML fetch result used by HTTP and browser acquisition paths."""
+
+    html: str
+    fetched_url: str
+    status_code: int | None = None
+    challenge_detected: bool = False
+    used_browser: bool = False
+
+
+@dataclass
+class ExtractionResult:
+    """Structured extraction result for downstream logging and storage decisions."""
+
+    content: str
+    method: str
+    fetched_url: str
+    status_code: int | None = None
+    challenge_detected: bool = False
+    used_browser: bool = False
 
 
 def _is_relative_url(url: str) -> bool:
     """Check if a URL is relative."""
     parsed = urlparse(url)
     return not parsed.scheme and not parsed.netloc
+
+
+def _get_timeout_seconds() -> float:
+    """Return configured extraction timeout in seconds."""
+    raw_value = os.getenv("BROWSER_EXTRACTION_TIMEOUT_SECONDS", str(DEFAULT_TIMEOUT_SECONDS))
+    try:
+        return max(1.0, float(raw_value))
+    except ValueError:
+        return float(DEFAULT_TIMEOUT_SECONDS)
+
+
+def _is_browser_extraction_enabled() -> bool:
+    """Return whether browser fallback is enabled."""
+    return os.getenv("BROWSER_EXTRACTION_ENABLED", "true").lower() not in {"0", "false", "no"}
+
+
+def _get_browser_semaphore() -> asyncio.Semaphore:
+    """Return the shared concurrency limiter for browser fetches."""
+    global _browser_semaphore
+    if _browser_semaphore is None:
+        raw_value = os.getenv(
+            "BROWSER_EXTRACTION_MAX_CONCURRENCY",
+            str(DEFAULT_BROWSER_MAX_CONCURRENCY),
+        )
+        try:
+            limit = max(1, int(raw_value))
+        except ValueError:
+            limit = DEFAULT_BROWSER_MAX_CONCURRENCY
+        _browser_semaphore = asyncio.Semaphore(limit)
+    return _browser_semaphore
+
+
+def _looks_like_challenge_page(html: str, status_code: int | None = None) -> bool:
+    """Detect common anti-bot challenge pages."""
+    lowered = html.lower()
+    if status_code in BLOCKED_STATUS_CODES:
+        return True
+    return any(marker in lowered for marker in CHALLENGE_MARKERS)
+
+
+def _looks_like_shell_page(html: str) -> bool:
+    """Detect thin shell pages that likely need browser rendering."""
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style", "noscript"]):
+        tag.decompose()
+
+    body_text = " ".join(soup.get_text(" ", strip=True).split())
+    if len(body_text) < MIN_CONTENT_LENGTH:
+        return True
+
+    semantic_match = any(soup.select(selector) for selector in SEMANTIC_CONTENT_SELECTORS)
+    return not semantic_match and len(body_text) < MIN_CONTENT_LENGTH * 3
+
+
+async def _block_non_essential_resources(route: Route) -> None:
+    """Abort non-essential resources to reduce Playwright overhead."""
+    if route.request.resource_type in {"image", "media", "font"}:
+        await route.abort()
+        return
+    await route.continue_()
+
+
+async def _get_browser() -> Browser:
+    """Create or reuse the shared Playwright browser instance."""
+    global _playwright_instance, _browser_instance
+    if async_playwright is None:
+        raise RuntimeError("Playwright is not installed in this environment")
+    async with _browser_lock:
+        if _browser_instance is not None and _browser_instance.is_connected():
+            return _browser_instance
+
+        _playwright_instance = await async_playwright().start()
+        _browser_instance = await _playwright_instance.chromium.launch(
+            headless=True,
+            args=["--disable-dev-shm-usage"],
+        )
+        return _browser_instance
+
+
+async def _fetch_html_http(url: str) -> FetchResult | None:
+    """Fetch article HTML with plain HTTP."""
+    async with httpx.AsyncClient(
+        timeout=_get_timeout_seconds(),
+        headers={"User-Agent": DEFAULT_USER_AGENT},
+        follow_redirects=True,
+    ) as client:
+        try:
+            response = await client.get(url)
+        except Exception:
+            return None
+
+    return FetchResult(
+        html=response.text,
+        fetched_url=str(response.url),
+        status_code=response.status_code,
+        challenge_detected=_looks_like_challenge_page(response.text, response.status_code),
+        used_browser=False,
+    )
+
+
+async def _fetch_html_browser(url: str) -> FetchResult | None:
+    """Fetch article HTML with Playwright after browser rendering."""
+    timeout_ms = int(_get_timeout_seconds() * 1000)
+    semaphore = _get_browser_semaphore()
+    async with semaphore:
+        browser = await _get_browser()
+        context = await browser.new_context(user_agent=DEFAULT_USER_AGENT)
+        await context.route("**/*", _block_non_essential_resources)
+        page = await context.new_page()
+        try:
+            response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            await page.wait_for_selector("body", timeout=timeout_ms)
+            # Many sites keep background requests open; DOM content is enough for extraction.
+            with suppress(Exception):
+                await page.wait_for_load_state("networkidle", timeout=min(timeout_ms, 5000))
+            html = await page.content()
+            return FetchResult(
+                html=html,
+                fetched_url=page.url,
+                status_code=response.status if response else None,
+                challenge_detected=_looks_like_challenge_page(
+                    html,
+                    response.status if response else None,
+                ),
+                used_browser=True,
+            )
+        except Exception:
+            return None
+        finally:
+            await context.close()
 
 
 def _convert_backticks_to_code(soup: BeautifulSoup) -> None:
@@ -148,6 +336,64 @@ async def postprocess_html(html: str, base_url: str | None = None) -> str:
     return await asyncio.to_thread(str, soup)
 
 
+def _extract_structured_article_text(soup: BeautifulSoup) -> str | None:
+    """Try to recover article text from JSON-LD blocks."""
+    for script in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw_json = script.string or script.get_text(strip=True)
+        if not raw_json:
+            continue
+        try:
+            payload = json.loads(raw_json)
+        except json.JSONDecodeError:
+            continue
+
+        candidates = payload if isinstance(payload, list) else [payload]
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+
+            article_body = candidate.get("articleBody")
+            if isinstance(article_body, str) and len(article_body.strip()) > MIN_CONTENT_LENGTH:
+                paragraphs = "".join(
+                    f"<p>{line.strip()}</p>"
+                    for line in article_body.splitlines()
+                    if line.strip()
+                )
+                return paragraphs
+
+    return None
+
+
+def _extract_semantic_html(html: str) -> str | None:
+    """
+    Recover article HTML from semantic containers when Readability fails.
+
+    This helps with modern marketing/news pages where the document structure is
+    clean enough for `article` or `main`, but Readability still returns an empty
+    or too-short summary.
+    """
+    soup = BeautifulSoup(html, "html.parser")
+
+    structured = _extract_structured_article_text(soup)
+    if structured:
+        return structured
+
+    best_candidate: Tag | None = None
+    best_text_length = 0
+
+    for selector in SEMANTIC_CONTENT_SELECTORS:
+        for candidate in soup.select(selector):
+            text_length = len(candidate.get_text(" ", strip=True))
+            if text_length > best_text_length:
+                best_candidate = candidate
+                best_text_length = text_length
+
+    if best_candidate and best_text_length > MIN_CONTENT_LENGTH:
+        return str(best_candidate)
+
+    return None
+
+
 async def extract_fulltext(html: str, url: str | None = None) -> str | None:
     """
     Extract main content from HTML using Mozilla's Readability algorithm.
@@ -162,16 +408,19 @@ async def extract_fulltext(html: str, url: str | None = None) -> str | None:
     try:
         doc = Document(html, url=url)
         content = cast(str, doc.summary())
-        # Return None if content is too short (likely extraction failure)
         if content and len(content) > MIN_CONTENT_LENGTH:
-            # Post-process to fix URLs and formatting
             return await postprocess_html(content, base_url=url)
+
+        semantic_content = await asyncio.to_thread(_extract_semantic_html, html)
+        if semantic_content and len(semantic_content) > MIN_CONTENT_LENGTH:
+            return await postprocess_html(semantic_content, base_url=url)
+
         return None
     except Exception:
         return None
 
 
-async def fetch_and_extract_fulltext(url: str) -> str | None:
+async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
     """
     Fetch a URL and extract its main content.
 
@@ -179,16 +428,41 @@ async def fetch_and_extract_fulltext(url: str) -> str | None:
         url: URL to fetch and extract content from.
 
     Returns:
-        Extracted HTML content or None if fetch/extraction fails.
+        Structured extraction result or None if all strategies fail.
     """
-    async with httpx.AsyncClient(
-        timeout=30.0,
-        headers={"User-Agent": "Mozilla/5.0 (compatible; GleanBot/1.0)"},
-        follow_redirects=True,
-    ) as client:
-        try:
-            response = await client.get(url)
-            response.raise_for_status()
-            return await extract_fulltext(response.text, url=url)
-        except Exception:
-            return None
+    http_result = await _fetch_html_http(url)
+    if http_result is not None and not http_result.challenge_detected:
+        extracted = await extract_fulltext(http_result.html, url=http_result.fetched_url)
+        if extracted:
+            return ExtractionResult(
+                content=extracted,
+                method="http",
+                fetched_url=http_result.fetched_url,
+                status_code=http_result.status_code,
+                challenge_detected=False,
+                used_browser=False,
+            )
+
+    should_try_browser = _is_browser_extraction_enabled()
+    if should_try_browser and (
+        http_result is None
+        or http_result.challenge_detected
+        or http_result.status_code in BLOCKED_STATUS_CODES
+        or _looks_like_shell_page(http_result.html)
+    ):
+        browser_result = await _fetch_html_browser(url)
+        if browser_result is not None and not browser_result.challenge_detected:
+            extracted = await extract_fulltext(browser_result.html, url=browser_result.fetched_url)
+            if extracted:
+                return ExtractionResult(
+                    content=extracted,
+                    method="browser",
+                    fetched_url=browser_result.fetched_url,
+                    status_code=browser_result.status_code,
+                    challenge_detected=False,
+                    used_browser=True,
+                )
+
+        logger.warning("Browser extraction failed", extra={"url": url})
+
+    return None

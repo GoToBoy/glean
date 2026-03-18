@@ -1,6 +1,12 @@
 """Tests for RSS parser."""
 
-from glean_rss.parser import _get_favicon_url
+from glean_rss.parser import (
+    MIN_FULL_CONTENT_TEXT_LENGTH,
+    ParsedEntry,
+    _extract_text_content,
+    _get_favicon_url,
+    _looks_like_full_content,
+)
 
 
 class TestFaviconURL:
@@ -49,3 +55,45 @@ class TestFaviconURL:
         """Test favicon URL generation with relative URL."""
         result = _get_favicon_url("/blog/feed")
         assert result is None
+
+
+class TestContentDetection:
+    """Test heuristics for feed-provided entry content."""
+
+    def test_extract_text_content_strips_html(self) -> None:
+        """HTML fragments should be normalized to visible text."""
+        assert _extract_text_content("<p>Hello <strong>world</strong></p>") == "Hello world"
+
+    def test_short_content_field_is_not_treated_as_full_article(self) -> None:
+        """Short teaser content should still trigger full-text extraction later."""
+        teaser = "We’re enhancing AI-driven news discovery and delivery."
+        entry = ParsedEntry(
+            {
+                "link": "https://openai.com/index/conde-nast/",
+                "title": "OpenAI partners with Condé Nast",
+                "summary": teaser,
+                "content": [{"value": f"<p>{teaser}</p>"}],
+            }
+        )
+
+        assert entry.content == f"<p>{teaser}</p>"
+        assert entry.has_full_content is False
+
+    def test_long_content_field_is_treated_as_full_article(self) -> None:
+        """Substantial HTML content should be kept without extra fetches."""
+        body_text = " ".join(["full article content"] * (MIN_FULL_CONTENT_TEXT_LENGTH // 4 + 20))
+        entry = ParsedEntry(
+            {
+                "link": "https://example.com/post",
+                "title": "Long Post",
+                "summary": "Short summary",
+                "content": [{"value": f"<div><p>{body_text}</p></div>"}],
+            }
+        )
+
+        assert entry.has_full_content is True
+
+    def test_matching_summary_and_content_is_not_full_content(self) -> None:
+        """Duplicated summary/content pairs are teasers, not article bodies."""
+        teaser = "A concise introduction to the announcement."
+        assert _looks_like_full_content(f"<p>{teaser}</p>", teaser) is False

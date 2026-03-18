@@ -6,14 +6,20 @@ async performance, and integration with the full extraction pipeline.
 """
 
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 from bs4 import BeautifulSoup
 
 from glean_rss.extractor import (
     MIN_CONTENT_LENGTH,
+    ExtractionResult,
+    FetchResult,
     _convert_backticks_to_code,
+    _extract_semantic_html,
+    _looks_like_challenge_page,
     extract_fulltext,
+    fetch_and_extract_fulltext,
     postprocess_html,
 )
 
@@ -413,3 +419,120 @@ class TestExtractFulltext:
 
         # Should return None
         assert result is None
+
+
+class TestSemanticFallback:
+    """Test non-Readability fallback extractors."""
+
+    def test_extract_semantic_html_from_article(self) -> None:
+        """Largest article container should be recovered when present."""
+        article_text = " ".join(["OpenAI article body"] * 20)
+        html = f"""
+        <html>
+            <body>
+                <header>Navigation</header>
+                <main>
+                    <article>
+                        <h1>Title</h1>
+                        <p>{article_text}</p>
+                    </article>
+                </main>
+            </body>
+        </html>
+        """
+
+        result = _extract_semantic_html(html)
+
+        assert result is not None
+        assert "<article>" in result
+        assert "OpenAI article body" in result
+
+    def test_extract_semantic_html_from_json_ld_article_body(self) -> None:
+        """JSON-LD articleBody should be converted into basic paragraphs."""
+        article_text = " ".join(["Structured article body"] * 20)
+        html = f"""
+        <html>
+            <head>
+                <script type="application/ld+json">
+                    {{"@type":"NewsArticle","articleBody":"{article_text}"}}
+                </script>
+            </head>
+            <body><div>Shell page</div></body>
+        </html>
+        """
+
+        result = _extract_semantic_html(html)
+
+        assert result is not None
+        assert "<p>" in result
+        assert "Structured article body" in result
+
+
+class TestBrowserFallback:
+    """Test browser fallback orchestration."""
+
+    def test_detects_challenge_page(self) -> None:
+        """Challenge page HTML should be recognized."""
+        html = "<html><body>Enable JavaScript and cookies to continue</body></html>"
+        assert _looks_like_challenge_page(html, 403) is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_uses_http_when_available(self) -> None:
+        """Successful HTTP extraction should not invoke the browser."""
+        http_result = FetchResult(
+            html=f"<html><body><article><p>{'x' * (MIN_CONTENT_LENGTH + 20)}</p></article></body></html>",
+            fetched_url="https://example.com/article",
+            status_code=200,
+        )
+
+        with (
+            pytest.MonkeyPatch.context() as monkeypatch,
+        ):
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=None),
+            )
+
+            result = await fetch_and_extract_fulltext("https://example.com/article")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.method == "http"
+        assert result.used_browser is False
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_falls_back_to_browser(self) -> None:
+        """Challenge pages should trigger browser fallback extraction."""
+        http_result = FetchResult(
+            html="<html><body>Enable JavaScript and cookies to continue</body></html>",
+            fetched_url="https://openai.com/index/post",
+            status_code=403,
+            challenge_detected=True,
+        )
+        browser_result = FetchResult(
+            html=f"<html><body><article><p>{'rendered content ' * 20}</p></article></body></html>",
+            fetched_url="https://openai.com/index/post",
+            status_code=200,
+            used_browser=True,
+        )
+
+        with (
+            pytest.MonkeyPatch.context() as monkeypatch,
+        ):
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=browser_result),
+            )
+
+            result = await fetch_and_extract_fulltext("https://openai.com/index/post")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.method == "browser"
+        assert result.used_browser is True

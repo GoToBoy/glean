@@ -12,6 +12,7 @@ Your Mac (开发)                    GitHub (CI/CD)                    UGREEN NA
 git push + git tag v0.x.x    →    GitHub Actions 自动构建     →     绿联 Docker 拉取
                                    │                                      │
                                    ├── glean-backend (amd64+arm64)        │
+                                   ├── glean-worker  (amd64+arm64)        │
                                    ├── glean-web     (amd64+arm64)        │
                                    └── glean-admin   (amd64+arm64)        │
                                    │                                      │
@@ -79,6 +80,7 @@ git push origin v0.1.0-alpha.1
 构建成功后镜像地址为：
 ```
 ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
+ghcr.io/gotoboy/glean-worker:0.1.0-alpha.1
 ghcr.io/gotoboy/glean-web:0.1.0-alpha.1
 ghcr.io/gotoboy/glean-admin:0.1.0-alpha.1
 ```
@@ -168,6 +170,16 @@ image: ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
 ```yaml
 # 个人版本
 image: ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
+
+# 官方版本
+image: ghcr.io/leslieleung/glean-backend:latest
+```
+
+其中 `worker` 需要对应改为：
+
+```yaml
+# 个人版本
+image: ghcr.io/gotoboy/glean-worker:0.1.0-alpha.1
 
 # 官方版本
 image: ghcr.io/leslieleung/glean-backend:latest

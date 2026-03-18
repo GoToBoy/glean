@@ -1,24 +1,19 @@
 services:
   postgres:
-    image: ${POSTGRES_IMAGE:-pgvector/pgvector:pg16}
+    image: pgvector/pgvector:pg16
     container_name: glean-postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-glean}
       POSTGRES_USER: ${POSTGRES_USER:-glean}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-glean}
-    # Enable CSV slow-query logging: queries > 1s written to /var/log/postgresql/
     command: >
       postgres
-      -c logging_collector=on
-      -c log_directory=/var/log/postgresql
-      -c log_filename=postgresql-%Y-%m-%d.log
-      -c log_rotation_age=1d
+      -c logging_collector=off
       -c log_min_duration_statement=1000
       -c log_line_prefix='%t [%p] %u@%d '
       -c log_statement=none
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ${LOGS_DIR:-./logs}/postgres:/var/log/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-glean}"]
       interval: 10s
@@ -40,10 +35,8 @@ services:
       redis-server
       --appendonly yes
       --loglevel notice
-      --logfile /data/logs/redis.log
     volumes:
       - redis_data:/data
-      - ${LOGS_DIR:-./logs}/redis:/data/logs
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -119,14 +112,16 @@ services:
         max-file: "10"
 
   worker:
-    image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
+    image: ghcr.io/gotoboy/glean-worker:${IMAGE_TAG:-latest}
     container_name: glean-worker
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-glean}:${POSTGRES_PASSWORD:-glean}@postgres:5432/${POSTGRES_DB:-glean}
       REDIS_URL: redis://redis:6379/0
       MTRAN_SERVER_URL: ${MTRAN_SERVER_URL:-http://mtranserver:5001}
       SECRET_KEY: ${SECRET_KEY:-change-me-in-production-use-a-long-random-string}
-      WORKER_JOB_TIMEOUT_SECONDS: ${WORKER_JOB_TIMEOUT_SECONDS:-1800}
+      BROWSER_EXTRACTION_ENABLED: ${BROWSER_EXTRACTION_ENABLED:-true}
+      BROWSER_EXTRACTION_TIMEOUT_SECONDS: ${BROWSER_EXTRACTION_TIMEOUT_SECONDS:-30}
+      BROWSER_EXTRACTION_MAX_CONCURRENCY: ${BROWSER_EXTRACTION_MAX_CONCURRENCY:-2}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FILE: ${WORKER_LOG_FILE:-/app/logs/glean-worker.log}
       LOG_ERROR_FILE: ${WORKER_LOG_ERROR_FILE:-/app/logs/glean-worker.error.log}
@@ -159,7 +154,7 @@ services:
     ports:
       - "${WEB_PORT:-8800}:80"
     volumes:
-      - ${LOGS_DIR:-./logs}/nginx-web:/var/log/nginx
+      - ${LOGS_DIR:-./logs}/nginx-web:/app/logs/nginx
     depends_on:
       - backend
     networks:
@@ -177,7 +172,7 @@ services:
     ports:
       - "${ADMIN_PORT:-3001}:80"
     volumes:
-      - ${LOGS_DIR:-./logs}/nginx-admin:/var/log/nginx
+      - ${LOGS_DIR:-./logs}/nginx-admin:/app/logs/nginx
     depends_on:
       - backend
     networks:
