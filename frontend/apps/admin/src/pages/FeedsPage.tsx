@@ -9,6 +9,10 @@ import {
   useRefreshErroredFeedsNow,
   useRefreshFeedStatus,
   useBatchFeedOperation,
+  useFeedContentBackfillCandidates,
+  useEnqueueFeedContentBackfill,
+  type AdminContentBackfillResponse,
+  type AdminFeed,
 } from '../hooks/useFeeds'
 import {
   Button,
@@ -16,6 +20,7 @@ import {
   Input,
   Badge,
   Skeleton,
+  Checkbox,
   Dialog,
   DialogTrigger,
   DialogPopup,
@@ -23,6 +28,8 @@ import {
   DialogTitle,
   DialogDescription,
   DialogPanel,
+  DialogClose,
+  Label,
   AlertDialog,
   AlertDialogPopup,
   AlertDialogHeader,
@@ -46,6 +53,7 @@ import {
   Filter,
   CheckSquare,
   Square,
+  Wand2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
@@ -90,6 +98,11 @@ export default function FeedsPage() {
   const [feedRefreshState, setFeedRefreshState] = useState<Record<string, FeedRefreshState>>({})
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false)
+  const [backfillFeed, setBackfillFeed] = useState<AdminFeed | null>(null)
+  const [backfillLimit, setBackfillLimit] = useState('50')
+  const [backfillMissingOnly, setBackfillMissingOnly] = useState(true)
+  const [backfillForce, setBackfillForce] = useState(false)
+  const [backfillResult, setBackfillResult] = useState<AdminContentBackfillResponse | null>(null)
 
   const { data, isLoading, refetch } = useFeeds({
     page,
@@ -108,6 +121,8 @@ export default function FeedsPage() {
   const refreshErroredFeedsNowMutation = useRefreshErroredFeedsNow()
   const refreshFeedStatusMutation = useRefreshFeedStatus()
   const batchMutation = useBatchFeedOperation()
+  const backfillCandidatesMutation = useFeedContentBackfillCandidates()
+  const enqueueBackfillMutation = useEnqueueFeedContentBackfill()
 
   const currentPageIds = useMemo(() => data?.items.map((f) => f.id) ?? [], [data?.items])
   const allCurrentPageSelected =
@@ -189,6 +204,59 @@ export default function FeedsPage() {
 
   const handleDeleteClick = (feedId: string) => {
     setDeleteConfirmFeedId(feedId)
+  }
+
+  const buildBackfillRequest = (dryRun: boolean) => ({
+    limit: Math.max(1, Number(backfillLimit) || 50),
+    force: backfillForce,
+    missing_only: backfillMissingOnly,
+    dry_run: dryRun,
+  })
+
+  const handleOpenBackfillDialog = async (feed: AdminFeed) => {
+    setBackfillFeed(feed)
+    setBackfillLimit('50')
+    setBackfillMissingOnly(true)
+    setBackfillForce(false)
+    setBackfillResult(null)
+    try {
+      const result = await backfillCandidatesMutation.mutateAsync({
+        feedId: feed.id,
+        params: {
+          limit: 50,
+          force: false,
+          missing_only: true,
+        },
+      })
+      setBackfillResult(result)
+    } catch {
+      setBackfillResult(null)
+    }
+  }
+
+  const handleCloseBackfillDialog = (open: boolean) => {
+    if (!open) {
+      setBackfillFeed(null)
+      setBackfillResult(null)
+    }
+  }
+
+  const handlePreviewBackfill = async () => {
+    if (!backfillFeed) return
+    const result = await backfillCandidatesMutation.mutateAsync({
+      feedId: backfillFeed.id,
+      params: buildBackfillRequest(true),
+    })
+    setBackfillResult(result)
+  }
+
+  const handleEnqueueBackfill = async () => {
+    if (!backfillFeed) return
+    const result = await enqueueBackfillMutation.mutateAsync({
+      feedId: backfillFeed.id,
+      data: buildBackfillRequest(false),
+    })
+    setBackfillResult(result)
   }
 
   const handleDeleteConfirm = async () => {
@@ -773,6 +841,24 @@ export default function FeedsPage() {
                           >
                             <RefreshCw className={`h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
                           </Button>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            onClick={() => handleOpenBackfillDialog(feed)}
+                            disabled={
+                              backfillCandidatesMutation.isPending ||
+                              enqueueBackfillMutation.isPending
+                            }
+                            title={t('admin:feeds.contentBackfill.open')}
+                          >
+                            {backfillFeed?.id === feed.id &&
+                            (backfillCandidatesMutation.isPending ||
+                              enqueueBackfillMutation.isPending) ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Wand2 className="h-4 w-4" />
+                            )}
+                          </Button>
                           {/* Toggle status button */}
                           <Button
                             size="icon"
@@ -936,6 +1022,186 @@ export default function FeedsPage() {
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
+
+      <Dialog open={!!backfillFeed} onOpenChange={handleCloseBackfillDialog}>
+        <DialogPopup className="sm:max-w-3xl" showCloseButton>
+          <DialogHeader>
+            <DialogTitle>{t('admin:feeds.contentBackfill.title')}</DialogTitle>
+            <DialogDescription>
+              {t('admin:feeds.contentBackfill.description', {
+                title: backfillFeed?.title || backfillFeed?.url || '',
+              })}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <div className="space-y-5">
+              <div className="grid gap-4 rounded-lg border p-4 sm:grid-cols-[160px_1fr]">
+                <div className="space-y-2">
+                  <Label htmlFor="backfill-limit">{t('admin:feeds.contentBackfill.limit')}</Label>
+                  <Input
+                    id="backfill-limit"
+                    type="number"
+                    min={1}
+                    max={1000}
+                    value={backfillLimit}
+                    onChange={(e) => setBackfillLimit(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-3">
+                  <label className="flex items-center gap-3 text-sm">
+                    <Checkbox
+                      checked={backfillMissingOnly}
+                      onCheckedChange={(checked) => setBackfillMissingOnly(Boolean(checked))}
+                    />
+                    <span>{t('admin:feeds.contentBackfill.missingOnly')}</span>
+                  </label>
+                  <label className="flex items-center gap-3 text-sm">
+                    <Checkbox
+                      checked={backfillForce}
+                      onCheckedChange={(checked) => setBackfillForce(Boolean(checked))}
+                    />
+                    <span>{t('admin:feeds.contentBackfill.force')}</span>
+                  </label>
+                </div>
+              </div>
+
+              {backfillResult && (
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border px-4 py-3">
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">
+                      {t('admin:feeds.contentBackfill.summary.matched')}
+                    </p>
+                    <p className="text-foreground mt-1 text-2xl font-semibold">
+                      {backfillResult.matched}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border px-4 py-3">
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">
+                      {t('admin:feeds.contentBackfill.summary.enqueued')}
+                    </p>
+                    <p className="text-foreground mt-1 text-2xl font-semibold">
+                      {backfillResult.enqueued}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border px-4 py-3">
+                    <p className="text-muted-foreground text-xs uppercase tracking-wide">
+                      {t('admin:feeds.contentBackfill.summary.mode')}
+                    </p>
+                    <p className="text-foreground mt-1 text-sm font-medium">
+                      {backfillResult.dry_run
+                        ? t('admin:feeds.contentBackfill.previewMode')
+                        : t('admin:feeds.contentBackfill.queuedMode')}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-lg border">
+                <div className="border-b px-4 py-3">
+                  <p className="text-sm font-medium">
+                    {t('admin:feeds.contentBackfill.candidatesTitle')}
+                  </p>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    {t('admin:feeds.contentBackfill.candidatesDescription')}
+                  </p>
+                </div>
+                <div className="max-h-80 overflow-auto">
+                  {backfillCandidatesMutation.isPending && !backfillResult ? (
+                    <div className="space-y-3 p-4">
+                      {Array.from({ length: 4 }).map((_, index) => (
+                        <Skeleton key={index} className="h-14 w-full" />
+                      ))}
+                    </div>
+                  ) : backfillResult && backfillResult.candidates.length > 0 ? (
+                    <div className="divide-y">
+                      {backfillResult.candidates.map((candidate) => (
+                        <div key={candidate.id} className="space-y-2 px-4 py-3">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{candidate.title}</p>
+                              <p className="text-muted-foreground truncate text-xs">
+                                {candidate.url}
+                              </p>
+                            </div>
+                            <Badge variant="outline" className="shrink-0">
+                              {candidate.content_source || candidate.content_backfill_status}
+                            </Badge>
+                          </div>
+                          <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                            <span>
+                              {t('admin:feeds.contentBackfill.published')}:{' '}
+                              {candidate.published_at
+                                ? format(new Date(candidate.published_at), 'MMM d, yyyy')
+                                : t('admin:feeds.contentBackfill.unknown')}
+                            </span>
+                            <span>
+                              {t('admin:feeds.contentBackfill.contentLength')}:{' '}
+                              {candidate.content_length}
+                            </span>
+                            <span>
+                              {t('admin:feeds.contentBackfill.summaryLength')}:{' '}
+                              {candidate.summary_length}
+                            </span>
+                            <span>
+                              {t('admin:feeds.contentBackfill.attempts')}:{' '}
+                              {candidate.content_backfill_attempts}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-muted-foreground p-6 text-sm">
+                      {t('admin:feeds.contentBackfill.empty')}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <DialogClose className={buttonVariants({ variant: 'ghost' })}>
+                  {t('common:actions.cancel')}
+                </DialogClose>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handlePreviewBackfill}
+                  disabled={
+                    backfillCandidatesMutation.isPending || enqueueBackfillMutation.isPending
+                  }
+                >
+                  {backfillCandidatesMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t('admin:feeds.contentBackfill.previewing')}
+                    </>
+                  ) : (
+                    t('admin:feeds.contentBackfill.preview')
+                  )}
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleEnqueueBackfill}
+                  disabled={
+                    enqueueBackfillMutation.isPending ||
+                    backfillCandidatesMutation.isPending ||
+                    (backfillResult?.matched ?? 0) === 0
+                  }
+                >
+                  {enqueueBackfillMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {t('admin:feeds.contentBackfill.queueing')}
+                    </>
+                  ) : (
+                    t('admin:feeds.contentBackfill.enqueue')
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogPanel>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }

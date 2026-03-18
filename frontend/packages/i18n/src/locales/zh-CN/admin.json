@@ -187,6 +187,33 @@
     "delete": "删除订阅",
     "deleting": "删除中...",
     "neverFetched": "从未拉取",
+    "contentBackfill": {
+      "open": "回填正文",
+      "title": "正文回填",
+      "description": "预览并为 {{title}} 排队全文回填任务。",
+      "limit": "候选数量上限",
+      "missingOnly": "仅包含看起来仍然只有摘要的文章",
+      "force": "即使已有正文也强制重跑",
+      "preview": "预览候选",
+      "previewing": "预览中...",
+      "enqueue": "开始回填",
+      "queueing": "排队中...",
+      "summary": {
+        "matched": "命中",
+        "enqueued": "已排队",
+        "mode": "模式"
+      },
+      "previewMode": "仅预览",
+      "queuedMode": "已排队",
+      "candidatesTitle": "候选文章",
+      "candidatesDescription": "这些文章看起来仍然只有摘要内容，适合重试正文提取。",
+      "published": "发布时间",
+      "contentLength": "正文长度",
+      "summaryLength": "摘要长度",
+      "attempts": "尝试次数",
+      "unknown": "未知",
+      "empty": "按当前条件没有匹配文章。"
+    },
     "emptyFiltered": "未找到符合条件的订阅",
     "empty": "暂无订阅",
     "batch": {

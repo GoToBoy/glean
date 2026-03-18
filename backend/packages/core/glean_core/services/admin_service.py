@@ -52,6 +52,27 @@ class AdminService:
         )
 
     @staticmethod
+    def _entry_needs_content_backfill(entry: Entry, force: bool, missing_only: bool) -> bool:
+        """Return True when an entry should be selected for content backfill."""
+        if force:
+            return True
+
+        if entry.content_source == "feed_summary_only":
+            return True
+
+        if entry.content_backfill_status in {"pending", "failed"}:
+            return True
+
+        if not missing_only:
+            content_length = len(entry.content or "")
+            summary_length = len(entry.summary or "")
+            return content_length == 0 or (
+                summary_length > 0 and content_length <= int(summary_length * 1.25)
+            )
+
+        return False
+
+    @staticmethod
     def _normalize_feed_status(status: str) -> FeedStatus:
         """
         Normalize admin-provided feed status to FeedStatus enum.
@@ -555,6 +576,47 @@ class AdminService:
 
         await self.session.commit()
         return count
+
+    async def list_feed_content_backfill_candidates(
+        self,
+        feed_id: str,
+        limit: int = 100,
+        published_after: datetime | None = None,
+        published_before: datetime | None = None,
+        force: bool = False,
+        missing_only: bool = True,
+    ) -> tuple[list[dict[str, Any]], int] | None:
+        """List entry candidates for a feed content backfill run."""
+        feed = await self.session.get(Feed, feed_id)
+        if not feed:
+            return None
+
+        query = select(Entry).where(Entry.feed_id == feed_id)
+        if published_after is not None:
+            query = query.where(Entry.published_at >= published_after)
+        if published_before is not None:
+            query = query.where(Entry.published_at <= published_before)
+        query = query.order_by(Entry.published_at.desc(), Entry.created_at.desc()).limit(limit)
+
+        result = await self.session.execute(query)
+        entries = list(result.scalars().all())
+        candidates = [
+            {
+                "id": entry.id,
+                "feed_id": entry.feed_id,
+                "url": entry.url,
+                "title": entry.title,
+                "published_at": entry.published_at,
+                "content_backfill_status": entry.content_backfill_status,
+                "content_source": entry.content_source,
+                "content_backfill_attempts": entry.content_backfill_attempts,
+                "content_length": len(entry.content or ""),
+                "summary_length": len(entry.summary or ""),
+            }
+            for entry in entries
+            if self._entry_needs_content_backfill(entry, force=force, missing_only=missing_only)
+        ]
+        return candidates, len(candidates)
 
     # M2: Entry management methods
     async def list_entries(

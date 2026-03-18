@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from glean_database.models.feed import FeedStatus
-from glean_rss.extractor import ExtractionResult
 from glean_worker.tasks.feed_fetcher import fetch_feed_task
 
 
@@ -185,14 +184,11 @@ class TestFetchFeedTask:
             ),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch(
-                "glean_worker.tasks.feed_fetcher.fetch_and_extract_fulltext",
+                "glean_worker.tasks.feed_fetcher.extract_entry_content_update",
                 new=AsyncMock(
-                    return_value=ExtractionResult(
+                    return_value=MagicMock(
                         content="<article><p>Full article body</p></article>",
-                        method="browser",
-                        fetched_url="https://openai.com/index/conde-nast/",
-                        status_code=200,
-                        used_browser=True,
+                        source="backfill_browser",
                     )
                 ),
             ) as mock_extract,

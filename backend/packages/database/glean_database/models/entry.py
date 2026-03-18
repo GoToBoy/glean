@@ -50,6 +50,15 @@ class Entry(Base, TimestampMixin):
     author: Mapped[str | None] = mapped_column(String(200))
     content: Mapped[str | None] = mapped_column(Text)
     summary: Mapped[str | None] = mapped_column(Text)
+    content_backfill_status: Mapped[str] = mapped_column(
+        String(20), default="pending", nullable=False, index=True
+    )  # pending / processing / done / failed / skipped
+    content_backfill_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    content_backfill_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    content_backfill_error: Mapped[str | None] = mapped_column(Text)
+    content_source: Mapped[str | None] = mapped_column(
+        String(30), index=True
+    )  # feed_fulltext / feed_summary_only / backfill_http / backfill_browser
 
     # Metadata
     guid: Mapped[str | None] = mapped_column(String(500), index=True)

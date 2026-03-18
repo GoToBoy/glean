@@ -3,10 +3,14 @@
 # Build stage
 FROM node:24-alpine AS builder
 
+ARG NPM_REGISTRY=https://registry.npmjs.org/
+ARG PNPM_REGISTRY=${NPM_REGISTRY}
+
 WORKDIR /app
 
 # Install pnpm
-RUN npm install -g pnpm@10.26.0
+RUN npm config set registry "${NPM_REGISTRY}" \
+    && npm install -g pnpm@10.26.0
 
 # Copy workspace configuration
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
@@ -15,7 +19,8 @@ COPY apps/admin/ apps/admin/
 COPY turbo.json ./
 
 # Install dependencies
-RUN pnpm install --frozen-lockfile
+RUN pnpm config set registry "${PNPM_REGISTRY}" \
+    && pnpm install --frozen-lockfile
 
 # Build the admin app
 RUN pnpm --filter=@glean/admin build

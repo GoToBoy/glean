@@ -187,6 +187,33 @@
     "delete": "Delete Feed",
     "deleting": "Deleting...",
     "neverFetched": "Never",
+    "contentBackfill": {
+      "open": "Backfill article content",
+      "title": "Backfill Article Content",
+      "description": "Preview and queue full-text backfill jobs for {{title}}.",
+      "limit": "Candidate limit",
+      "missingOnly": "Only include entries that still look summary-only",
+      "force": "Force reprocess even when content already exists",
+      "preview": "Preview candidates",
+      "previewing": "Previewing...",
+      "enqueue": "Queue backfill",
+      "queueing": "Queueing...",
+      "summary": {
+        "matched": "Matched",
+        "enqueued": "Enqueued",
+        "mode": "Mode"
+      },
+      "previewMode": "Preview only",
+      "queuedMode": "Jobs queued",
+      "candidatesTitle": "Candidate entries",
+      "candidatesDescription": "These entries look like they only have teaser content and are worth retrying.",
+      "published": "Published",
+      "contentLength": "Content",
+      "summaryLength": "Summary",
+      "attempts": "Attempts",
+      "unknown": "Unknown",
+      "empty": "No matching entries for the current filters."
+    },
     "emptyFiltered": "No feeds found matching your criteria",
     "empty": "No feeds yet",
     "batch": {

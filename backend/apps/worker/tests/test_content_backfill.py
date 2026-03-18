@@ -1,0 +1,102 @@
+"""Tests for entry content backfill worker tasks."""
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from glean_worker.tasks.content_backfill import backfill_entry_content_task
+
+
+class TestBackfillEntryContentTask:
+    """Test single-entry content backfill behavior."""
+
+    @pytest.mark.asyncio
+    async def test_successful_backfill_updates_entry_and_invalidates_translations(self):
+        """Successful backfill should replace content and reset derivative state."""
+        mock_entry = MagicMock()
+        mock_entry.id = "entry-1"
+        mock_entry.url = "https://example.com/article"
+        mock_entry.content = "<p>Short summary</p>"
+        mock_entry.summary = "<p>Short summary</p>"
+        mock_entry.content_source = "feed_summary_only"
+        mock_entry.content_backfill_status = "pending"
+        mock_entry.content_backfill_attempts = 0
+        mock_entry.embedding_status = "done"
+        mock_entry.embedding_error = None
+        mock_entry.embedding_at = object()
+
+        mock_translation = MagicMock()
+        mock_translation.status = "done"
+        mock_translation.error = None
+        mock_translation.translated_content = "<p>旧翻译</p>"
+        mock_translation.paragraph_translations = {"a": "b"}
+
+        entry_result = MagicMock()
+        entry_result.scalar_one_or_none.return_value = mock_entry
+        translations_result = MagicMock()
+        translations_result.scalars.return_value.all.return_value = [mock_translation]
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[entry_result, translations_result])
+
+        mock_redis = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.content_backfill.extract_entry_content_update",
+                new=AsyncMock(
+                    return_value=MagicMock(
+                        content="<article><p>Long full article body</p></article>",
+                        source="backfill_browser",
+                    )
+                ),
+            ),
+            patch(
+                "glean_worker.tasks.content_backfill._is_vectorization_enabled",
+                new=AsyncMock(return_value=True),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await backfill_entry_content_task({"redis": mock_redis}, "entry-1")
+
+        assert result["status"] == "success"
+        assert result["updated"] is True
+        assert mock_entry.content_source == "backfill_browser"
+        assert mock_entry.content_backfill_status == "done"
+        assert mock_entry.embedding_status == "pending"
+        assert mock_translation.status == "pending"
+        assert mock_translation.translated_content is None
+        mock_redis.enqueue_job.assert_awaited_once_with("generate_entry_embedding", "entry-1")
+
+    @pytest.mark.asyncio
+    async def test_failed_backfill_marks_entry_failed(self):
+        """Extraction failure should mark the entry as failed."""
+        mock_entry = MagicMock()
+        mock_entry.id = "entry-2"
+        mock_entry.url = "https://example.com/article"
+        mock_entry.content = None
+        mock_entry.summary = None
+        mock_entry.content_source = None
+        mock_entry.content_backfill_status = "pending"
+        mock_entry.content_backfill_attempts = 0
+
+        entry_result = MagicMock()
+        entry_result.scalar_one_or_none.return_value = mock_entry
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[entry_result, entry_result])
+
+        with (
+            patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.content_backfill.extract_entry_content_update",
+                new=AsyncMock(side_effect=RuntimeError("boom")),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await backfill_entry_content_task({"redis": AsyncMock()}, "entry-2")
+
+        assert result["status"] == "error"
+        assert mock_entry.content_backfill_status == "failed"
+        assert mock_entry.content_backfill_error == "boom"

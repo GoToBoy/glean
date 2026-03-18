@@ -19,6 +19,7 @@ from .config import settings
 from .tasks import (
     bookmark_metadata,
     cleanup,
+    content_backfill,
     embedding_rebuild,
     embedding_worker,
     feed_fetcher,
@@ -55,6 +56,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     logger.info("Database initialized")
     logger.info("Vector storage: pgvector (uses existing PostgreSQL database)")
     logger.info(f"Worker job timeout: {settings.worker_job_timeout_seconds}s")
+    logger.info(f"Worker max jobs: {settings.worker_max_jobs}")
 
     # Store Redis client for distributed locks (arq provides it via ctx['redis'])
     logger.info("Redis client available for distributed locks")
@@ -94,6 +96,8 @@ def get_oss_functions() -> list[TaskFunction]:
     return [
         feed_fetcher.fetch_feed_task,
         feed_fetcher.fetch_all_feeds,
+        content_backfill.enqueue_feed_content_backfill,
+        content_backfill.backfill_entry_content_task,
         cleanup.cleanup_read_later,
         bookmark_metadata.fetch_bookmark_metadata_task,
         # M3: Embedding tasks (triggered immediately after feed fetch)
@@ -141,6 +145,6 @@ class WorkerSettings:
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
 
     # Worker settings
-    max_jobs = 20
+    max_jobs = settings.worker_max_jobs
     job_timeout = settings.worker_job_timeout_seconds
     keep_result = 3600

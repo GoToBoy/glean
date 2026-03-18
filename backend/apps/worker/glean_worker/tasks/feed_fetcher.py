@@ -19,7 +19,8 @@ from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import RSSHubService, TypedConfigService
 from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session_context
-from glean_rss import fetch_and_extract_fulltext, fetch_feed, parse_feed, postprocess_html
+from glean_rss import fetch_feed, parse_feed, postprocess_html
+from .content_extraction import extract_entry_content_update
 
 logger = get_logger(__name__)
 MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
@@ -216,33 +217,43 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
                 # Determine content: fetch full text if feed only provides summary
                 entry_content = parsed_entry.content
+                content_source = "feed_fulltext" if parsed_entry.has_full_content else "feed_summary_only"
+                content_backfill_status = "done" if parsed_entry.has_full_content else "pending"
+                content_backfill_attempts = 0
+                content_backfill_error = None
+                content_backfill_at = None
                 if not parsed_entry.has_full_content and parsed_entry.url:
                     logger.info(
                         "Entry has no full content, fetching from URL",
                         extra={"feed_id": feed_id, "url": parsed_entry.url},
                     )
                     try:
-                        extraction_result = await fetch_and_extract_fulltext(parsed_entry.url)
-                        if extraction_result:
+                        extraction_result = await extract_entry_content_update(parsed_entry.url)
+                        content_backfill_attempts = 1
+                        if extraction_result.content and extraction_result.source:
                             entry_content = extraction_result.content
+                            content_source = extraction_result.source
+                            content_backfill_status = "done"
+                            content_backfill_at = datetime.now(UTC)
                             logger.info(
                                 "Successfully extracted full text",
                                 extra={
                                     "feed_id": feed_id,
                                     "content_length": len(extraction_result.content),
-                                    "method": extraction_result.method,
-                                    "used_browser": extraction_result.used_browser,
-                                    "fetched_url": extraction_result.fetched_url,
-                                    "status_code": extraction_result.status_code,
-                                    "challenge_detected": extraction_result.challenge_detected,
+                                    "source": extraction_result.source,
                                 },
                             )
                         else:
+                            content_backfill_status = "failed"
+                            content_backfill_error = extraction_result.error or "empty_extraction"
                             logger.warning(
                                 "Full text extraction returned empty, using summary",
                                 extra={"feed_id": feed_id},
                             )
                     except Exception as extract_err:
+                        content_backfill_attempts = 1
+                        content_backfill_status = "failed"
+                        content_backfill_error = str(extract_err)
                         logger.warning(
                             "Full text extraction failed, using summary",
                             extra={"feed_id": feed_id, "error": str(extract_err)},
@@ -265,6 +276,11 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         author=parsed_entry.author,
                         content=entry_content,
                         summary=parsed_entry.summary,
+                        content_backfill_status=content_backfill_status,
+                        content_backfill_attempts=content_backfill_attempts,
+                        content_backfill_at=content_backfill_at,
+                        content_backfill_error=content_backfill_error,
+                        content_source=content_source,
                         published_at=parsed_entry.published_at,
                     )
                     .on_conflict_do_nothing(constraint="uq_feed_guid")

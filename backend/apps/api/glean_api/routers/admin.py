@@ -22,6 +22,9 @@ from glean_core.schemas import (
 from glean_core.schemas.admin import (
     AdminBatchEntryRequest,
     AdminBatchFeedRequest,
+    AdminContentBackfillCandidateResponse,
+    AdminContentBackfillRequest,
+    AdminContentBackfillResponse,
     AdminEntryDetailResponse,
     AdminEntryListItem,
     AdminEntryListResponse,
@@ -628,6 +631,80 @@ async def refresh_feed_now(
         db_feed.last_fetch_attempt_at = datetime.now(UTC)
         await session.commit()
     return {"status": "queued", **job_payload}
+
+
+@router.get(
+    "/feeds/{feed_id}/backfill-content/candidates",
+    response_model=AdminContentBackfillResponse,
+)
+async def list_feed_content_backfill_candidates(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    limit: int = Query(100, ge=1, le=1000),
+    published_after: datetime | None = Query(None),
+    published_before: datetime | None = Query(None),
+    force: bool = Query(False),
+    missing_only: bool = Query(True),
+) -> AdminContentBackfillResponse:
+    """List entries that would be selected for a content backfill run."""
+    result = await admin_service.list_feed_content_backfill_candidates(
+        feed_id=feed_id,
+        limit=limit,
+        published_after=published_after,
+        published_before=published_before,
+        force=force,
+        missing_only=missing_only,
+    )
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    candidates, matched = result
+    return AdminContentBackfillResponse(
+        feed_id=feed_id,
+        matched=matched,
+        enqueued=0,
+        skipped=0,
+        dry_run=True,
+        candidates=[AdminContentBackfillCandidateResponse(**candidate) for candidate in candidates],
+    )
+
+
+@router.post("/feeds/{feed_id}/backfill-content", response_model=AdminContentBackfillResponse)
+async def enqueue_feed_content_backfill(
+    feed_id: str,
+    request: AdminContentBackfillRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    admin_service: Annotated[AdminService, Depends(get_admin_service)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+) -> AdminContentBackfillResponse:
+    """Queue entry content backfill jobs for a feed."""
+    result = await admin_service.list_feed_content_backfill_candidates(
+        feed_id=feed_id,
+        limit=request.limit,
+        published_after=request.published_after,
+        published_before=request.published_before,
+        force=request.force,
+        missing_only=request.missing_only,
+    )
+    if result is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    candidates, matched = result
+    if not request.dry_run:
+        for candidate in candidates:
+            await redis.enqueue_job(
+                "backfill_entry_content_task", candidate["id"], force=request.force
+            )
+
+    return AdminContentBackfillResponse(
+        feed_id=feed_id,
+        matched=matched,
+        enqueued=0 if request.dry_run else matched,
+        skipped=0,
+        dry_run=request.dry_run,
+        candidates=[AdminContentBackfillCandidateResponse(**candidate) for candidate in candidates],
+    )
 
 
 @router.post("/feeds/refresh-all", status_code=status.HTTP_202_ACCEPTED)

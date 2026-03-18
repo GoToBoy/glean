@@ -41,6 +41,38 @@ interface FeedListParams {
 
 export type AdminFeedRefreshJob = FeedRefreshJob
 export type AdminFeedRefreshStatusItem = RefreshStatusItem
+export type AdminFeed = Feed
+
+export interface AdminContentBackfillCandidate {
+  id: string
+  feed_id: string
+  url: string
+  title: string
+  published_at: string | null
+  content_backfill_status: 'pending' | 'processing' | 'done' | 'failed' | 'skipped'
+  content_source: 'feed_fulltext' | 'feed_summary_only' | 'backfill_http' | 'backfill_browser' | null
+  content_backfill_attempts: number
+  content_length: number
+  summary_length: number
+}
+
+export interface AdminContentBackfillRequest {
+  limit?: number
+  published_after?: string
+  published_before?: string
+  force?: boolean
+  missing_only?: boolean
+  dry_run?: boolean
+}
+
+export interface AdminContentBackfillResponse {
+  feed_id: string
+  matched: number
+  enqueued: number
+  skipped: number
+  dry_run: boolean
+  candidates: AdminContentBackfillCandidate[]
+}
 
 export function useFeeds(params: FeedListParams = {}) {
   return useQuery<FeedListResponse>({
@@ -171,6 +203,38 @@ export function useRefreshFeedStatus() {
     mutationFn: async (items: Array<{ feed_id: string; job_id: string }>) => {
       const response = await api.post('/feeds/refresh/status', { items })
       return response.data as { items: AdminFeedRefreshStatusItem[] }
+    },
+  })
+}
+
+export function useFeedContentBackfillCandidates() {
+  return useMutation({
+    mutationFn: async ({
+      feedId,
+      params,
+    }: {
+      feedId: string
+      params: AdminContentBackfillRequest
+    }) => {
+      const response = await api.get(`/feeds/${feedId}/backfill-content/candidates`, {
+        params,
+      })
+      return response.data as AdminContentBackfillResponse
+    },
+  })
+}
+
+export function useEnqueueFeedContentBackfill() {
+  return useMutation({
+    mutationFn: async ({
+      feedId,
+      data,
+    }: {
+      feedId: string
+      data: AdminContentBackfillRequest
+    }) => {
+      const response = await api.post(`/feeds/${feedId}/backfill-content`, data)
+      return response.data as AdminContentBackfillResponse
     },
   })
 }

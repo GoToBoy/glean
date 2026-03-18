@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         database_url: PostgreSQL connection URL.
         redis_url: Redis connection URL for task queue.
         worker_job_timeout_seconds: Per-job timeout in seconds for arq worker.
+        worker_max_jobs: Maximum concurrent arq jobs for the worker process.
     """
 
     model_config = SettingsConfigDict(
@@ -28,6 +29,7 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://glean:changeme@localhost:5432/glean"
     redis_url: str = "redis://localhost:6379/0"
     worker_job_timeout_seconds: int = 1800
+    worker_max_jobs: int = 4
 
 
 @lru_cache

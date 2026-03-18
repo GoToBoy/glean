@@ -152,6 +152,43 @@ class AdminBatchFeedRequest(BaseModel):
     feed_ids: list[str]
 
 
+class AdminContentBackfillRequest(BaseModel):
+    """Admin request for queueing entry content backfill."""
+
+    limit: int = Field(100, ge=1, le=1000)
+    published_after: datetime | None = None
+    published_before: datetime | None = None
+    force: bool = False
+    missing_only: bool = True
+    dry_run: bool = False
+
+
+class AdminContentBackfillCandidateResponse(BaseModel):
+    """Candidate entry for content backfill."""
+
+    id: str
+    feed_id: str
+    url: str
+    title: str
+    published_at: datetime | None
+    content_backfill_status: str
+    content_source: str | None
+    content_backfill_attempts: int
+    content_length: int
+    summary_length: int
+
+
+class AdminContentBackfillResponse(BaseModel):
+    """Admin response after selecting or queueing content backfill."""
+
+    feed_id: str
+    matched: int
+    enqueued: int
+    skipped: int
+    dry_run: bool = False
+    candidates: list[AdminContentBackfillCandidateResponse] = Field(default_factory=list)
+
+
 # M2: Admin entry management schemas
 class AdminEntryListItem(BaseModel):
     """Admin entry list item schema."""

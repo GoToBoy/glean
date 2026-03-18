@@ -110,8 +110,18 @@ docker compose --profile mtran up -d
 | `IMAGE_TAG` | Docker 镜像标签 | `latest` |
 | `MTRAN_SERVER_URL` | backend/worker 使用的翻译服务地址 | `http://mtranserver:5001` |
 | `WORKER_JOB_TIMEOUT_SECONDS` | 长任务 worker 超时 | `1800` |
+| `WORKER_MAX_JOBS` | worker 的最大并发 job 数 | `4` |
+| `WORKER_MEMORY_LIMIT` | worker 容器的 Docker 内存硬上限 | `2g` |
+| `WORKER_MEMORY_RESERVATION` | worker 容器的 Docker 内存预留 | `1g` |
+| `BROWSER_EXTRACTION_MAX_CONCURRENCY` | Playwright 正文回退的最大并发数 | `1` |
+| `BROWSER_EXTRACTION_TIMEOUT_SECONDS` | 单页 Playwright 提取超时秒数 | `20` |
 
 完整配置见 [.env.example](./.env.example)。
+
+Docker 部署性能说明：
+
+- 默认配置已经把 `glean-worker` 收紧为更保守的运行模式：`WORKER_MAX_JOBS=4`、`BROWSER_EXTRACTION_MAX_CONCURRENCY=1`，并给 worker 容器设置了 `2g` 内存上限。
+- 后续如果继续增加抓取、回填、翻译或向量任务，建议把并发和内存预算作为功能设计的一部分，一起评估和落配置。
 
 ## 当前能力重点
 

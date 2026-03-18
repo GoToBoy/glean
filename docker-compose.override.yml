@@ -35,12 +35,28 @@ services:
         UV_INDEX_URL: ${UV_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     image: glean-backend:local
     pull_policy: never
+    mem_limit: ${WORKER_MEMORY_LIMIT:-2g}
+    mem_reservation: ${WORKER_MEMORY_RESERVATION:-1g}
+    shm_size: ${WORKER_SHM_SIZE:-256m}
 
   admin:
     build:
       context: ./frontend
       dockerfile: apps/admin/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
+        PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com/}
     image: glean-admin:local
+    pull_policy: never
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: apps/web/Dockerfile
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
+        PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com/}
+    image: glean-web:local
     pull_policy: never
 
 volumes:

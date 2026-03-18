@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - exercised in environments without Play
 # snippets from failed extractions while still capturing short-form content.
 MIN_CONTENT_LENGTH = 100
 DEFAULT_TIMEOUT_SECONDS = 30
-DEFAULT_BROWSER_MAX_CONCURRENCY = 2
+DEFAULT_BROWSER_MAX_CONCURRENCY = 1
 DEFAULT_USER_AGENT = "Mozilla/5.0 (compatible; GleanBot/1.0)"
 SEMANTIC_CONTENT_SELECTORS = (
     "article",
@@ -155,7 +155,15 @@ async def _get_browser() -> Browser:
         _playwright_instance = await async_playwright().start()
         _browser_instance = await _playwright_instance.chromium.launch(
             headless=True,
-            args=["--disable-dev-shm-usage"],
+            args=[
+                "--disable-dev-shm-usage",
+                "--disable-gpu",
+                "--disable-software-rasterizer",
+                "--disable-background-networking",
+                "--disable-background-timer-throttling",
+                "--disable-renderer-backgrounding",
+                "--disable-extensions",
+            ],
         )
         return _browser_instance
 
@@ -187,7 +195,11 @@ async def _fetch_html_browser(url: str) -> FetchResult | None:
     semaphore = _get_browser_semaphore()
     async with semaphore:
         browser = await _get_browser()
-        context = await browser.new_context(user_agent=DEFAULT_USER_AGENT)
+        context = await browser.new_context(
+            user_agent=DEFAULT_USER_AGENT,
+            service_workers="block",
+            viewport={"width": 1280, "height": 720},
+        )
         await context.route("**/*", _block_non_essential_resources)
         page = await context.new_page()
         try:
