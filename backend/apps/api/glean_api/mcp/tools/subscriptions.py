@@ -97,12 +97,4 @@ async def list_subscriptions(
                 }
             )
 
-        logger.info(
-            "MCP list_subscriptions completed",
-            extra={
-                "user_id": user_id,
-                "subscription_count": len(responses),
-            },
-        )
-
         return responses

@@ -12,6 +12,11 @@ from pathlib import Path
 from loguru import logger
 
 
+def _env_log_level(name: str, default: str) -> str:
+    """Read and normalize a log level from environment variables."""
+    return os.getenv(name, default).upper()
+
+
 def setup_logging(
     log_level: str = "INFO",
     log_file: str | None = None,
@@ -138,6 +143,8 @@ def setup_logging_from_env() -> None:
 
     Environment Variables:
     - LOG_LEVEL: Log level (default: INFO)
+    - LOG_THIRD_PARTY_LEVEL: Default level for intercepted third-party loggers (default: INFO)
+    - LOG_SQLALCHEMY_LEVEL: Level for SQLAlchemy/engine/pool logs (default: WARNING)
     - LOG_FILE: Log file path (default: None)
     - LOG_ERROR_FILE: Error log file path (default: derived from LOG_FILE)
     - LOG_FORMAT: Log format (default: use built-in format)
@@ -199,9 +206,22 @@ def intercept_standard_logging() -> None:
     # Configure standard logging
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
-    # Set third-party library log levels
-    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "arq", "sqlalchemy"]:
-        logging.getLogger(logger_name).setLevel(logging.INFO)
+    third_party_level = _env_log_level("LOG_THIRD_PARTY_LEVEL", "INFO")
+    sqlalchemy_level = _env_log_level("LOG_SQLALCHEMY_LEVEL", "WARNING")
+
+    # Keep framework lifecycle/request logs visible by default.
+    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "arq"]:
+        logging.getLogger(logger_name).setLevel(third_party_level)
+
+    # In business-mode logging, SQL/ORM internals are noise unless explicitly debugging DB behavior.
+    for logger_name in [
+        "sqlalchemy",
+        "sqlalchemy.engine",
+        "sqlalchemy.engine.Engine",
+        "sqlalchemy.pool",
+        "sqlalchemy.dialects",
+    ]:
+        logging.getLogger(logger_name).setLevel(sqlalchemy_level)
 
 
 def get_logger(name: str | None = None):

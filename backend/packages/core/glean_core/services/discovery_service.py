@@ -161,10 +161,6 @@ class DiscoveryService:
 
         # No validated search results -> keep existing candidates unchanged.
         if not drafts:
-            logger.info(
-                "Discovery refresh produced no external candidates",
-                extra={"user_id": user_id, "queries": search_queries},
-            )
             return await self.list_candidates(user_id=user_id, limit=limit)
 
         now = datetime.now(UTC)
@@ -467,28 +463,8 @@ class DiscoveryService:
                         }
                     )
                     if len(drafts) >= limit:
-                        logger.info(
-                            "Discovery search refresh summary",
-                            extra={
-                                "queries": [item["query"] for item in query_specs],
-                                "total_results_seen": total_results_seen,
-                                "validated_feeds": total_validated,
-                                "candidates_emitted": len(drafts),
-                                "strategy_counts": dict(strategy_counts),
-                            },
-                        )
                         return drafts
 
-        logger.info(
-            "Discovery search refresh summary",
-            extra={
-                "queries": [item["query"] for item in query_specs],
-                "total_results_seen": total_results_seen,
-                "validated_feeds": total_validated,
-                "candidates_emitted": len(drafts),
-                "strategy_counts": dict(strategy_counts),
-            },
-        )
         return drafts
 
     async def _search_tavily(

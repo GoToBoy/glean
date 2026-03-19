@@ -147,11 +147,6 @@ async def fetch_bookmark_metadata_task(
     Returns:
         Dictionary with fetch results.
     """
-    logger.info(
-        "Starting metadata fetch",
-        extra={"bookmark_id": bookmark_id},
-    )
-
     async with get_session_context() as session:
         try:
             # Get bookmark from database
@@ -167,8 +162,6 @@ async def fetch_bookmark_metadata_task(
                 logger.error("Bookmark has no URL", extra={"bookmark_id": bookmark_id})
                 return {"status": "error", "message": "Bookmark has no URL"}
 
-            logger.info("Fetching URL", extra={"bookmark_id": bookmark_id, "url": bookmark.url})
-
             # Fetch the webpage
             async with httpx.AsyncClient(
                 timeout=30.0,
@@ -181,10 +174,6 @@ async def fetch_bookmark_metadata_task(
                 # Only process HTML content
                 content_type = response.headers.get("content-type", "")
                 if "text/html" not in content_type.lower():
-                    logger.warning(
-                        "Non-HTML content type",
-                        extra={"bookmark_id": bookmark_id, "content_type": content_type},
-                    )
                     return {
                         "status": "skipped",
                         "message": f"Non-HTML content: {content_type}",
@@ -206,29 +195,11 @@ async def fetch_bookmark_metadata_task(
             content = None
             try:
                 content = await extract_fulltext(html, url=bookmark.url)
-                if content:
-                    logger.info(
-                        "Extracted content",
-                        extra={"bookmark_id": bookmark_id, "content_length": len(content)},
-                    )
-                else:
-                    logger.warning(
-                        "Content extraction returned empty", extra={"bookmark_id": bookmark_id}
-                    )
             except Exception as extract_err:
                 logger.warning(
                     "Content extraction failed",
                     extra={"bookmark_id": bookmark_id, "error": str(extract_err)},
                 )
-
-            logger.debug(
-                "Extracted metadata",
-                extra={
-                    "bookmark_id": bookmark_id,
-                    "title": title,
-                    "description_preview": description[:100] if description else None,
-                },
-            )
 
             # Update bookmark if we got better data
             updated = False
@@ -237,24 +208,16 @@ async def fetch_bookmark_metadata_task(
             if title and bookmark.title == bookmark.url:
                 bookmark.title = title[:500]  # Respect max length
                 updated = True
-                logger.info("Updated title", extra={"bookmark_id": bookmark_id})
 
             # Update excerpt if not set
             if description and not bookmark.excerpt:
                 bookmark.excerpt = description
                 updated = True
-                logger.info("Updated excerpt", extra={"bookmark_id": bookmark_id})
 
             # Store extracted content for in-app reading
             if content:
                 bookmark.content = content
                 updated = True
-                logger.info("Updated content", extra={"bookmark_id": bookmark_id})
-
-            if updated:
-                logger.info("Successfully updated bookmark", extra={"bookmark_id": bookmark_id})
-            else:
-                logger.debug("No updates needed", extra={"bookmark_id": bookmark_id})
 
             return {
                 "status": "success",

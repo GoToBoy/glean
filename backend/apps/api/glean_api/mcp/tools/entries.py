@@ -122,15 +122,6 @@ async def search_entries(
                 }
             )
 
-        logger.info(
-            "MCP search_entries completed",
-            extra={
-                "user_id": user_id,
-                "query": query,
-                "result_count": len(entries),
-            },
-        )
-
         return entries
 
 
@@ -185,11 +176,6 @@ async def get_entry(
         sub_result = await session.execute(sub_stmt)
         if not sub_result.scalar_one_or_none():
             return {"error": "Not subscribed to this feed"}
-
-        logger.info(
-            "MCP get_entry completed",
-            extra={"user_id": user_id, "entry_id": entry_id},
-        )
 
         return {
             "id": str(entry.id),
@@ -308,15 +294,5 @@ async def list_entries_by_date(
                     "is_read": bool(user_entry.is_read) if user_entry else False,
                 }
             )
-
-        logger.info(
-            "MCP list_entries_by_date completed",
-            extra={
-                "user_id": user_id,
-                "start_date": start_date,
-                "end_date": end_date,
-                "result_count": len(entries),
-            },
-        )
 
         return entries

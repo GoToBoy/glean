@@ -321,15 +321,6 @@ class BookmarkService:
                         entry_id=entry_id,
                         signal_type="bookmark",
                     )
-                    logger.info(
-                        f"Queued preference update: user={user_id[:8]}... "
-                        f"entry={entry_id[:8]}... signal=bookmark"
-                    )
-                else:
-                    logger.debug(
-                        f"Preference update debounced: user={user_id[:8]}... "
-                        f"entry={entry_id[:8]}... signal=bookmark"
-                    )
             except Exception as e:
                 # Don't fail the request if task queueing fails
                 logger.warning(f"Failed to queue preference update: {e}")

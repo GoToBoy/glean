@@ -483,15 +483,6 @@ class EntryService:
                         entry_id=entry_id,
                         signal_type=preference_signal_type,
                     )
-                    logger.info(
-                        f"Queued preference update: user={user_id[:8]}... "
-                        f"entry={entry_id[:8]}... signal={preference_signal_type}"
-                    )
-                else:
-                    logger.debug(
-                        f"Preference update debounced: user={user_id[:8]}... "
-                        f"entry={entry_id[:8]}... signal={preference_signal_type}"
-                    )
             except Exception as e:
                 # Don't fail the request if task queueing fails
                 # The user's like/dislike is already saved

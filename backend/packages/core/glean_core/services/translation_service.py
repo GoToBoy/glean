@@ -123,13 +123,6 @@ class TranslationService:
                     target_language=target_language,
                     user_id=user_id,
                 )
-                logger.info(
-                    "Queued translation task",
-                    extra={
-                        "entry_id": entry_id,
-                        "target_language": target_language,
-                    },
-                )
             except Exception:
                 logger.exception(
                     "Failed to queue translation task",

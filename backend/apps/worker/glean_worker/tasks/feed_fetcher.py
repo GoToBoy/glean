@@ -73,7 +73,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
     Returns:
         Dictionary with fetch results.
     """
-    logger.info("Starting feed fetch", extra={"feed_id": feed_id})
     async with get_session_context() as session:
         try:
             fetch_attempt_at = datetime.now(UTC)
@@ -91,8 +90,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             feed.last_fetch_attempt_at = fetch_attempt_at
             await session.commit()
 
-            logger.info("Fetching feed", extra={"feed_id": feed_id, "url": feed.url})
-
             # Build fallback sequence: source URL -> RSSHub converted URL (if available).
             rsshub_service = RSSHubService(session)
             fallback_source = feed.site_url or feed.url
@@ -109,7 +106,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
             for idx, attempt_url in enumerate(attempt_urls):
                 try:
-                    logger.debug("Requesting feed", extra={"url": attempt_url})
                     use_conditional = idx == 0  # ETag/Last-Modified only for primary source URL
                     fetch_result = await fetch_feed(
                         attempt_url,
@@ -119,10 +115,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
                     if fetch_result is None:
                         # Not modified (304) on primary URL.
-                        logger.info(
-                            "Feed not modified (304)",
-                            extra={"feed_id": feed_id, "url": attempt_url},
-                        )
                         # 304 means the feed was fetched successfully and unchanged.
                         # Clear previous fetch error state so admin "error" list is accurate.
                         feed.status = FeedStatus.ACTIVE
@@ -133,9 +125,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         feed.last_fetched_at = fetch_attempt_at
                         return {"status": "not_modified", "new_entries": 0}
 
-                    logger.debug("Feed content received, parsing...", extra={"feed_id": feed_id})
                     content, headers = fetch_result
-                    logger.debug("Parsing feed content...", extra={"feed_id": feed_id})
                     parsed_feed = await parse_feed(content, attempt_url)
                     cache_headers = headers
                     used_url = attempt_url
@@ -155,35 +145,16 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
             if used_url != feed.url:
                 logger.info(
-                    "Fetched via RSSHub fallback",
-                    extra={"feed_id": feed_id, "source_url": feed.url, "rsshub_url": used_url},
+                    "Feed fetched via fallback source",
+                    extra={"feed_id": feed_id, "source_url": feed.url, "fetched_url": used_url},
                 )
-            logger.info(
-                "Parsed feed",
-                extra={
-                    "feed_id": feed_id,
-                    "title": parsed_feed.title,
-                    "entries_count": len(parsed_feed.entries),
-                },
-            )
 
             # Update feed metadata
-            logger.debug(
-                "Feed metadata",
-                extra={
-                    "feed_id": feed_id,
-                    "parsed_icon_url": parsed_feed.icon_url,
-                    "current_icon_url": feed.icon_url,
-                },
-            )
             feed.title = parsed_feed.title or feed.title
             feed.description = parsed_feed.description or feed.description
             feed.site_url = parsed_feed.site_url or feed.site_url
             feed.language = parsed_feed.language or feed.language
             feed.icon_url = parsed_feed.icon_url or feed.icon_url
-            logger.debug(
-                "Updated feed metadata", extra={"feed_id": feed_id, "icon_url": feed.icon_url}
-            )
             feed.status = FeedStatus.ACTIVE
             feed.error_count = 0
             feed.fetch_error_message = None
@@ -208,10 +179,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 guid = (parsed_entry.guid or "").strip()
                 if guid:
                     if guid in seen_guids:
-                        logger.debug(
-                            "Skipping duplicate guid in feed payload",
-                            extra={"feed_id": feed_id, "guid": guid},
-                        )
                         continue
                     seen_guids.add(guid)
 
@@ -223,10 +190,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 content_backfill_error = None
                 content_backfill_at = None
                 if not parsed_entry.has_full_content and parsed_entry.url:
-                    logger.info(
-                        "Entry has no full content, fetching from URL",
-                        extra={"feed_id": feed_id, "url": parsed_entry.url},
-                    )
                     try:
                         extraction_result = await extract_entry_content_update(parsed_entry.url)
                         content_backfill_attempts = 1
@@ -235,29 +198,13 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                             content_source = extraction_result.source
                             content_backfill_status = "done"
                             content_backfill_at = datetime.now(UTC)
-                            logger.info(
-                                "Successfully extracted full text",
-                                extra={
-                                    "feed_id": feed_id,
-                                    "content_length": len(extraction_result.content),
-                                    "source": extraction_result.source,
-                                },
-                            )
                         else:
                             content_backfill_status = "failed"
                             content_backfill_error = extraction_result.error or "empty_extraction"
-                            logger.warning(
-                                "Full text extraction returned empty, using summary",
-                                extra={"feed_id": feed_id},
-                            )
                     except Exception as extract_err:
                         content_backfill_attempts = 1
                         content_backfill_status = "failed"
                         content_backfill_error = str(extract_err)
-                        logger.warning(
-                            "Full text extraction failed, using summary",
-                            extra={"feed_id": feed_id, "error": str(extract_err)},
-                        )
                 else:
                     # Process content from feed to fix backtick formatting etc.
                     if entry_content:
@@ -290,10 +237,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                     insert_result = await session.execute(insert_stmt)
                 except IntegrityError as insert_error:
                     if _is_duplicate_feed_guid_error(insert_error):
-                        logger.debug(
-                            "Skipping duplicate entry due to guid unique constraint",
-                            extra={"feed_id": feed_id, "guid": guid},
-                        )
                         continue
                     raise
                 inserted_entry_id = insert_result.scalar_one_or_none()
@@ -307,10 +250,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 # M3: Queue embedding task for new entry (only if vectorization enabled)
                 if vectorization_enabled:
                     await ctx["redis"].enqueue_job("generate_entry_embedding", inserted_entry_id)
-                    logger.debug(
-                        "Queued embedding task for entry",
-                        extra={"feed_id": feed_id, "entry_id": inserted_entry_id},
-                    )
 
                 # Track latest entry time
                 if parsed_entry.published_at and (
@@ -374,10 +313,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
 
                 # Duplicate guid is a benign idempotency race/path issue; do not count as feed failure.
                 if _is_duplicate_feed_guid_exception(e):
-                    logger.warning(
-                        "Duplicate guid surfaced at task boundary, treating as non-fatal",
-                        extra={"feed_id": feed_id},
-                    )
                     feed.status = FeedStatus.ACTIVE
                     feed.error_count = 0
                     feed.fetch_error_message = None
@@ -416,8 +351,8 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 retry_minutes = min(60, 15 * (2 ** min(feed.error_count - 1, 5)))
                 feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=retry_minutes)
 
-                logger.info(
-                    "Scheduling retry with exponential backoff",
+                logger.warning(
+                    "Feed fetch scheduled for retry",
                     extra={
                         "feed_id": feed_id,
                         "retry_minutes": retry_minutes,
@@ -429,7 +364,6 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 await session.commit()
 
             # Retry the task
-            logger.info("Retrying task in 5 minutes", extra={"feed_id": feed_id})
             raise Retry(defer=timedelta(minutes=5)) from None
 
 
@@ -443,7 +377,6 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
     Returns:
         Dictionary with fetch statistics.
     """
-    logger.info("Starting to fetch all active feeds")
     async with get_session_context() as session:
         # Get all active feeds that are due for fetching
         now = datetime.now(UTC)
@@ -454,14 +387,11 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
         result = await session.execute(stmt)
         feeds = result.scalars().all()
 
-        logger.info("Found feeds to fetch", extra={"count": len(feeds)})
-
         # Queue fetch tasks for each feed
         for feed in feeds:
-            logger.debug("Queueing feed", extra={"feed_id": feed.id, "url": feed.url})
             await ctx["redis"].enqueue_job("fetch_feed_task", feed.id)
 
-        logger.info("Queued feeds for fetching", extra={"count": len(feeds)})
+        logger.info("Queued due feeds for fetching", extra={"count": len(feeds)})
         return {"feeds_queued": len(feeds)}
 
 
@@ -475,7 +405,6 @@ async def scheduled_fetch(ctx: dict[str, Any]) -> dict[str, int]:
     Returns:
         Dictionary with fetch statistics.
     """
-    logger.info("Running scheduled feed fetch (every 15 minutes)")
     return await fetch_all_feeds(ctx)
 
 

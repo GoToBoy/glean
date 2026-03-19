@@ -245,17 +245,6 @@ async def translate_texts(
             to_translate.append(text)
             to_translate_indices.append(i)
 
-    logger.info(
-        "Translating texts batch",
-        extra={
-            "total": len(non_empty_texts),
-            "cached": len(cached_results),
-            "to_translate": len(to_translate),
-            "target": data.target_language,
-            "user_id": current_user.id,
-        },
-    )
-
     # Translate uncached sentences using user's configured provider
     translated_new: list[str] = []
     if to_translate:

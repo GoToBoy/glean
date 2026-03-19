@@ -215,8 +215,7 @@ async def login(
     try:
         user, tokens = await auth_service.login(data)
         return {"user": user, "tokens": tokens}
-    except ValueError as e:
-        logger.info("Login failed", extra={"error_type": type(e).__name__})
+    except ValueError:
         raise _authentication_failed_exception() from None
 
 
@@ -241,8 +240,7 @@ async def refresh_token(
     try:
         tokens = await auth_service.refresh_access_token(data.refresh_token)
         return tokens
-    except ValueError as e:
-        logger.info("Token refresh failed", extra={"error_type": type(e).__name__})
+    except ValueError:
         raise _authentication_failed_exception() from None
 
 

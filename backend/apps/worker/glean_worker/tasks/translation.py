@@ -149,11 +149,6 @@ async def translate_entry_task(
     Returns:
         Result dictionary with status.
     """
-    logger.info(
-        "Starting translation task",
-        extra={"entry_id": entry_id, "target_language": target_language, "user_id": user_id},
-    )
-
     async with get_session_context() as session:
         # Look up user settings for translation provider
         user_settings: dict[str, Any] | None = None
@@ -199,10 +194,6 @@ async def translate_entry_task(
             translated_title = None
             if entry.title:
                 translated_title = _translate_text(entry.title, source, target_language, provider)
-                logger.info(
-                    "Title translated",
-                    extra={"entry_id": entry_id, "original": entry.title[:50]},
-                )
 
             # Translate content (HTML) — bilingual mode
             translated_content = None
@@ -210,14 +201,6 @@ async def translate_entry_task(
             if content:
                 translated_content = _translate_html_bilingual(
                     content, source, target_language, provider
-                )
-                logger.info(
-                    "Content translated",
-                    extra={
-                        "entry_id": entry_id,
-                        "content_length": len(content),
-                        "translated_length": len(translated_content),
-                    },
                 )
 
             # Update translation record
