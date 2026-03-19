@@ -1,5 +1,6 @@
 """Tests for feed fetcher worker tasks."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -434,3 +435,21 @@ class TestFetchFeedTask:
         assert mock_feed.error_count == 0
         assert "ix_entries_url is corrupted" in mock_feed.fetch_error_message
         assert mock_session.commit.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_cancelled_feed_logs_timeout_summary(self):
+        """Cancelled feed fetches should emit a concise timeout summary."""
+        mock_session = AsyncMock()
+        mock_session.execute.side_effect = asyncio.CancelledError()
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.logger.error") as mock_error,
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+
+            with pytest.raises(asyncio.CancelledError):
+                await fetch_feed_task({}, feed_id="feed-timeout")
+
+        mock_error.assert_called_once()
+        assert "Feed fetch timed out: feed_id=feed-timeout" in mock_error.call_args.args[0]

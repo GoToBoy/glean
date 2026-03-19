@@ -1,7 +1,7 @@
 """
 Logging middleware.
 
-Adds unique ID to each request and logs request information.
+Adds request IDs and logs only high-signal API events by default.
 """
 
 import time
@@ -22,6 +22,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
 
     Adds unique ID to each request and logs request and response information.
     """
+
+    _QUIET_PATHS = frozenset({"/api/health"})
+    _SLOW_REQUEST_SECONDS = 1.0
 
     async def dispatch(
         self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
@@ -56,15 +59,16 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             process_time = time.time() - start_time
             status = response.status_code
 
-            # Include method, path, status and duration in the message so they
-            # are searchable in plain-text log files (grep "slow" / grep "POST /entries").
             msg = f"{request.method} {path} {status} {process_time:.3f}s"
-            if process_time >= 3.0:
+
+            # Keep routine successful requests out of production logs; retain only
+            # slow paths and error responses by default.
+            if path in self._QUIET_PATHS and status < 400:
+                pass
+            elif process_time >= self._SLOW_REQUEST_SECONDS:
                 context_logger.warning(f"SLOW {msg}")
             elif status >= 400:
                 context_logger.warning(msg)
-            else:
-                context_logger.info(msg)
 
             response.headers["X-Request-ID"] = request_id
             return response

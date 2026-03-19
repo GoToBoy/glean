@@ -148,3 +148,4 @@ class WorkerSettings:
     max_jobs = settings.worker_max_jobs
     job_timeout = settings.worker_job_timeout_seconds
     keep_result = 3600
+    log_results = False

@@ -20,6 +20,7 @@ from glean_core.services import RSSHubService, TypedConfigService
 from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
+from ..config import settings
 from .content_extraction import extract_entry_content_update
 
 logger = get_logger(__name__)
@@ -123,6 +124,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         feed.last_fetch_attempt_at = fetch_attempt_at
                         feed.last_fetch_success_at = fetch_attempt_at
                         feed.last_fetched_at = fetch_attempt_at
+                        feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
                         return {"status": "not_modified", "new_entries": 0}
 
                     content, headers = fetch_result
@@ -291,14 +293,12 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             }
 
         except asyncio.CancelledError:
-            # arq cancels the task when job_timeout is reached.
-            # Log an explicit UTC timestamp to make timeout incidents easier to trace.
+            # arq cancels the task when job_timeout is reached. Keep this to one
+            # concise line instead of relying on the downstream traceback noise.
             logger.error(
-                "Feed fetch cancelled (likely job timeout)",
-                extra={
-                    "feed_id": feed_id,
-                    "cancelled_at_utc": datetime.now(UTC).isoformat(),
-                },
+                "Feed fetch timed out: "
+                f"feed_id={feed_id} timeout_s={settings.worker_job_timeout_seconds} "
+                f"cancelled_at_utc={datetime.now(UTC).isoformat()}"
             )
             raise
         except Exception as e:
