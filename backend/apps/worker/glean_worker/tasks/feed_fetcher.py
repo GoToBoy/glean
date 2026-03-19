@@ -201,10 +201,20 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                         else:
                             content_backfill_status = "failed"
                             content_backfill_error = extraction_result.error or "empty_extraction"
+                            logger.warning(
+                                "Entry content extraction failed for "
+                                f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
+                                f"reason={content_backfill_error}"
+                            )
                     except Exception as extract_err:
                         content_backfill_attempts = 1
                         content_backfill_status = "failed"
                         content_backfill_error = str(extract_err)
+                        logger.warning(
+                            "Entry content extraction raised for "
+                            f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
+                            f"reason={content_backfill_error}"
+                        )
                 else:
                     # Process content from feed to fix backtick formatting etc.
                     if entry_content:
@@ -269,13 +279,9 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
 
             logger.info(
-                "Successfully fetched feed",
-                extra={
-                    "feed_id": feed_id,
-                    "url": feed.url,
-                    "new_entries": new_entries,
-                    "total_entries": len(parsed_feed.entries),
-                },
+                "Feed fetch complete: "
+                f"feed_id={feed_id} url={feed.url} "
+                f"status=success new_entries={new_entries} total_entries={len(parsed_feed.entries)}"
             )
             return {
                 "status": "success",

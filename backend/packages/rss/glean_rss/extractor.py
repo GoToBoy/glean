@@ -497,6 +497,6 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
                     used_browser=True,
                 )
 
-        logger.warning("Browser extraction failed", extra={"url": url})
+        logger.debug(f"Browser extraction failed for article_url={url}")
 
     return None

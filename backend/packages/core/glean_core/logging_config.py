@@ -144,6 +144,9 @@ def setup_logging_from_env() -> None:
     Environment Variables:
     - LOG_LEVEL: Log level (default: INFO)
     - LOG_THIRD_PARTY_LEVEL: Default level for intercepted third-party loggers (default: INFO)
+    - LOG_UVICORN_ACCESS_LEVEL: Level for uvicorn access logs (default: WARNING)
+    - LOG_ARQ_LEVEL: Level for arq worker lifecycle/job logs (default: WARNING)
+    - LOG_HTTPX_LEVEL: Level for httpx request logs (default: WARNING)
     - LOG_SQLALCHEMY_LEVEL: Level for SQLAlchemy/engine/pool logs (default: WARNING)
     - LOG_FILE: Log file path (default: None)
     - LOG_ERROR_FILE: Error log file path (default: derived from LOG_FILE)
@@ -207,11 +210,17 @@ def intercept_standard_logging() -> None:
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
 
     third_party_level = _env_log_level("LOG_THIRD_PARTY_LEVEL", "INFO")
+    uvicorn_access_level = _env_log_level("LOG_UVICORN_ACCESS_LEVEL", "WARNING")
+    arq_level = _env_log_level("LOG_ARQ_LEVEL", "WARNING")
+    httpx_level = _env_log_level("LOG_HTTPX_LEVEL", "WARNING")
     sqlalchemy_level = _env_log_level("LOG_SQLALCHEMY_LEVEL", "WARNING")
 
-    # Keep framework lifecycle/request logs visible by default.
-    for logger_name in ["uvicorn", "uvicorn.error", "uvicorn.access", "arq"]:
+    # Keep framework lifecycle logs visible by default, but suppress noisy request/job traces.
+    for logger_name in ["uvicorn", "uvicorn.error"]:
         logging.getLogger(logger_name).setLevel(third_party_level)
+    logging.getLogger("uvicorn.access").setLevel(uvicorn_access_level)
+    logging.getLogger("arq").setLevel(arq_level)
+    logging.getLogger("httpx").setLevel(httpx_level)
 
     # In business-mode logging, SQL/ORM internals are noise unless explicitly debugging DB behavior.
     for logger_name in [

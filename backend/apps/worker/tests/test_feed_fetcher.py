@@ -202,6 +202,140 @@ class TestFetchFeedTask:
         mock_extract.assert_awaited_once_with("https://openai.com/index/conde-nast/")
 
     @pytest.mark.asyncio
+    async def test_content_extraction_failure_logs_feed_context(self):
+        """Extraction warnings should include feed and entry context in the message."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "https://example.com/feed.xml"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://example.com/posts/1"
+        entry.title = "Entry"
+        entry.author = None
+        entry.content = "<p>short</p>"
+        entry.summary = "short"
+        entry.published_at = None
+        entry.has_full_content = False
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "Feed"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://example.com"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = "entry-1"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_feed_result, mock_insert_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.extract_entry_content_update",
+                new=AsyncMock(return_value=MagicMock(content=None, source=None, error="empty_extraction")),
+            ),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch("glean_worker.tasks.feed_fetcher.logger.warning") as mock_warning,
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            await fetch_feed_task({}, feed_id="feed-1")
+
+        mock_warning.assert_any_call(
+            "Entry content extraction failed for "
+            "feed_id=feed-1 feed_url=https://example.com/feed.xml "
+            "entry_url=https://example.com/posts/1 reason=empty_extraction"
+        )
+
+    @pytest.mark.asyncio
+    async def test_success_log_is_feed_level_summary(self):
+        """Successful fetch logs should be a single feed-level summary message."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "https://example.com/feed.xml"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://example.com/posts/1"
+        entry.title = "Entry"
+        entry.author = None
+        entry.content = "<p>full</p>"
+        entry.summary = None
+        entry.published_at = None
+        entry.has_full_content = True
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "Feed"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://example.com"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = "entry-1"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_feed_result, mock_insert_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch("glean_worker.tasks.feed_fetcher.logger.info") as mock_info,
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            await fetch_feed_task({}, feed_id="feed-1")
+
+        mock_info.assert_any_call(
+            "Feed fetch complete: "
+            "feed_id=feed-1 url=https://example.com/feed.xml "
+            "status=success new_entries=1 total_entries=1"
+        )
+
+    @pytest.mark.asyncio
     async def test_top_level_duplicate_guid_error_does_not_increment_error_count(self):
         """Duplicate guid at task boundary should be treated as non-fatal."""
         mock_feed = MagicMock()
