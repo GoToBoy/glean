@@ -8,7 +8,7 @@ import hashlib
 import math
 from urllib.parse import urljoin
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -19,7 +19,7 @@ from glean_core.schemas import (
     SubscriptionSyncResponse,
 )
 from glean_core.services.typed_config_service import TypedConfigService
-from glean_database.models import Entry, Feed, Subscription, UserEntry, UserPreferenceStats
+from glean_database.models import Bookmark, Entry, Feed, Subscription, UserEntry, UserPreferenceStats
 
 # Sentinel for unset values
 UNSET: object = object()
@@ -37,6 +37,19 @@ class FeedService:
         """
         self.session = session
         self._typed_config = TypedConfigService(session)
+
+    async def _preserve_entry_bookmark_urls_for_feed(self, feed_id: str) -> None:
+        """Backfill bookmark URLs before deleting a feed's entries."""
+        entry_url_subquery = (
+            select(Entry.url).where(Entry.id == Bookmark.entry_id).scalar_subquery()
+        )
+        feed_entry_ids = select(Entry.id).where(Entry.feed_id == feed_id)
+
+        await self.session.execute(
+            update(Bookmark)
+            .where(Bookmark.entry_id.in_(feed_entry_ids), Bookmark.url.is_(None))
+            .values(url=entry_url_subquery)
+        )
 
     async def _build_rsshub_feed_url(self, rsshub_path: str) -> str:
         """
@@ -472,6 +485,8 @@ class FeedService:
         count = result.scalar() or 0
 
         if count == 0:
+            await self._preserve_entry_bookmark_urls_for_feed(feed_id)
+
             # No more subscribers - get entry IDs before deleting
             entry_stmt = select(Entry.id).where(Entry.feed_id == feed_id)
             entry_result = await self.session.execute(entry_stmt)

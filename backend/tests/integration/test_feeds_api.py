@@ -4,6 +4,7 @@ import uuid
 
 import pytest
 from httpx import AsyncClient
+from sqlalchemy import select
 
 
 class TestListSubscriptions:
@@ -285,6 +286,47 @@ class TestDeleteSubscription:
         )
         remaining = await db_session.scalar(remaining_stmt)
         assert remaining == 0
+
+    @pytest.mark.asyncio
+    async def test_delete_subscription_preserves_entry_bookmarks_as_url_bookmarks(
+        self, client: AsyncClient, auth_headers, db_session, test_subscription, test_feed, test_user
+    ):
+        """Deleting the last subscription should preserve legacy entry-only bookmarks."""
+        from glean_database.models.bookmark import Bookmark
+        from glean_database.models.entry import Entry
+
+        entry = Entry(
+            feed_id=test_feed.id,
+            url="https://example.com/articles/delete-me",
+            title="Delete Me",
+            author="Test Author",
+            summary="Test summary",
+        )
+        db_session.add(entry)
+        await db_session.flush()
+
+        bookmark = Bookmark(
+            user_id=test_user.id,
+            entry_id=entry.id,
+            url=None,
+            title=entry.title,
+            excerpt=entry.summary,
+            snapshot_status="pending",
+        )
+        db_session.add(bookmark)
+        await db_session.commit()
+
+        response = await client.delete(f"/api/feeds/{test_subscription.id}", headers=auth_headers)
+
+        assert response.status_code == 204
+
+        refreshed_bookmark = await db_session.get(Bookmark, bookmark.id)
+        assert refreshed_bookmark is not None
+        assert refreshed_bookmark.entry_id is None
+        assert refreshed_bookmark.url == entry.url
+
+        deleted_entry = await db_session.execute(select(Entry).where(Entry.id == entry.id))
+        assert deleted_entry.scalar_one_or_none() is None
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent_subscription(self, client: AsyncClient, auth_headers):

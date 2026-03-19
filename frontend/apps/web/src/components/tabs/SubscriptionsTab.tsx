@@ -2,17 +2,26 @@ import { useState, useRef, useEffect, useMemo } from 'react'
 import {
   useSubscriptions,
   useDeleteSubscription,
+  useBatchDeleteSubscriptions,
   useRefreshFeed,
   useRefreshAllFeeds,
   useRefreshStatus,
   useImportOPML,
   useExportOPML,
 } from '../../hooks/useSubscriptions'
+import { useEntries } from '../../hooks/useEntries'
 import { useFolderStore } from '../../stores/folderStore'
-import type { FolderTreeNode, RefreshStatusItem, Subscription, SubscriptionListResponse } from '@glean/types'
+import type {
+  EntryWithState,
+  FolderTreeNode,
+  RefreshStatusItem,
+  Subscription,
+  SubscriptionListResponse,
+} from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
+  Checkbox,
   Skeleton,
   Menu,
   MenuTrigger,
@@ -36,6 +45,10 @@ import {
   ChevronRight,
   Loader2,
   Folder,
+  Eye,
+  EyeOff,
+  CheckSquare,
+  Square,
 } from 'lucide-react'
 
 type FeedRefreshState = {
@@ -75,6 +88,7 @@ export function SubscriptionsTab() {
     return map
   }, [feedFolders])
   const deleteMutation = useDeleteSubscription()
+  const batchDeleteMutation = useBatchDeleteSubscriptions()
   const refreshMutation = useRefreshFeed()
   const refreshAllMutation = useRefreshAllFeeds()
   const refreshStatusMutation = useRefreshStatus()
@@ -88,6 +102,9 @@ export function SubscriptionsTab() {
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [page, setPage] = useState(1)
   const [perPage] = useState(10)
+  const [isBatchMode, setIsBatchMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [previewSubscriptionId, setPreviewSubscriptionId] = useState<string | null>(null)
 
   // Fetch subscriptions
   const { data, isLoading, error } = useSubscriptions({
@@ -109,8 +126,72 @@ export function SubscriptionsTab() {
     setPage(1)
   }, [searchQuery])
 
+  useEffect(() => {
+    const visibleIds = new Set((data?.items ?? []).map((subscription) => subscription.id))
+    setSelectedIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => visibleIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+
+    if (
+      previewSubscriptionId &&
+      !Array.from(visibleIds).includes(previewSubscriptionId)
+    ) {
+      setPreviewSubscriptionId(null)
+    }
+  }, [data?.items, previewSubscriptionId])
+
   const handleDelete = async (id: string) => {
     await deleteMutation.mutateAsync(id)
+    setSelectedIds((prev) => {
+      if (!prev.has(id)) return prev
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    if (previewSubscriptionId === id) {
+      setPreviewSubscriptionId(null)
+    }
+  }
+
+  const handleBatchDelete = async () => {
+    const subscriptionIds = Array.from(selectedIds)
+    if (subscriptionIds.length === 0) return
+
+    await batchDeleteMutation.mutateAsync({ subscription_ids: subscriptionIds })
+    setSelectedIds(new Set())
+    setPreviewSubscriptionId(null)
+  }
+
+  const handleToggleSelection = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const handleToggleSelectAll = () => {
+    if (!data?.items?.length) return
+
+    const pageIds = data.items.map((subscription) => subscription.id)
+    const allSelected = pageIds.every((id) => selectedIds.has(id))
+
+    setSelectedIds((prev) => {
+      if (allSelected) {
+        const next = new Set(prev)
+        pageIds.forEach((id) => next.delete(id))
+        return next
+      }
+
+      const next = new Set(prev)
+      pageIds.forEach((id) => next.add(id))
+      return next
+    })
   }
 
   const handleRefresh = async (id: string) => {
@@ -245,6 +326,10 @@ export function SubscriptionsTab() {
   const totalPages = Math.max(1, Math.ceil(totalItems / perPage))
   const hasNextPage = page < totalPages
   const hasPrevPage = page > 1
+  const pageIds = data?.items?.map((subscription) => subscription.id) ?? []
+  const selectedCount = pageIds.filter((id) => selectedIds.has(id)).length
+  const isAllSelected = pageIds.length > 0 && selectedCount === pageIds.length
+  const isSomeSelected = selectedCount > 0 && !isAllSelected
 
   const pageItems: Array<number | 'ellipsis'> = (() => {
     if (totalPages <= 7) {
@@ -309,6 +394,26 @@ export function SubscriptionsTab() {
 
         <div className="flex items-center gap-2">
           <Button
+            variant={isBatchMode ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => {
+              setIsBatchMode((prev) => !prev)
+              setSelectedIds(new Set())
+            }}
+            className="gap-1.5"
+          >
+            {isBatchMode ? (
+              <CheckSquare className="h-4 w-4 shrink-0" />
+            ) : (
+              <Square className="h-4 w-4 shrink-0" />
+            )}
+            <span className="hidden sm:inline">
+              {isBatchMode
+                ? t('manageFeeds.exitBatchMode')
+                : t('manageFeeds.batchManage')}
+            </span>
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={handleRefreshAll}
@@ -344,6 +449,42 @@ export function SubscriptionsTab() {
           </Button>
         </div>
       </div>
+
+      {isBatchMode && (
+        <div className="border-border bg-muted/30 flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleToggleSelectAll}
+              className="text-muted-foreground hover:text-foreground flex items-center gap-2 text-sm transition-colors"
+            >
+              <Checkbox
+                checked={isAllSelected}
+                indeterminate={isSomeSelected}
+                aria-label={t('manageFeeds.selectAllOnPage')}
+              />
+              <span>{t('manageFeeds.selectAllOnPage')}</span>
+            </button>
+            <span className="text-muted-foreground text-sm">
+              {t('manageFeeds.selectedCount', { count: selectedCount })}
+            </span>
+          </div>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={handleBatchDelete}
+            disabled={selectedCount === 0 || batchDeleteMutation.isPending}
+            className="gap-1.5"
+          >
+            {batchDeleteMutation.isPending ? (
+              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4 shrink-0" />
+            )}
+            <span>{t('manageFeeds.unsubscribeSelected')}</span>
+          </Button>
+        </div>
+      )}
 
       {/* Import progress banner */}
       {importMutation.isPending && (
@@ -436,6 +577,7 @@ export function SubscriptionsTab() {
                   refreshState?.lastFetchedAt
                 const effectiveLastFetchSuccessAt =
                   refreshState?.lastFetchSuccessAt || subscription.feed.last_fetch_success_at
+                const isPreviewOpen = previewSubscriptionId === subscription.id
 
                 return (
                 <div
@@ -443,6 +585,13 @@ export function SubscriptionsTab() {
                   className="hover:bg-muted/30 w-full p-4 transition-colors"
                 >
                   <div className="flex w-full items-center gap-3">
+                    {isBatchMode && (
+                      <Checkbox
+                        checked={selectedIds.has(subscription.id)}
+                        aria-label={t('manageFeeds.selectFeed')}
+                        onCheckedChange={() => handleToggleSelection(subscription.id)}
+                      />
+                    )}
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       {subscription.feed.icon_url ? (
                         <img
@@ -523,6 +672,26 @@ export function SubscriptionsTab() {
                       <Button
                         variant="ghost"
                         size="icon-sm"
+                        onClick={() =>
+                          setPreviewSubscriptionId((prev) =>
+                            prev === subscription.id ? null : subscription.id
+                          )
+                        }
+                        title={
+                          isPreviewOpen
+                            ? t('manageFeeds.hideRecentArticles')
+                            : t('manageFeeds.previewRecentArticles')
+                        }
+                      >
+                        {isPreviewOpen ? (
+                          <EyeOff className="h-4 w-4" />
+                        ) : (
+                          <Eye className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
                         onClick={() => window.open(subscription.feed.url, '_blank')}
                         title={t('manageFeeds.openFeed')}
                       >
@@ -568,6 +737,12 @@ export function SubscriptionsTab() {
                       </Menu>
                     </div>
                   </div>
+                  {isPreviewOpen && (
+                    <RecentEntriesPreview
+                      feedId={subscription.feed_id}
+                      feedUrl={subscription.feed.url}
+                    />
+                  )}
                 </div>
                 )
               })
@@ -654,4 +829,85 @@ export function SubscriptionsTab() {
       </div>
     </div>
   )
+}
+
+function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: string }) {
+  const { t } = useTranslation('settings')
+  const { data, isLoading, error } = useEntries({
+    feed_id: feedId,
+    page: 1,
+    per_page: 10,
+    view: 'timeline',
+  })
+
+  const items = data?.items ?? []
+
+  return (
+    <div className="bg-muted/30 mt-3 rounded-lg border border-dashed px-4 py-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-medium">{t('manageFeeds.recentArticlesTitle')}</p>
+          <p className="text-muted-foreground text-xs">
+            {t('manageFeeds.recentArticlesDescription')}
+          </p>
+        </div>
+        <span className="text-muted-foreground text-xs">
+          {t('manageFeeds.recentArticlesCount', { count: items.length })}
+        </span>
+      </div>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={`entry-skeleton-${index}`} className="space-y-1">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/3" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!isLoading && error && (
+        <p className="text-destructive text-sm">{t('manageFeeds.recentArticlesFailed')}</p>
+      )}
+
+      {!isLoading && !error && items.length === 0 && (
+        <p className="text-muted-foreground text-sm">{t('manageFeeds.recentArticlesEmpty')}</p>
+      )}
+
+      {!isLoading && !error && items.length > 0 && (
+        <div className="space-y-2">
+          {items.map((entry: EntryWithState) => (
+            <a
+              key={entry.id}
+              href={entry.url || feedUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:bg-background/80 flex items-start justify-between gap-3 rounded-md px-2 py-2 transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium line-clamp-2">{entry.title}</p>
+                <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2 text-xs">
+                  <span>{entry.author || t('manageFeeds.unknownAuthor')}</span>
+                  <span>•</span>
+                  <span>{formatEntryDate(entry.published_at || entry.created_at)}</span>
+                  {!entry.is_read && (
+                    <>
+                      <span>•</span>
+                      <span>{t('manageFeeds.unread')}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+              <ExternalLink className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function formatEntryDate(value: string) {
+  return new Date(value).toLocaleString()
 }
