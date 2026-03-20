@@ -541,98 +541,65 @@ export default function SettingsPage() {
     </div>
   )
 
-  return (
-    <div className="bg-background h-full p-4 sm:p-6 lg:p-8">
-      <div className="flex h-full flex-col">
-        {/* Header with animation */}
-        <div className="animate-fade-in mb-2">
-          <div className="flex items-center gap-4">
-            <div className="from-primary/20 to-primary/5 ring-primary/20 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ring-1">
-              <User className="text-primary h-6 w-6" />
-            </div>
-            <div>
-              <h1 className="font-display text-foreground text-3xl font-bold">{t('title')}</h1>
-              <p className="text-muted-foreground mt-1 text-sm">{t('subtitle')}</p>
-            </div>
-          </div>
-        </div>
+  const settingsRootClass =
+    'h-full [&_.animate-fade-in]:!animate-none [&_.stagger-children>*]:!animate-none [&_.animate-progress-indeterminate]:!animate-none [&_*]:!transition-none'
+  const settingsFrameClass =
+    'min-h-0 flex-1 overflow-hidden border bg-card/50 shadow-xl backdrop-blur-sm'
+  const tabsRailClass =
+    'w-full shrink-0 border-b bg-muted/20 md:w-56 md:overflow-y-auto md:border-r md:border-b-0'
+  const tabsListClass =
+    'no-scrollbar flex h-auto w-full !flex-row gap-0 overflow-x-auto bg-transparent md:!flex-col md:gap-1 md:overflow-x-visible md:p-3 [&_[data-slot=tab-indicator]]:hidden md:[&_[data-slot=tab-indicator]]:block'
+  const tabsTabClass =
+    'flex-1 flex-col gap-0.5 border-b-2 border-transparent px-2 py-2.5 md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:font-medium'
+  const panelClass = 'h-full w-full min-w-0 p-6'
+  const panelHeaderClass = 'mb-8'
 
-        {/* Tabs Layout with glass effect */}
-        <div
-          className="border-border/50 bg-card/50 animate-fade-in min-h-0 flex-1 overflow-hidden rounded-2xl border shadow-xl backdrop-blur-sm"
-          style={{ animationDelay: '100ms' }}
-        >
+  return (
+    <div className={settingsRootClass}>
+      <div className="flex h-full flex-col">
+        <div className={settingsFrameClass}>
           <Tabs defaultValue="profile" orientation="vertical" className="h-full w-full">
             <div className="flex h-full w-full flex-1 flex-col md:flex-row">
-              {/* Vertical Tabs List */}
-              <div className="border-border/50 from-muted/30 to-muted/10 w-full shrink-0 border-b bg-gradient-to-br backdrop-blur-sm md:w-56 md:overflow-y-auto md:border-r md:border-b-0">
-                <TabsList
-                  variant="underline"
-                  className="no-scrollbar flex h-auto w-full !flex-row gap-0 overflow-x-auto bg-transparent md:!flex-col md:gap-1 md:overflow-x-visible md:p-3 [&_[data-slot=tab-indicator]]:hidden md:[&_[data-slot=tab-indicator]]:block"
-                >
-                  <TabsTab
-                    value="profile"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+              <div className={tabsRailClass}>
+                <TabsList variant="underline" className={tabsListClass}>
+                  <TabsTab value="profile" className={tabsTabClass}>
                     <User className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.profile')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="read-later"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="read-later" className={tabsTabClass}>
                     <Clock className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.readLater')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="appearance"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="appearance" className={tabsTabClass}>
                     <Sun className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.appearance')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="reader-mode"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="reader-mode" className={tabsTabClass}>
                     <Compass className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.reader')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="translation"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="translation" className={tabsTabClass}>
                     <Languages className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.translation')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="manage-feeds"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="manage-feeds" className={tabsTabClass}>
                     <ListChecks className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.manageFeeds')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="preferences"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="preferences" className={tabsTabClass}>
                     <Sparkles className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.preferences')}</span>
                   </TabsTab>
-                  <TabsTab
-                    value="api-tokens"
-                    className="hover:bg-accent/80 data-[state=active]:bg-primary/10 data-[state=active]:text-primary data-[state=active]:border-primary flex-1 flex-col gap-0.5 rounded-none border-b-2 border-transparent px-2 py-2.5 transition-all duration-200 data-[state=active]:font-medium md:w-full md:flex-none md:flex-row md:justify-start md:gap-2.5 md:rounded-md md:border-b-0 md:px-3 md:py-2.5"
-                  >
+                  <TabsTab value="api-tokens" className={tabsTabClass}>
                     <Key className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.apiTokens')}</span>
                   </TabsTab>
                 </TabsList>
               </div>
 
-              {/* Tab Panels with stagger animation */}
               <div className="w-full min-w-0 flex-1 overflow-y-auto">
-                <TabsPanel value="profile" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="profile" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <User className="text-primary h-5 w-5" />
@@ -645,13 +612,11 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-                    <ProfileContent />
-                  </div>
+                  <ProfileContent />
                 </TabsPanel>
 
-                <TabsPanel value="read-later" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="read-later" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Clock className="text-primary h-5 w-5" />
@@ -664,13 +629,11 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-                    <ReadLaterContent />
-                  </div>
+                  <ReadLaterContent />
                 </TabsPanel>
 
-                <TabsPanel value="appearance" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="appearance" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Sun className="text-primary h-5 w-5" />
@@ -683,13 +646,13 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in w-full" style={{ animationDelay: '50ms' }}>
+                  <div className="w-full">
                     <AppearanceContent />
                   </div>
                 </TabsPanel>
 
-                <TabsPanel value="translation" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="translation" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Languages className="text-primary h-5 w-5" />
@@ -702,13 +665,11 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-                    <TranslationTab />
-                  </div>
+                  <TranslationTab />
                 </TabsPanel>
 
-                <TabsPanel value="reader-mode" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="reader-mode" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Compass className="text-primary h-5 w-5" />
@@ -728,31 +689,15 @@ export default function SettingsPage() {
 
                 <TabsPanel
                   value="manage-feeds"
-                  className="flex h-full w-full min-w-0 flex-col overflow-hidden p-6"
+                  className="flex h-full w-full min-w-0 flex-col overflow-hidden"
                 >
-                  <div className="animate-fade-in mb-6 shrink-0">
-                    <div className="mb-2 flex items-center gap-3">
-                      <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
-                        <ListChecks className="text-primary h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="font-display text-foreground text-2xl font-semibold">
-                          {t('manageFeeds.title')}
-                        </h2>
-                        <p className="text-muted-foreground text-sm">{t('manageFeeds.desc')}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div
-                    className="animate-fade-in min-h-0 w-full flex-1"
-                    style={{ animationDelay: '50ms' }}
-                  >
+                  <div className="min-h-0 w-full flex-1 p-4">
                     <SubscriptionsTab />
                   </div>
                 </TabsPanel>
 
-                <TabsPanel value="preferences" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="preferences" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Sparkles className="text-primary h-5 w-5" />
@@ -765,13 +710,11 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-                    <PreferenceTab />
-                  </div>
+                  <PreferenceTab />
                 </TabsPanel>
 
-                <TabsPanel value="api-tokens" className="h-full w-full min-w-0 p-6">
-                  <div className="animate-fade-in mb-8">
+                <TabsPanel value="api-tokens" className={panelClass}>
+                  <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">
                       <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
                         <Key className="text-primary h-5 w-5" />
@@ -784,21 +727,11 @@ export default function SettingsPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
-                    <APITokensTab />
-                  </div>
+                  <APITokensTab />
                 </TabsPanel>
               </div>
             </div>
           </Tabs>
-        </div>
-
-        {/* App info with subtle animation */}
-        <div
-          className="text-muted-foreground/70 animate-fade-in py-3 text-center text-xs"
-          style={{ animationDelay: '200ms' }}
-        >
-          <p>{t('version', { version: import.meta.env.VITE_APP_VERSION || 'dev' })}</p>
         </div>
       </div>
     </div>

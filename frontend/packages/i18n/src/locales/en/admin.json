@@ -231,6 +231,7 @@
     },
     "pagination": {
       "page": "Page {{page}} of {{totalPages}} ({{total}} total feeds)",
+      "rowsPerPage": "Rows per page",
       "previous": "Previous",
       "next": "Next"
     }

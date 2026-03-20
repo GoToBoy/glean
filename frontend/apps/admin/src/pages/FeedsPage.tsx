@@ -37,6 +37,11 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogClose,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
 } from '@glean/ui'
 import {
   Search,
@@ -74,6 +79,8 @@ type FeedRefreshState = {
   updatedAt: string
 }
 
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+
 /**
  * Feed management page.
  *
@@ -88,6 +95,7 @@ type FeedRefreshState = {
 export default function FeedsPage() {
   const { t } = useTranslation(['admin', 'common'])
   const [page, setPage] = useState(1)
+  const [perPage, setPerPage] = useState(20)
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [statusFilter, setStatusFilter] = useState<FeedStatus>('all')
@@ -106,7 +114,7 @@ export default function FeedsPage() {
 
   const { data, isLoading, refetch } = useFeeds({
     page,
-    per_page: 20,
+    per_page: perPage,
     status: statusFilter === 'all' ? undefined : statusFilter,
     search: search || undefined,
     sort: sortBy,
@@ -910,15 +918,40 @@ export default function FeedsPage() {
           </div>
 
           {/* Pagination */}
-          {data && data.total_pages > 1 && (
-            <div className="border-border flex shrink-0 items-center justify-between border-t px-6 py-4">
-              <p className="text-muted-foreground text-sm">
-                {t('admin:feeds.pagination.page', {
-                  page: data.page,
-                  totalPages: data.total_pages,
-                  total: data.total,
-                })}
-              </p>
+          {data && data.total > 0 && (
+            <div className="border-border flex shrink-0 flex-col gap-3 border-t px-6 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <p className="text-muted-foreground text-sm">
+                  {t('admin:feeds.pagination.page', {
+                    page: data.page,
+                    totalPages: data.total_pages,
+                    total: data.total,
+                  })}
+                </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground text-sm">
+                    {t('admin:feeds.pagination.rowsPerPage')}
+                  </span>
+                  <Select
+                    value={String(perPage)}
+                    onValueChange={(value) => {
+                      setPerPage(Number(value))
+                      setPage(1)
+                    }}
+                  >
+                    <SelectTrigger size="sm" className="w-24">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PAGE_SIZE_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={String(option)}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="flex items-center gap-2">
                 <Button
                   size="sm"

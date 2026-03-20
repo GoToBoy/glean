@@ -231,6 +231,7 @@
     },
     "pagination": {
       "page": "第 {{page}} 页 / 共 {{totalPages}} 页（共 {{total}} 个订阅）",
+      "rowsPerPage": "每页显示",
       "previous": "上一页",
       "next": "下一页"
     }
