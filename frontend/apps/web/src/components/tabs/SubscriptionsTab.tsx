@@ -775,6 +775,7 @@ function FolderBranch({
               previewSubscriptionId={previewSubscriptionId}
               onTogglePreview={onTogglePreview}
               onDelete={onDelete}
+              isDeletePending={isDeletePending}
               onRefresh={onRefresh}
               refreshingId={refreshingId}
               feedRefreshState={feedRefreshState}

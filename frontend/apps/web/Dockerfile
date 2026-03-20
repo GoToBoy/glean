@@ -23,7 +23,10 @@ COPY turbo.json ./
 RUN pnpm config set registry "${PNPM_REGISTRY}" \
     && pnpm install --frozen-lockfile --ignore-scripts
 
-RUN pnpm --filter=@glean/web build
+# Enforce frontend quality gates before release/build artifacts are produced.
+RUN pnpm --filter=@glean/web lint \
+    && pnpm --filter=@glean/web typecheck \
+    && pnpm --filter=@glean/web build
 RUN pnpm --filter=@glean/web compress:assets
 
 # Production stage

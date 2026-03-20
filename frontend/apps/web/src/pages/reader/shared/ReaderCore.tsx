@@ -675,10 +675,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       } catch (error) {
         console.error('Failed to translate list entries:', error)
       } finally {
-        if (sessionId !== listTranslationSessionRef.current) return
-        setListTranslationBatchCount((count) => Math.max(0, count - 1))
-        for (const { entry } of entryTexts) {
-          pendingTranslationEntryIdsRef.current.delete(entry.id)
+        if (sessionId === listTranslationSessionRef.current) {
+          setListTranslationBatchCount((count) => Math.max(0, count - 1))
+          for (const { entry } of entryTexts) {
+            pendingTranslationEntryIdsRef.current.delete(entry.id)
+          }
         }
       }
     },
