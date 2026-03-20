@@ -14,6 +14,7 @@ RUN npm config set registry "${NPM_REGISTRY}" \
 
 # Copy workspace configuration
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml ./
+COPY eslint.config.js ./
 COPY packages/ packages/
 COPY apps/web/ apps/web/
 COPY turbo.json ./
