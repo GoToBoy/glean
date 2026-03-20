@@ -272,6 +272,85 @@ class TestFetchFeedTask:
         )
 
     @pytest.mark.asyncio
+    async def test_manual_refresh_enqueues_backfill_for_existing_summary_only_entry(self):
+        """Manual refresh should enqueue content backfill for duplicate teaser-only entries."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "https://example.com/feed.xml"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://example.com/posts/1"
+        entry.title = "Entry"
+        entry.author = None
+        entry.content = "<p>short</p>"
+        entry.summary = "short"
+        entry.published_at = None
+        entry.has_full_content = False
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "Feed"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://example.com"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        existing_entry = MagicMock()
+        existing_entry.id = "existing-entry-1"
+        existing_entry.content = "<p>short</p>"
+        existing_entry.summary = "short"
+        existing_entry.content_source = "feed_summary_only"
+        existing_entry.content_backfill_status = "failed"
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = None
+
+        mock_existing_result = MagicMock()
+        mock_existing_result.scalar_one_or_none.return_value = existing_entry
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(
+            side_effect=[mock_feed_result, mock_insert_result, mock_existing_result]
+        )
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        mock_redis = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await fetch_feed_task(
+                {"redis": mock_redis}, feed_id="feed-1", backfill_existing_entries=True
+            )
+
+        assert result["status"] == "success"
+        assert result["new_entries"] == 0
+        mock_redis.enqueue_job.assert_awaited_once_with(
+            "backfill_entry_content_task", "existing-entry-1", force=False
+        )
+
+    @pytest.mark.asyncio
     async def test_success_log_is_feed_level_summary(self):
         """Successful fetch logs should be a single feed-level summary message."""
         mock_feed = MagicMock()

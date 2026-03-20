@@ -26,6 +26,7 @@
     "markAllAsRead": "全部标为已读",
     "moveTo": "移动到...",
     "selectFeeds": "多选订阅",
+    "unsubscribeSelected": "批量取消订阅",
     "groupSelectedFeeds": "所选归组为文件夹",
     "groupIntoFolder": "归组到新文件夹",
     "dissolveFolder": "解散文件夹"
@@ -147,6 +148,7 @@
     "saving": "保存中...",
     "removeFromFolder": "从文件夹中移除",
     "emptyFolder": "空文件夹",
+    "selectFolder": "选择文件夹内全部订阅",
     "createSubfolder": "创建子文件夹",
     "moveToFolder": "移动到文件夹",
     "noFolder": "无文件夹",

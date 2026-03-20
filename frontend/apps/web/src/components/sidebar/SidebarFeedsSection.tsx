@@ -3,6 +3,7 @@ import { useTranslation } from '@glean/i18n'
 import {
   Button,
   Badge,
+  Checkbox,
   Menu,
   MenuTrigger,
   MenuPopup,
@@ -38,11 +39,11 @@ import {
   Pencil,
   MoreHorizontal as MoreIcon,
   CheckCheck,
-  CheckSquare,
-  Square,
+  Loader2,
 } from 'lucide-react'
 import type { FolderTreeNode, Subscription } from '@glean/types'
 import {
+  useBatchDeleteSubscriptions,
   useDeleteSubscription,
   useRefreshFeed,
   useUpdateSubscription,
@@ -115,13 +116,10 @@ export function SidebarFeedsSection({
   setDragOverFolderId,
 }: SidebarFeedsSectionProps) {
   const { t } = useTranslation('feeds')
-  const { createFolder } = useFolderStore()
   const updateMutation = useUpdateSubscription()
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set())
-  const [showGroupDialog, setShowGroupDialog] = useState(false)
-  const [groupFolderName, setGroupFolderName] = useState('')
-  const [isGrouping, setIsGrouping] = useState(false)
+  const batchDeleteMutation = useBatchDeleteSubscriptions()
 
   useEffect(() => {
     // Clean up drag and drop state when the component unmounts.
@@ -152,33 +150,12 @@ export function SidebarFeedsSection({
     setSelectedSubscriptionIds(new Set())
   }
 
-  const handleGroupSelectedFeeds = async () => {
-    if (!groupFolderName.trim() || selectedCount < 2) return
+  const handleBatchUnsubscribe = async () => {
+    const subscriptionIds = Array.from(selectedSubscriptionIds)
+    if (subscriptionIds.length === 0) return
 
-    setIsGrouping(true)
-    try {
-      const folder = await createFolder({
-        name: groupFolderName.trim(),
-        type: 'feed',
-        parent_id: null,
-      })
-      if (!folder) return
-
-      await Promise.all(
-        Array.from(selectedSubscriptionIds).map((subscriptionId) =>
-          updateMutation.mutateAsync({
-            subscriptionId,
-            data: { folder_id: folder.id },
-          })
-        )
-      )
-
-      setShowGroupDialog(false)
-      setGroupFolderName('')
-      exitSelectionMode()
-    } finally {
-      setIsGrouping(false)
-    }
+    await batchDeleteMutation.mutateAsync({ subscription_ids: subscriptionIds })
+    exitSelectionMode()
   }
 
   return (
@@ -307,11 +284,17 @@ export function SidebarFeedsSection({
               </div>
               <Button
                 size="sm"
-                className="w-full"
-                onClick={() => setShowGroupDialog(true)}
-                disabled={selectedCount < 2}
+                variant="destructive"
+                className="w-full gap-1.5"
+                onClick={() => void handleBatchUnsubscribe()}
+                disabled={selectedCount === 0 || batchDeleteMutation.isPending}
               >
-                {t('actions.groupSelectedFeeds')}
+                {batchDeleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {t('actions.unsubscribeSelected')}
               </Button>
             </div>
           )}
@@ -413,41 +396,6 @@ export function SidebarFeedsSection({
         </>
       )}
 
-      <Dialog open={showGroupDialog} onOpenChange={setShowGroupDialog}>
-        <DialogPopup>
-          <DialogHeader>
-            <DialogTitle>{t('dialogs.groupFeeds.title')}</DialogTitle>
-            <DialogDescription>
-              {t('dialogs.groupFeeds.description', { count: selectedCount })}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 px-6 py-4">
-            <Label htmlFor="group-folder-name">{t('dialogs.createFolder.name')}</Label>
-            <Input
-              id="group-folder-name"
-              value={groupFolderName}
-              onChange={(e) => setGroupFolderName(e.target.value)}
-              placeholder={t('dialogs.createFolder.namePlaceholder')}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  handleGroupSelectedFeeds()
-                }
-              }}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowGroupDialog(false)}>
-              {t('common.cancel')}
-            </Button>
-            <Button
-              onClick={handleGroupSelectedFeeds}
-              disabled={isGrouping || !groupFolderName.trim() || selectedCount < 2}
-            >
-              {isGrouping ? t('common.creating') : t('actions.groupIntoFolder')}
-            </Button>
-          </DialogFooter>
-        </DialogPopup>
-      </Dialog>
     </>
   )
 }
@@ -515,6 +463,12 @@ function SidebarFolderItem({
   const [isRenaming, setIsRenaming] = useState(false)
 
   const totalUnread = subscriptions.reduce((sum, sub) => sum + sub.unread_count, 0)
+  const folderSubscriptionIds = collectFolderSubscriptionIds(folder, subscriptionsByFolder)
+  const selectedCount = folderSubscriptionIds.filter((subscriptionId) =>
+    selectedSubscriptionIds.has(subscriptionId)
+  ).length
+  const isFullySelected = folderSubscriptionIds.length > 0 && selectedCount === folderSubscriptionIds.length
+  const isPartiallySelected = selectedCount > 0 && selectedCount < folderSubscriptionIds.length
 
   const isDragTarget = dragOverFolderId === folder.id
   const canReceiveDrop = draggedFeed && draggedFeed.folder_id !== folder.id
@@ -567,6 +521,24 @@ function SidebarFolderItem({
     setIsMenuOpen(true)
   }
 
+  const handleFolderSelectionToggle = () => {
+    if (folderSubscriptionIds.length === 0) return
+
+    const shouldSelect = !isFullySelected
+    folderSubscriptionIds.forEach((subscriptionId) => {
+      if (shouldSelect) {
+        if (!selectedSubscriptionIds.has(subscriptionId)) {
+          onToggleFeedSelection(subscriptionId)
+        }
+        return
+      }
+
+      if (selectedSubscriptionIds.has(subscriptionId)) {
+        onToggleFeedSelection(subscriptionId)
+      }
+    })
+  }
+
   const getContainerClasses = () => {
     if (isDragTarget && canReceiveDrop) {
       return 'bg-primary/10 ring-primary/30 ring-2'
@@ -581,8 +553,7 @@ function SidebarFolderItem({
 
   return (
     <div>
-      <button
-        type="button"
+      <div
         className={cn(
           'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
           isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
@@ -592,10 +563,24 @@ function SidebarFolderItem({
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        onClick={() => onSelect(folder.id)}
         onMouseEnter={() => onHoverFolder?.(folder.id)}
+        onTouchStart={() => onHoverFolder?.(folder.id)}
       >
-        <button onClick={onToggle} className="touch-target-none flex h-5 items-center gap-2.5">
+        {isSelectionMode && (
+          <Checkbox
+            checked={isFullySelected}
+            indeterminate={isPartiallySelected}
+            aria-label={t('common.selectFolder')}
+            disabled={folderSubscriptionIds.length === 0}
+            onCheckedChange={handleFolderSelectionToggle}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="touch-target-none flex h-5 items-center gap-2.5"
+        >
           <ChevronRight
             className={cn(
               'h-3 w-3 shrink-0 transition-transform duration-200',
@@ -673,7 +658,7 @@ function SidebarFolderItem({
             </MenuSub>
           </MenuPopup>
         </Menu>
-      </button>
+      </div>
 
       {isExpanded && (
         <div className="border-border mt-0.5 ml-4 space-y-0.5 border-l pl-2">
@@ -766,6 +751,16 @@ function SidebarFolderItem({
       </Dialog>
     </div>
   )
+}
+
+function collectFolderSubscriptionIds(
+  folder: FolderTreeNode,
+  subscriptionsByFolder: Record<string, Subscription[]>
+): string[] {
+  return [
+    ...(subscriptionsByFolder[folder.id] || []).map((subscription) => subscription.id),
+    ...folder.children.flatMap((child) => collectFolderSubscriptionIds(child, subscriptionsByFolder)),
+  ]
 }
 
 interface SidebarFeedItemProps {
@@ -876,17 +871,12 @@ function SidebarFeedItem({
   }
 
   const handleClick = () => {
-    if (isSelectionMode) {
-      onToggleSelect?.(subscription.id)
-      return
-    }
     onClick()
   }
 
   return (
     <>
-      <button
-        type="button"
+      <div
         className={cn(
           'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
           isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
@@ -901,23 +891,25 @@ function SidebarFeedItem({
         }}
         onDragEnd={onDragEnd}
         onContextMenu={handleContextMenu}
-        onClick={handleClick}
         onMouseEnter={onHover}
         onTouchStart={onHover}
       >
+        {isSelectionMode && (
+          <Checkbox
+            checked={isSelected}
+            aria-label={t('actions.selectFeeds')}
+            onCheckedChange={() => onToggleSelect?.(subscription.id)}
+            onClick={(e) => e.stopPropagation()}
+          />
+        )}
         <button
+          type="button"
           onClick={handleClick}
           className={cn(
             'touch-target-none flex h-5 min-w-0 flex-1 items-center',
             isCompact ? 'gap-2' : 'gap-3'
           )}
         >
-          {isSelectionMode &&
-            (isSelected ? (
-              <CheckSquare className="text-primary h-4 w-4 shrink-0" />
-            ) : (
-              <Square className="text-muted-foreground h-4 w-4 shrink-0" />
-            ))}
           {subscription.feed.icon_url ? (
             <img
               src={subscription.feed.icon_url}
@@ -997,7 +989,7 @@ function SidebarFeedItem({
             </MenuPopup>
           </Menu>
         )}
-      </button>
+      </div>
 
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogPopup>

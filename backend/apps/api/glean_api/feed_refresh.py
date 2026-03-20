@@ -11,9 +11,12 @@ async def enqueue_feed_refresh_job(
     feed_id: str,
     feed_title: str,
     subscription_id: str | None = None,
+    backfill_existing_entries: bool = False,
 ) -> dict[str, str]:
     """Enqueue one feed refresh job and return unified payload."""
-    job = await redis.enqueue_job("fetch_feed_task", feed_id)
+    job = await redis.enqueue_job(
+        "fetch_feed_task", feed_id, backfill_existing_entries=backfill_existing_entries
+    )
     payload: dict[str, str] = {
         "feed_id": feed_id,
         "job_id": job.job_id if job else "unknown",

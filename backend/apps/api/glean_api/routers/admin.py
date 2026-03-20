@@ -625,6 +625,7 @@ async def refresh_feed_now(
         redis=redis,
         feed_id=feed_id,
         feed_title=feed.get("title") or feed.get("url") or feed_id,
+        backfill_existing_entries=True,
     )
     db_feed = await session.get(Feed, feed_id)
     if db_feed:
@@ -723,7 +724,10 @@ async def refresh_all_feeds_now(
     for feed in feeds:
         jobs.append(
             await enqueue_feed_refresh_job(
-                redis=redis, feed_id=feed.id, feed_title=feed.title or feed.url
+                redis=redis,
+                feed_id=feed.id,
+                feed_title=feed.title or feed.url,
+                backfill_existing_entries=True,
             )
         )
         queued_feed_ids.add(feed.id)
@@ -755,7 +759,10 @@ async def refresh_errored_feeds_now(
     for feed in feeds:
         jobs.append(
             await enqueue_feed_refresh_job(
-                redis=redis, feed_id=feed.id, feed_title=feed.title or feed.url
+                redis=redis,
+                feed_id=feed.id,
+                feed_title=feed.title or feed.url,
+                backfill_existing_entries=True,
             )
         )
         queued_feed_ids.add(feed.id)

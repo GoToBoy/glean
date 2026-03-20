@@ -21,7 +21,7 @@ from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
 from ..config import settings
-from .content_extraction import extract_entry_content_update
+from .content_extraction import extract_entry_content_update, should_backfill_entry
 
 logger = get_logger(__name__)
 MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
@@ -63,7 +63,9 @@ async def _is_vectorization_enabled(session: AsyncSession) -> bool:
     )
 
 
-async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | int]:
+async def fetch_feed_task(
+    ctx: dict[str, Any], feed_id: str, backfill_existing_entries: bool = False
+) -> dict[str, str | int]:
     """
     Fetch and parse a single RSS feed.
 
@@ -174,6 +176,7 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
             new_entries = 0
             latest_entry_time = feed.last_entry_at
             seen_guids: set[str] = set()
+            queued_backfill_entry_ids: set[str] = set()
             pending_inserts_since_commit = 0
             vectorization_enabled = await _is_vectorization_enabled(session)
 
@@ -254,6 +257,26 @@ async def fetch_feed_task(ctx: dict[str, Any], feed_id: str) -> dict[str, str | 
                 inserted_entry_id = insert_result.scalar_one_or_none()
 
                 if not inserted_entry_id:
+                    if backfill_existing_entries and guid and parsed_entry.url and "redis" in ctx:
+                        existing_entry_result = await session.execute(
+                            select(Entry).where(Entry.feed_id == feed.id, Entry.guid == guid)
+                        )
+                        existing_entry = existing_entry_result.scalar_one_or_none()
+                        if (
+                            existing_entry
+                            and existing_entry.id not in queued_backfill_entry_ids
+                            and should_backfill_entry(
+                                content=existing_entry.content,
+                                summary=existing_entry.summary,
+                                content_source=existing_entry.content_source,
+                                content_backfill_status=existing_entry.content_backfill_status,
+                                force=False,
+                            )
+                        ):
+                            await ctx["redis"].enqueue_job(
+                                "backfill_entry_content_task", existing_entry.id, force=False
+                            )
+                            queued_backfill_entry_ids.add(existing_entry.id)
                     continue
 
                 new_entries += 1

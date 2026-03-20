@@ -424,6 +424,7 @@ async def refresh_feed(
             redis=redis,
             feed_id=subscription.feed.id,
             feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
+            backfill_existing_entries=True,
         )
         feed = await session.get(Feed, subscription.feed.id)
         if feed:
@@ -464,6 +465,7 @@ async def refresh_all_feeds(
                 feed_id=subscription.feed.id,
                 feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
                 subscription_id=subscription.id,
+                backfill_existing_entries=True,
             )
         )
         queued_count += 1

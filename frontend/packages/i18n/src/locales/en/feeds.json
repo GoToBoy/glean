@@ -26,6 +26,7 @@
     "markAllAsRead": "Mark All as Read",
     "moveTo": "Move to...",
     "selectFeeds": "Select Feeds",
+    "unsubscribeSelected": "Unsubscribe Selected",
     "groupSelectedFeeds": "Group Selected Feeds",
     "groupIntoFolder": "Group into Folder",
     "dissolveFolder": "Dissolve Folder"
@@ -147,6 +148,7 @@
     "saving": "Saving...",
     "removeFromFolder": "Remove from folder",
     "emptyFolder": "Empty folder",
+    "selectFolder": "Select all feeds in folder",
     "createSubfolder": "Create Subfolder",
     "moveToFolder": "Move to Folder",
     "noFolder": "No folder",
