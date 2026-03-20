@@ -104,24 +104,23 @@ export function TranslationTab() {
   }
 
   return (
-    <div className="stagger-children space-y-6">
+    <div className="space-y-6">
       {/* Provider selection */}
-      <div className="animate-fade-in">
+      <div>
         <Label className="text-muted-foreground mb-2 block text-sm font-medium">
           {t('translation.provider')}
         </Label>
         <p className="text-muted-foreground/80 mb-4 text-sm">{t('translation.providerDesc')}</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          {PROVIDERS.map(({ value, nameKey, descKey }, index) => (
+          {PROVIDERS.map(({ value, nameKey, descKey }) => (
             <button
               key={value}
               onClick={() => setProvider(value)}
-              className={`group animate-fade-in relative flex flex-col gap-2 rounded-xl border p-4 text-left transition-all duration-200 ${
+              className={`group relative flex flex-col gap-2 rounded-xl border p-4 text-left ${
                 provider === value
                   ? 'border-primary/50 from-primary/10 to-primary/5 ring-primary/30 bg-gradient-to-br ring-2'
                   : 'border-border/50 from-muted/30 to-muted/10 hover:border-primary/30 bg-gradient-to-br hover:shadow-md'
               }`}
-              style={{ animationDelay: `${index * 50}ms` }}
             >
               {provider === value && (
                 <div className="bg-primary ring-background absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full shadow-md ring-2">
@@ -142,7 +141,7 @@ export function TranslationTab() {
       </div>
 
       {/* Target language */}
-      <div className="animate-fade-in" style={{ animationDelay: '60ms' }}>
+      <div>
         <Label className="text-muted-foreground mb-2 block text-sm font-medium">
           {t('translation.targetLanguage')}
         </Label>
@@ -163,7 +162,7 @@ export function TranslationTab() {
 
       {/* Base URL input (MTran only) */}
       {provider === 'mtran' && (
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('translation.baseUrl')}
           </Label>
@@ -179,8 +178,7 @@ export function TranslationTab() {
 
       {/* List translation default toggle */}
       <div
-        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in rounded-xl border bg-gradient-to-br p-5 ring-1"
-        style={{ animationDelay: '80ms' }}
+        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 rounded-xl border bg-gradient-to-br p-5 ring-1"
       >
         <div className="flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">
@@ -199,7 +197,7 @@ export function TranslationTab() {
 
       {/* API Key input */}
       {needsKey && (
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('translation.apiKey')}
           </Label>
@@ -224,7 +222,7 @@ export function TranslationTab() {
 
       {/* Model selector (OpenAI only) */}
       {provider === 'openai' && (
-        <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('translation.model')}
           </Label>
@@ -247,7 +245,7 @@ export function TranslationTab() {
 
       {/* Model input (MTran optional) */}
       {provider === 'mtran' && (
-        <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('translation.model')}
           </Label>
@@ -263,7 +261,7 @@ export function TranslationTab() {
 
       {/* Warning when no API key */}
       {hasKeyWarning && (
-        <div className="animate-fade-in flex items-center gap-2 rounded-lg bg-amber-500/10 px-4 py-3 text-sm text-amber-600 ring-1 ring-amber-500/20 dark:text-amber-400">
+        <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 px-4 py-3 text-sm text-amber-600 ring-1 ring-amber-500/20 dark:text-amber-400">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           {t('translation.noKeyWarning', {
             provider: provider === 'deepl' ? 'DeepL' : 'OpenAI',
@@ -276,13 +274,12 @@ export function TranslationTab() {
         <Button
           onClick={handleSave}
           disabled={isSaving || isLoading || !hasChanges}
-          className={hasChanges ? 'btn-glow' : ''}
         >
-          {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          {isSaving && <Loader2 className="mr-2 h-4 w-4" />}
           {t('common:actions.save')}
         </Button>
         {saveSuccess && (
-          <span className="animate-fade-in flex items-center gap-1.5 text-sm text-green-600">
+          <span className="flex items-center gap-1.5 text-sm text-green-600">
             <CheckCircle className="h-4 w-4" />
             {t('translation.settingsSaved')}
           </span>

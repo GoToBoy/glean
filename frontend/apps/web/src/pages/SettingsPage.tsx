@@ -123,9 +123,9 @@ export default function SettingsPage() {
     const contactInfo = user?.email || user?.phone || t('profile.notSet')
 
     return (
-      <div className="stagger-children space-y-5">
+      <div className="space-y-5">
         {/* Name */}
-        <div className="animate-fade-in">
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('profile.name')}
           </Label>
@@ -138,7 +138,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Contact Info (Email or Phone) */}
-        <div className="animate-fade-in" style={{ animationDelay: '50ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {user?.email ? t('profile.email') : t('profile.phone')}
           </Label>
@@ -151,7 +151,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Account Status */}
-        <div className="animate-fade-in" style={{ animationDelay: '100ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('profile.accountStatus')}
           </Label>
@@ -184,7 +184,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Language */}
-        <div className="animate-fade-in" style={{ animationDelay: '150ms' }}>
+        <div>
           <Label className="text-muted-foreground mb-2 block text-sm font-medium">
             {t('profile.language')}
           </Label>
@@ -211,28 +211,25 @@ export default function SettingsPage() {
   }
 
   const ReadLaterContent = () => (
-    <div className="stagger-children space-y-6">
-      <div className="animate-fade-in">
+    <div className="space-y-6">
+      <div>
         <Label className="text-muted-foreground mb-2 block text-sm font-medium">
           {t('readLater.autoCleanup')}
         </Label>
         <p className="text-muted-foreground/80 mb-4 text-sm">{t('readLater.autoCleanupDesc')}</p>
         <div className="flex flex-wrap gap-2">
-          {READ_LATER_OPTIONS.map((option, index) => (
+          {READ_LATER_OPTIONS.map((option) => (
             <Button
               key={option.value}
               variant={currentReadLaterDays === option.value ? 'default' : 'outline'}
               size="sm"
               onClick={() => handleReadLaterDaysChange(option.value)}
               disabled={isSaving || isLoading}
-              className={`min-w-[100px] transition-all ${
-                currentReadLaterDays === option.value ? 'btn-glow' : ''
-              }`}
-              style={{ animationDelay: `${index * 30}ms` }}
+              className="min-w-[100px]"
             >
               {isSaving && currentReadLaterDays !== option.value ? null : currentReadLaterDays ===
                   option.value && isSaving ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4" />
               ) : null}
               {option.label}
             </Button>
@@ -242,8 +239,7 @@ export default function SettingsPage() {
 
       {/* Show remaining time toggle */}
       <div
-        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in rounded-xl border bg-gradient-to-br p-5 ring-1"
-        style={{ animationDelay: '100ms' }}
+        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 rounded-xl border bg-gradient-to-br p-5 ring-1"
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex flex-1 items-center gap-3">
@@ -268,7 +264,7 @@ export default function SettingsPage() {
       </div>
 
       {saveSuccess && (
-        <div className="animate-fade-in flex items-center gap-2 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-600 ring-1 ring-green-500/20">
+        <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-600 ring-1 ring-green-500/20">
           <CheckCircle className="h-4 w-4" />
           {t('readLater.settingsSaved')}
         </div>
@@ -322,17 +318,16 @@ export default function SettingsPage() {
           <Label className="text-muted-foreground mb-4 block text-sm font-medium">
             {t('appearance.chooseTheme')}
           </Label>
-          <div className="stagger-children grid w-full grid-cols-3 gap-2 md:gap-6">
-            {themeOptions.map(({ value, icon: Icon, label, description, preview }, index) => (
+          <div className="grid w-full grid-cols-3 gap-2 md:gap-6">
+            {themeOptions.map(({ value, icon: Icon, label, description, preview }) => (
               <button
                 key={value}
                 onClick={() => setTheme(value)}
-                className={`group animate-fade-in relative flex flex-col items-center gap-2 rounded-xl border p-2 text-center transition-all duration-200 md:gap-4 md:rounded-2xl md:p-6 ${
+                className={`group relative flex flex-col items-center gap-2 rounded-xl border p-2 text-center md:gap-4 md:rounded-2xl md:p-6 ${
                   theme === value
                     ? 'border-primary/50 from-primary/10 to-primary/5 ring-primary/30 bg-gradient-to-br shadow-lg ring-2 md:scale-105'
                     : 'border-border/50 from-muted/30 to-muted/10 hover:border-primary/30 bg-gradient-to-br hover:shadow-lg md:hover:scale-105'
                 }`}
-                style={{ animationDelay: `${index * 50}ms` }}
               >
                 {/* Selected indicator */}
                 {theme === value && (
@@ -523,15 +518,12 @@ export default function SettingsPage() {
               isLoading ||
               discoveryTavilyApiKey === currentDiscoveryTavilyApiKey
             }
-            className={
-              discoveryTavilyApiKey !== currentDiscoveryTavilyApiKey ? 'btn-glow' : ''
-            }
           >
-            {isSavingDiscoveryKey && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {isSavingDiscoveryKey && <Loader2 className="mr-2 h-4 w-4" />}
             {t('common:actions.save')}
           </Button>
           {discoveryKeySaved && (
-            <span className="animate-fade-in flex items-center gap-1.5 text-sm text-green-600">
+            <span className="flex items-center gap-1.5 text-sm text-green-600">
               <CheckCircle className="h-4 w-4" />
               {t('readerMode.discoveryApiKeySaved')}
             </span>
@@ -541,8 +533,7 @@ export default function SettingsPage() {
     </div>
   )
 
-  const settingsRootClass =
-    'h-full [&_.animate-fade-in]:!animate-none [&_.stagger-children>*]:!animate-none [&_.animate-progress-indeterminate]:!animate-none [&_*]:!transition-none'
+  const settingsRootClass = 'h-full'
   const settingsFrameClass =
     'min-h-0 flex-1 overflow-hidden border bg-card/50 shadow-xl backdrop-blur-sm'
   const tabsRailClass =

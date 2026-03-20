@@ -121,11 +121,11 @@ export function APITokensTab() {
   const tokens = tokensData?.tokens || []
 
   return (
-    <div className="stagger-children space-y-6">
+    <div className="space-y-6">
       {/* Create Token Button */}
-      <div className="animate-fade-in flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <p className="text-muted-foreground text-sm">{t('apiTokens.description')}</p>
-        <Button onClick={() => setShowCreateDialog(true)} className="btn-glow">
+        <Button onClick={() => setShowCreateDialog(true)}>
           <Plus className="mr-2 h-4 w-4" />
           {t('apiTokens.createToken')}
         </Button>
@@ -133,7 +133,7 @@ export function APITokensTab() {
 
       {/* Error State */}
       {error && (
-        <div className="animate-fade-in flex items-center gap-2 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500 ring-1 ring-red-500/20">
+        <div className="flex items-center gap-2 rounded-lg bg-red-500/10 px-4 py-3 text-sm text-red-500 ring-1 ring-red-500/20">
           <AlertCircle className="h-4 w-4" />
           {t('apiTokens.loadError')}
         </div>
@@ -152,19 +152,15 @@ export function APITokensTab() {
       {!isLoading && !error && (
         <div className="space-y-3">
           {tokens.length === 0 ? (
-            <div
-              className="animate-fade-in flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 py-12"
-              style={{ animationDelay: '50ms' }}
-            >
+            <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-border/50 py-12">
               <Key className="text-muted-foreground mb-3 h-10 w-10" />
               <p className="text-muted-foreground text-sm">{t('apiTokens.noTokens')}</p>
             </div>
           ) : (
-            tokens.map((token, index) => (
+            tokens.map((token) => (
               <div
                 key={token.id}
-                className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 animate-fade-in flex items-center justify-between rounded-xl bg-gradient-to-br p-4 ring-1 transition-all"
-                style={{ animationDelay: `${index * 50}ms` }}
+                className="from-muted/50 to-muted/30 ring-border/50 hover:ring-primary/20 flex items-center justify-between rounded-xl bg-gradient-to-br p-4 ring-1 transition-all"
               >
                 <div className="flex items-center gap-3">
                   <div className="bg-primary/10 flex h-10 w-10 items-center justify-center rounded-lg">
@@ -212,8 +208,7 @@ export function APITokensTab() {
 
       {/* MCP Usage Guide */}
       <div
-        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 animate-fade-in space-y-4 rounded-xl border bg-gradient-to-br p-5 ring-1"
-        style={{ animationDelay: '150ms' }}
+        className="border-border/50 from-muted/30 to-muted/10 ring-border/20 space-y-4 rounded-xl border bg-gradient-to-br p-5 ring-1"
       >
         <div className="flex items-center gap-2">
           <ExternalLink className="text-primary h-5 w-5" />
@@ -340,7 +335,7 @@ export function APITokensTab() {
                   disabled={!newTokenName.trim() || createMutation.isPending}
                 >
                   {createMutation.isPending && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4" />
                   )}
                   {t('apiTokens.create')}
                 </Button>
@@ -369,7 +364,7 @@ export function APITokensTab() {
               disabled={revokeMutation.isPending}
             >
               {revokeMutation.isPending && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className="mr-2 h-4 w-4" />
               )}
               {t('apiTokens.revoke')}
             </Button>

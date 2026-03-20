@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, type ChangeEvent, type Dispatch, type SetStateAction } from 'react'
+import { useState, useRef, useEffect, useMemo, type ChangeEvent } from 'react'
 import {
   useAllSubscriptions,
   useDeleteSubscription,
@@ -17,6 +17,15 @@ import { useTranslation } from '@glean/i18n'
 import {
   Button,
   Checkbox,
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
   Skeleton,
   Menu,
   MenuTrigger,
@@ -40,7 +49,6 @@ import {
   Folder,
   FolderOpen,
   Eye,
-  EyeOff,
   CheckSquare,
   Square,
   ChevronRight,
@@ -117,7 +125,6 @@ export function SubscriptionsTab() {
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const [isBatchMode, setIsBatchMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [previewSubscriptionId, setPreviewSubscriptionId] = useState<string | null>(null)
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -169,11 +176,7 @@ export function SubscriptionsTab() {
       const next = new Set(Array.from(prev).filter((id) => visibleIds.has(id)))
       return next.size === prev.size ? prev : next
     })
-
-    if (previewSubscriptionId && !visibleIds.has(previewSubscriptionId)) {
-      setPreviewSubscriptionId(null)
-    }
-  }, [previewSubscriptionId, visibleIds])
+  }, [visibleIds])
 
   useEffect(() => {
     if (!normalizedQuery || feedFolders.length === 0) return
@@ -236,9 +239,6 @@ export function SubscriptionsTab() {
       next.delete(id)
       return next
     })
-    if (previewSubscriptionId === id) {
-      setPreviewSubscriptionId(null)
-    }
   }
 
   const handleBatchDelete = async () => {
@@ -247,7 +247,6 @@ export function SubscriptionsTab() {
 
     await batchDeleteMutation.mutateAsync({ subscription_ids: subscriptionIds })
     setSelectedIds(new Set())
-    setPreviewSubscriptionId(null)
   }
 
   const toggleSelection = (id: string) => {
@@ -486,7 +485,7 @@ export function SubscriptionsTab() {
             className="gap-1.5"
           >
             {refreshAllMutation.isPending ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0" />
             ) : (
               <RefreshCw className="h-4 w-4 shrink-0" />
             )}
@@ -542,7 +541,7 @@ export function SubscriptionsTab() {
             className="gap-1.5"
           >
             {batchDeleteMutation.isPending ? (
-              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0" />
             ) : (
               <Trash2 className="h-4 w-4 shrink-0" />
             )}
@@ -553,10 +552,10 @@ export function SubscriptionsTab() {
 
       {importMutation.isPending && (
         <div className="flex items-center gap-3 border bg-muted/30 px-4 py-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+          <Loader2 className="h-4 w-4 shrink-0" />
           <span className="flex-1">{t('manageFeeds.importing')}</span>
           <div className="h-1 w-32 overflow-hidden rounded-full bg-muted">
-            <div className="h-full w-1/4 animate-progress-indeterminate rounded-full bg-primary" />
+            <div className="h-full w-1/4 rounded-full bg-primary" />
           </div>
         </div>
       )}
@@ -626,8 +625,6 @@ export function SubscriptionsTab() {
                     isBatchMode={isBatchMode}
                     onToggleFolderSelection={toggleFolderSelection}
                     onToggleSelection={toggleSelection}
-                    previewSubscriptionId={previewSubscriptionId}
-                    onTogglePreview={setPreviewSubscriptionId}
                     onDelete={handleDelete}
                     isDeletePending={deleteMutation.isPending}
                     onRefresh={handleRefresh}
@@ -651,8 +648,6 @@ export function SubscriptionsTab() {
                         isBatchMode={isBatchMode}
                         isSelected={selectedIds.has(subscription.id)}
                         onToggleSelection={toggleSelection}
-                        isPreviewOpen={previewSubscriptionId === subscription.id}
-                        onTogglePreview={setPreviewSubscriptionId}
                         onDelete={handleDelete}
                         isDeletePending={deleteMutation.isPending}
                         onRefresh={handleRefresh}
@@ -687,8 +682,6 @@ interface FolderBranchProps {
   isBatchMode: boolean
   onToggleFolderSelection: (folderId: string) => void
   onToggleSelection: (id: string) => void
-  previewSubscriptionId: string | null
-  onTogglePreview: Dispatch<SetStateAction<string | null>>
   onDelete: (id: string) => Promise<void>
   isDeletePending: boolean
   onRefresh: (id: string) => Promise<void>
@@ -707,8 +700,6 @@ function FolderBranch({
   isBatchMode,
   onToggleFolderSelection,
   onToggleSelection,
-  previewSubscriptionId,
-  onTogglePreview,
   onDelete,
   isDeletePending,
   onRefresh,
@@ -772,8 +763,6 @@ function FolderBranch({
               isBatchMode={isBatchMode}
               onToggleFolderSelection={onToggleFolderSelection}
               onToggleSelection={onToggleSelection}
-              previewSubscriptionId={previewSubscriptionId}
-              onTogglePreview={onTogglePreview}
               onDelete={onDelete}
               isDeletePending={isDeletePending}
               onRefresh={onRefresh}
@@ -790,8 +779,6 @@ function FolderBranch({
               isBatchMode={isBatchMode}
               isSelected={selectedIds.has(subscription.id)}
               onToggleSelection={onToggleSelection}
-              isPreviewOpen={previewSubscriptionId === subscription.id}
-              onTogglePreview={onTogglePreview}
               onDelete={onDelete}
               isDeletePending={isDeletePending}
               onRefresh={onRefresh}
@@ -820,8 +807,6 @@ interface SubscriptionRowProps {
   isBatchMode: boolean
   isSelected: boolean
   onToggleSelection: (id: string) => void
-  isPreviewOpen: boolean
-  onTogglePreview: Dispatch<SetStateAction<string | null>>
   onDelete: (id: string) => Promise<void>
   isDeletePending: boolean
   onRefresh: (id: string) => Promise<void>
@@ -835,8 +820,6 @@ function SubscriptionRow({
   isBatchMode,
   isSelected,
   onToggleSelection,
-  isPreviewOpen,
-  onTogglePreview,
   onDelete,
   isDeletePending,
   onRefresh,
@@ -857,11 +840,10 @@ function SubscriptionRow({
     refreshState?.lastFetchSuccessAt || subscription.feed.last_fetch_success_at
 
   return (
-    <div>
-      <div
-        className={cn(TREE_ROW_CLASS, 'hover:bg-muted/40')}
-        style={{ paddingLeft: `${28 + depth * 16}px` }}
-      >
+    <div
+      className={cn(TREE_ROW_CLASS, 'hover:bg-muted/40')}
+      style={{ paddingLeft: `${28 + depth * 16}px` }}
+    >
         {isBatchMode && (
           <Checkbox
             checked={isSelected}
@@ -903,19 +885,23 @@ function SubscriptionRow({
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={() =>
-              onTogglePreview((prev) => (prev === subscription.id ? null : subscription.id))
-            }
-            title={
-              isPreviewOpen ? t('manageFeeds.hideRecentArticles') : t('manageFeeds.previewRecentArticles')
-            }
-            className={ICON_BUTTON_CLASS}
-          >
-            {isPreviewOpen ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
+          <HoverCard>
+            <HoverCardTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  title={t('manageFeeds.previewRecentArticles')}
+                  className={ICON_BUTTON_CLASS}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              }
+            />
+            <HoverCardContent align="end" sideOffset={8} className="w-[420px] p-0">
+              <RecentEntriesPreview feedId={subscription.feed_id} feedUrl={subscription.feed.url} />
+            </HoverCardContent>
+          </HoverCard>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -936,7 +922,7 @@ function SubscriptionRow({
             <RefreshCw
               className={cn(
                 'h-4 w-4',
-                (refreshingId === subscription.id || isRefreshingRow) && 'animate-spin'
+                (refreshingId === subscription.id || isRefreshingRow) && 'opacity-70'
               )}
             />
           </Button>
@@ -965,13 +951,6 @@ function SubscriptionRow({
             </MenuPopup>
           </Menu>
         </div>
-      </div>
-
-      {isPreviewOpen && (
-        <div style={{ paddingLeft: `${28 + depth * 16}px` }}>
-          <RecentEntriesPreview feedId={subscription.feed_id} feedUrl={subscription.feed.url} />
-        </div>
-      )}
     </div>
   )
 }
@@ -1037,7 +1016,7 @@ function RefreshMeta({
 
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
         {isPendingRow && (
-          <div className="h-full w-1/4 animate-progress-indeterminate rounded-full bg-primary" />
+          <div className="h-full w-1/4 rounded-full bg-primary" />
         )}
         {isDone && !isError && <div className="h-full w-full rounded-full bg-primary" />}
         {isError && <div className="h-full w-full rounded-full bg-destructive" />}
@@ -1065,6 +1044,7 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
 
   const items = useMemo(() => data?.items ?? [], [data?.items])
   const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
+  const [previewEntry, setPreviewEntry] = useState<EntryWithState | null>(null)
   const listTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
   const preferredTargetLanguage = user?.settings?.translation_target_language ?? 'zh-CN'
 
@@ -1115,8 +1095,8 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
   }, [items, listTranslationAutoEnabled, preferredTargetLanguage])
 
   return (
-    <div className="mt-2 border border-dashed bg-muted/20 px-4 py-3">
-      <div className="mb-3 flex items-center justify-between gap-3">
+    <div className="max-h-[420px] overflow-y-auto rounded-lg border bg-popover px-4 py-3">
+      <div className="mb-3 flex items-center justify-between gap-3 border-b pb-3">
         <div>
           <p className="text-sm font-medium">{t('manageFeeds.recentArticlesTitle')}</p>
           <p className="text-xs text-muted-foreground">{t('manageFeeds.recentArticlesDescription')}</p>
@@ -1148,17 +1128,19 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
       {!isLoading && !error && items.length > 0 && (
         <div className="space-y-2">
           {items.map((entry: EntryWithState) => (
-            <a
+            <div
               key={entry.id}
-              href={entry.url || feedUrl}
-              target="_blank"
-              rel="noopener noreferrer"
               className="flex items-start justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-background/80"
             >
               <div className="min-w-0 flex-1">
                 <p className="line-clamp-2 text-sm font-medium">
                   {translatedTitles[entry.id] || entry.title}
                 </p>
+                {getEntryPreviewText(entry.summary) && (
+                  <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                    {getEntryPreviewText(entry.summary)}
+                  </p>
+                )}
                 <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                   <span>{entry.author || t('manageFeeds.unknownAuthor')}</span>
                   <span>•</span>
@@ -1171,15 +1153,77 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
                   )}
                 </div>
               </div>
-              <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            </a>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setPreviewEntry(entry)}
+                  title={t('manageFeeds.previewArticleDetails')}
+                  className={ICON_BUTTON_CLASS}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => window.open(entry.url || feedUrl, '_blank')}
+                  title={t('manageFeeds.openArticle')}
+                  className={ICON_BUTTON_CLASS}
+                >
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       )}
+
+      <Dialog open={!!previewEntry} onOpenChange={(open) => !open && setPreviewEntry(null)}>
+        <DialogPopup className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{previewEntry ? translatedTitles[previewEntry.id] || previewEntry.title : ''}</DialogTitle>
+            <DialogDescription>
+              {previewEntry
+                ? `${previewEntry.author || t('manageFeeds.unknownAuthor')} • ${formatEntryDate(
+                    previewEntry.published_at || previewEntry.created_at
+                  )}`
+                : ''}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogPanel>
+            <div className="space-y-4">
+              <div className="max-h-[52vh] overflow-y-auto rounded-lg border bg-muted/20 p-4">
+                <p className="text-sm leading-7 text-foreground whitespace-pre-wrap">
+                  {previewEntry
+                    ? getEntryPreviewText(previewEntry.summary, previewEntry.content) ||
+                      t('manageFeeds.articlePreviewEmpty')
+                    : ''}
+                </p>
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  onClick={() => {
+                    if (previewEntry) window.open(previewEntry.url || feedUrl, '_blank')
+                  }}
+                >
+                  <ExternalLink className="mr-2 h-4 w-4" />
+                  {t('manageFeeds.openArticle')}
+                </Button>
+              </div>
+            </div>
+          </DialogPanel>
+        </DialogPopup>
+      </Dialog>
     </div>
   )
 }
 
 function formatEntryDate(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function getEntryPreviewText(summary: string | null, content?: string | null) {
+  const source = summary || content || ''
+  if (!source) return ''
+  return source.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
 }

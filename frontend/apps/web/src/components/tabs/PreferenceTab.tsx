@@ -97,9 +97,9 @@ export function PreferenceTab() {
   }
 
   return (
-    <div className="stagger-children space-y-6">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="animate-fade-in flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-foreground text-lg font-medium">{t('preferences.title')}</h3>
           <p className="text-muted-foreground text-sm">{t('preferences.desc')}</p>
@@ -113,7 +113,7 @@ export function PreferenceTab() {
         >
           {rebuildMutation.isPending ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" />
+              <Loader2 className="h-4 w-4" />
               <span className="hidden sm:inline">{t('preferences.rebuilding')}</span>
             </>
           ) : (
@@ -126,7 +126,7 @@ export function PreferenceTab() {
       </div>
 
       {/* Show Preference Scores Toggle */}
-      <div className="animate-fade-in border-border bg-card flex items-center justify-between rounded-lg border p-4">
+      <div className="border-border bg-card flex items-center justify-between rounded-lg border p-4">
         <div className="flex items-center gap-3">
           <Eye className="text-muted-foreground h-5 w-5" />
           <div>
@@ -143,7 +143,7 @@ export function PreferenceTab() {
 
       {/* Stats Grid */}
       {isLoading ? (
-        <div className="animate-fade-in grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="border-border rounded-lg border p-4">
               <Skeleton className="mb-2 h-8 w-8" />
@@ -153,14 +153,14 @@ export function PreferenceTab() {
           ))}
         </div>
       ) : error ? (
-        <Alert variant="error" className="animate-fade-in">
+        <Alert variant="error">
           <AlertCircle />
           <AlertTitle>{t('preferences.failedToLoad')}</AlertTitle>
           <AlertDescription>{(error as Error).message}</AlertDescription>
         </Alert>
       ) : stats ? (
         <>
-          <div className="animate-fade-in grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             {/* Total Interactions */}
             <div className="border-border bg-card rounded-lg border p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -233,7 +233,7 @@ export function PreferenceTab() {
           </div>
 
           {/* Recent Activity */}
-          <div className="animate-fade-in border-border bg-card rounded-lg border">
+          <div className="border-border bg-card rounded-lg border">
             <div className="border-border border-b p-4">
               <h4 className="text-foreground flex items-center gap-2 font-medium">
                 <TrendingUp className="text-primary h-4 w-4" />
@@ -273,7 +273,7 @@ export function PreferenceTab() {
 
           {/* Top Sources */}
           {stats.top_sources.length > 0 && (
-            <div className="animate-fade-in border-border bg-card rounded-lg border">
+            <div className="border-border bg-card rounded-lg border">
               <div className="border-border border-b p-4">
                 <h4 className="text-foreground flex items-center gap-2 font-medium">
                   <Target className="text-primary h-4 w-4" />
@@ -309,7 +309,7 @@ export function PreferenceTab() {
 
           {/* Top Authors */}
           {stats.top_authors.length > 0 && (
-            <div className="animate-fade-in border-border bg-card rounded-lg border">
+            <div className="border-border bg-card rounded-lg border">
               <div className="border-border border-b p-4">
                 <h4 className="text-foreground flex items-center gap-2 font-medium">
                   <Heart className="text-primary h-4 w-4" />
@@ -363,7 +363,7 @@ export function PreferenceTab() {
             >
               {rebuildMutation.isPending ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4" />
                   {t('preferences.rebuilding')}
                 </>
               ) : (
