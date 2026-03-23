@@ -239,7 +239,30 @@
     "listAutoEnable": "Enable list translation by default",
     "listAutoEnableDesc": "Automatically turn on viewport-based translation in the reader list",
     "listEnglishOnly": "Translate English text only",
-    "listEnglishOnlyDesc": "Only translate list items that are primarily English"
+    "listEnglishOnlyDesc": "Only translate list items that are primarily English",
+    "obsidian": {
+      "title": "Obsidian Export",
+      "desc": "Connect a dedicated Obsidian folder. Archive actions will save Markdown directly into it.",
+      "unsupported": "This browser does not support direct folder access. Use a Chromium-based browser for Obsidian export.",
+      "currentFolder": "Connected folder: {{name}}",
+      "currentFolderDesc": "Archive actions will write directly into this folder after translation is complete.",
+      "notConnected": "No Obsidian folder connected yet",
+      "connectHint": "Choose the folder inside your vault where archived notes should be written.",
+      "connect": "Choose Folder",
+      "connecting": "Connecting...",
+      "reconnect": "Reconnect Folder",
+      "disconnect": "Disconnect",
+      "test": "Test Access",
+      "testing": "Testing...",
+      "connected": "Obsidian folder connected",
+      "connectedDesc": "Archive exports will write into {{name}}.",
+      "connectFailed": "Failed to connect Obsidian folder",
+      "permissionDenied": "Folder permission was denied.",
+      "notConnectedError": "No folder is connected yet.",
+      "testSuccess": "Folder access confirmed",
+      "testSuccessDesc": "Glean can write archive notes to the selected folder.",
+      "testFailed": "Folder access failed"
+    }
   },
   "apiTokens": {
     "title": "API Tokens",

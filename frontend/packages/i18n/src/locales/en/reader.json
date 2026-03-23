@@ -12,6 +12,8 @@
     "savedForLater": "Saved for Later",
     "archive": "Archive",
     "archived": "Archived",
+    "archiving": "Archiving...",
+    "completingTranslation": "Completing translation...",
     "openOriginal": "Original",
     "open": "Open",
     "backShort": "Back",
@@ -28,7 +30,14 @@
     "like": "Like",
     "liked": "Liked",
     "dislike": "Dislike",
-    "disliked": "Disliked"
+    "disliked": "Disliked",
+    "archiveFailed": "Archive failed",
+    "obsidianUnsupported": "Obsidian export requires a Chromium-based browser.",
+    "obsidianNotConfigured": "Connect an Obsidian export folder in Settings first.",
+    "obsidianPermissionDenied": "Obsidian folder permission was denied.",
+    "translationIncomplete": "The translation could not be completed.",
+    "obsidianExportSuccess": "Archived to Obsidian",
+    "obsidianExportSuccessDesc": "Saved as {{fileName}}"
   },
   "entries": {
     "loadError": "Failed to load entries",

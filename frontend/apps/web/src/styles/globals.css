@@ -1720,6 +1720,39 @@ body {
   animation: archiveDrop 350ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
+.archive-action-btn__icon-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.archive-action-btn__pulse {
+  position: absolute;
+  inset: -0.35rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-primary) 22%, transparent);
+  opacity: 0;
+  transform: scale(0.92);
+}
+
+.action-btn-archive-breathing .archive-action-btn__pulse {
+  animation: archiveBreathing 1.6s ease-in-out infinite;
+}
+
+@keyframes archiveBreathing {
+  0%,
+  100% {
+    opacity: 0.12;
+    transform: scale(0.94);
+  }
+
+  50% {
+    opacity: 0.42;
+    transform: scale(1.18);
+  }
+}
+
 /* External link fly-out animation */
 @keyframes linkFlyOut {
   0% {

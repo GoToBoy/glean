@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { entryService } from '@glean/api-client'
+import { TranslationSnapshot, extractArticleTextBlocks } from '../lib/obsidianExport'
 import { classifyPreElement } from '../lib/preTranslation'
 import {
   hasSkipAncestor,
@@ -38,6 +39,8 @@ interface UseViewportTranslationReturn {
   deactivate: () => void
   toggle: () => void
   retry: () => void
+  ensureCompleteTranslation: () => Promise<TranslationSnapshot | null>
+  getTranslationSnapshot: () => TranslationSnapshot | null
 }
 
 /**
@@ -274,6 +277,51 @@ export function useViewportTranslation({
     return applied
   }, [contentRef, translatePreUnknown])
 
+  const getTranslationSnapshot = useCallback((): TranslationSnapshot | null => {
+    if (!contentRef.current) return null
+
+    const originalBlocks = extractArticleTextBlocks(contentRef.current, translatePreUnknown)
+    if (originalBlocks.length === 0) {
+      return {
+        original: '',
+        translated: '',
+        totalSegments: 0,
+        translatedSegments: 0,
+        isComplete: true,
+      }
+    }
+
+    const translatedBlocks: string[] = []
+    let totalSegments = 0
+    let translatedSegments = 0
+
+    for (const block of originalBlocks) {
+      const segments = block
+        .split('\n')
+        .map((segment) => segment.trim())
+        .filter((segment) => segment.length > 0)
+      totalSegments += segments.length
+
+      const translatedLines = segments.map((segment) => {
+        const translated = cacheRef.current.get(segment)?.trim() ?? ''
+        if (translated) {
+          translatedSegments += 1
+        }
+        return translated
+      })
+
+      translatedBlocks.push(translatedLines.filter((line) => line.length > 0).join('\n'))
+    }
+
+    return {
+      original: originalBlocks.join('\n\n'),
+      translated: translatedBlocks.filter((block) => block.length > 0).join('\n\n'),
+      totalSegments,
+      translatedSegments,
+      isComplete: totalSegments > 0 && translatedSegments === totalSegments,
+    }
+  }, [contentRef, translatePreUnknown])
+
   /**
    * Restore all translated blocks to their original HTML.
    */
@@ -357,6 +405,59 @@ export function useViewportTranslation({
       activate()
     }
   }, [activate, deactivate])
+
+  const ensureCompleteTranslation = useCallback(async (): Promise<TranslationSnapshot | null> => {
+    if (!targetLanguage || !contentRef.current) return null
+
+    if (!isActiveRef.current) {
+      activate()
+    }
+
+    const blocks = collectTranslatableBlocks(contentRef.current, translatePreUnknown, classifyPreElement)
+    const allSegments = blocks.flatMap((block) => splitBlockByBreaks(block))
+    const missingSegments = [...new Set(allSegments.filter((segment) => !cacheRef.current.has(segment)))]
+
+    try {
+      setError(null)
+      const batchSize = 24
+      for (let index = 0; index < missingSegments.length; index += batchSize) {
+        const batch = missingSegments.slice(index, index + batchSize)
+        if (batch.length === 0) continue
+
+        const response = await entryService.translateTexts(batch, targetLanguage, 'auto', entryId)
+        batch.forEach((text, batchIndex) => {
+          const translated = response.translations[batchIndex]?.trim()
+          if (translated) {
+            cacheRef.current.set(text, translated)
+          }
+        })
+        SESSION_TRANSLATION_CACHE.set(sessionCacheKey, new Map(cacheRef.current))
+      }
+
+      if (blocks.length > 0) {
+        await translateBlocks(blocks)
+      }
+
+      const snapshot = getTranslationSnapshot()
+      if (snapshot && !snapshot.isComplete) {
+        throw new Error('Translation is not complete yet')
+      }
+      return snapshot
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Translation failed'
+      setError(message)
+      throw err
+    }
+  }, [
+    activate,
+    contentRef,
+    entryId,
+    getTranslationSnapshot,
+    sessionCacheKey,
+    targetLanguage,
+    translateBlocks,
+    translatePreUnknown,
+  ])
 
   // Set up observer when activated.
   // If persisted cache exists, apply cached translations first to avoid flash.
@@ -463,5 +564,7 @@ export function useViewportTranslation({
     deactivate,
     toggle,
     retry,
+    ensureCompleteTranslation,
+    getTranslationSnapshot,
   }
 }

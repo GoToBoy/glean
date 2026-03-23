@@ -239,7 +239,30 @@
     "listAutoEnable": "默认开启列表翻译",
     "listAutoEnableDesc": "在阅读列表中自动开启基于视窗的翻译",
     "listEnglishOnly": "仅翻译英文内容",
-    "listEnglishOnlyDesc": "仅翻译以英文为主的列表条目"
+    "listEnglishOnlyDesc": "仅翻译以英文为主的列表条目",
+    "obsidian": {
+      "title": "Obsidian 导出",
+      "desc": "连接一个专用的 Obsidian 文件夹。归档时会把 Markdown 直接写进去。",
+      "unsupported": "当前浏览器不支持直接目录访问。Obsidian 导出请使用 Chromium 内核浏览器。",
+      "currentFolder": "已连接文件夹：{{name}}",
+      "currentFolderDesc": "归档动作会在补齐翻译后直接写入这个文件夹。",
+      "notConnected": "尚未连接 Obsidian 文件夹",
+      "connectHint": "请选择 vault 中用于保存归档笔记的目录。",
+      "connect": "选择文件夹",
+      "connecting": "连接中...",
+      "reconnect": "重新连接文件夹",
+      "disconnect": "断开连接",
+      "test": "测试访问",
+      "testing": "测试中...",
+      "connected": "Obsidian 文件夹已连接",
+      "connectedDesc": "后续归档会直接写入 {{name}}。",
+      "connectFailed": "连接 Obsidian 文件夹失败",
+      "permissionDenied": "目录权限被拒绝。",
+      "notConnectedError": "尚未连接任何目录。",
+      "testSuccess": "目录访问正常",
+      "testSuccessDesc": "Glean 可以把归档笔记写入所选目录。",
+      "testFailed": "目录访问失败"
+    }
   },
   "apiTokens": {
     "title": "API 令牌",

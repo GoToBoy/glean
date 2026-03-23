@@ -40,13 +40,23 @@ import {
   SheetPanel,
   Switch,
 } from '@glean/ui'
+import { toastManager } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
 import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
 import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
 import { useAuthStore } from '../stores/authStore'
+import { useObsidianExportStore } from '../stores/obsidianExportStore'
 import type { TranslationTargetLanguage } from '@glean/types'
+import {
+  buildObsidianMarkdown,
+  ensureDirectoryPermission,
+  extractArticleTextBlocks,
+  isObsidianExportSupported,
+  loadObsidianDirectoryHandle,
+  writeMarkdownToObsidianDirectory,
+} from '../lib/obsidianExport'
 
 /**
  * Hook to track animation state for action buttons
@@ -182,6 +192,7 @@ export function ArticleReader({
 }: ArticleReaderProps) {
   const { t } = useTranslation('reader')
   const { user } = useAuthStore()
+  const { enabled: obsidianExportEnabled } = useObsidianExportStore()
   const queryClient = useQueryClient()
 
   const handleOpenMenu = () => {
@@ -194,7 +205,9 @@ export function ArticleReader({
   const displayContent = entry.content || entry.summary || undefined
 
   const contentRef = useContentRenderer(displayContent)
-  const [isBookmarking, setIsBookmarking] = useState(false)
+  const [archiveFlowState, setArchiveFlowState] = useState<
+    'idle' | 'completing-translation' | 'archiving'
+  >('idle')
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -221,6 +234,7 @@ export function ArticleReader({
     error: translationError,
     toggle: toggleTranslation,
     activate: activateTranslation,
+    ensureCompleteTranslation,
   } = useViewportTranslation({
     contentRef,
     scrollContainerRef,
@@ -337,24 +351,81 @@ export function ArticleReader({
   }
 
   const handleToggleBookmark = async () => {
-    setIsBookmarking(true)
     try {
       if (entry.is_bookmarked && entry.bookmark_id) {
+        setArchiveFlowState('archiving')
         // Remove bookmark
         await bookmarkService.deleteBookmark(entry.bookmark_id)
       } else {
+        let originalText = displayContent
+        let translatedText: string | null = null
+
+        if (obsidianExportEnabled) {
+          if (!isObsidianExportSupported()) {
+            throw new Error(t('actions.obsidianUnsupported'))
+          }
+
+          const directoryHandle = await loadObsidianDirectoryHandle()
+          if (!directoryHandle) {
+            throw new Error(t('actions.obsidianNotConfigured'))
+          }
+
+          const granted = await ensureDirectoryPermission(directoryHandle, true)
+          if (!granted) {
+            throw new Error(t('actions.obsidianPermissionDenied'))
+          }
+
+          if (showTranslation && targetLanguage) {
+            setArchiveFlowState('completing-translation')
+            const translationSnapshot = await ensureCompleteTranslation()
+            if (!translationSnapshot?.isComplete) {
+              throw new Error(t('actions.translationIncomplete'))
+            }
+            originalText = translationSnapshot.original
+            translatedText = translationSnapshot.translated
+          } else if (contentRef.current) {
+            originalText = extractArticleTextBlocks(contentRef.current, translatePreUnknown).join('\n\n')
+          }
+        }
+
+        setArchiveFlowState('archiving')
         // Create bookmark
         await bookmarkService.createBookmark({
           entry_id: entry.id,
         })
+
+        if (obsidianExportEnabled) {
+          const directoryHandle = await loadObsidianDirectoryHandle()
+          if (!directoryHandle) {
+            throw new Error(t('actions.obsidianNotConfigured'))
+          }
+          const markdown = buildObsidianMarkdown({
+            entry,
+            original: originalText || entry.summary || entry.title,
+            translated: translatedText,
+            targetLanguage,
+          })
+          const fileName = await writeMarkdownToObsidianDirectory(directoryHandle, entry, markdown)
+          toastManager.add({
+            title: t('actions.obsidianExportSuccess'),
+            description: t('actions.obsidianExportSuccessDesc', { fileName }),
+            type: 'success',
+          })
+        }
       }
       // Invalidate queries to refetch with updated is_bookmarked status
       await queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
       await queryClient.invalidateQueries({ queryKey: entryKeys.detail(entry.id) })
     } catch (err) {
       console.error('Failed to toggle bookmark:', err)
+      const message = err instanceof Error ? err.message : t('actions.archiveFailed')
+      toastManager.add({
+        title: t('actions.archiveFailed'),
+        description: message,
+        type: 'error',
+      })
     } finally {
-      setIsBookmarking(false)
+      setArchiveFlowState('idle')
     }
   }
 
@@ -385,6 +456,23 @@ export function ArticleReader({
   ]
     .filter(Boolean)
     .join(' ')
+  const isBookmarking = archiveFlowState !== 'idle'
+  const bookmarkButtonClassName = [
+    'action-btn',
+    bookmarkAnimation,
+    entry.is_bookmarked ? 'text-primary' : 'text-muted-foreground',
+    archiveFlowState === 'completing-translation' ? 'action-btn-archive-breathing' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+  const bookmarkLabel =
+    archiveFlowState === 'completing-translation'
+      ? t('actions.completingTranslation')
+      : archiveFlowState === 'archiving'
+        ? t('actions.archiving')
+        : entry.is_bookmarked
+          ? t('actions.archived')
+          : t('actions.archive')
 
   return (
     <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -536,14 +624,17 @@ export function ArticleReader({
               size="sm"
               onClick={handleToggleBookmark}
               disabled={isBookmarking}
-              className={`action-btn ${bookmarkAnimation} ${entry.is_bookmarked ? 'text-primary' : 'text-muted-foreground'}`}
+              className={bookmarkButtonClassName}
             >
-              {isBookmarking ? (
+              {archiveFlowState === 'archiving' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Archive className="h-4 w-4" />
+                <span className="archive-action-btn__icon-wrap">
+                  <span className="archive-action-btn__pulse" aria-hidden="true" />
+                  <Archive className="h-4 w-4" />
+                </span>
               )}
-              <span>{entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}</span>
+              <span>{bookmarkLabel}</span>
             </Button>
           </div>
         </div>
@@ -811,14 +902,15 @@ export function ArticleReader({
                   } disabled:opacity-50`}
                 >
                   <span className="flex items-center gap-2">
-                    {isBookmarking ? (
+                    {archiveFlowState === 'archiving' ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Archive className="h-4 w-4" />
+                      <span className="archive-action-btn__icon-wrap">
+                        <span className="archive-action-btn__pulse" aria-hidden="true" />
+                        <Archive className="h-4 w-4" />
+                      </span>
                     )}
-                    <span>
-                      {entry.is_bookmarked ? t('actions.archived') : t('actions.archive')}
-                    </span>
+                    <span>{bookmarkLabel}</span>
                   </span>
                 </button>
               </div>
