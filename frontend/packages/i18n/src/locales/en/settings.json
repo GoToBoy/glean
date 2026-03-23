@@ -243,7 +243,9 @@
     "obsidian": {
       "title": "Obsidian Export",
       "desc": "Connect a dedicated Obsidian folder. Archive actions will save Markdown directly into it.",
-      "unsupported": "This browser does not support direct folder access. Use a Chromium-based browser for Obsidian export.",
+      "unsupported": "This browser does not support direct folder access. Glean will fall back to downloading Markdown files, and your browser download settings decide where they are saved.",
+      "downloadMode": "Download mode active",
+      "downloadModeDesc": "Archive actions will download a Markdown file instead of writing directly to a folder.",
       "currentFolder": "Connected folder: {{name}}",
       "currentFolderDesc": "Archive actions will write directly into this folder after translation is complete.",
       "notConnected": "No Obsidian folder connected yet",

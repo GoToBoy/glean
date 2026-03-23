@@ -37,7 +37,9 @@
     "obsidianPermissionDenied": "Obsidian folder permission was denied.",
     "translationIncomplete": "The translation could not be completed.",
     "obsidianExportSuccess": "Archived to Obsidian",
-    "obsidianExportSuccessDesc": "Saved as {{fileName}}"
+    "obsidianExportSuccessDesc": "Saved as {{fileName}}",
+    "obsidianDownloadSuccess": "Obsidian Markdown downloaded",
+    "obsidianDownloadSuccessDesc": "Downloaded as {{fileName}}"
   },
   "entries": {
     "loadError": "Failed to load entries",

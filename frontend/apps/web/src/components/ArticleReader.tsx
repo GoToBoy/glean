@@ -51,6 +51,7 @@ import { useObsidianExportStore } from '../stores/obsidianExportStore'
 import type { TranslationTargetLanguage } from '@glean/types'
 import {
   buildObsidianMarkdown,
+  downloadMarkdownFile,
   ensureDirectoryPermission,
   extractArticleTextBlocks,
   isObsidianExportSupported,
@@ -359,20 +360,19 @@ export function ArticleReader({
       } else {
         let originalText = displayContent
         let translatedText: string | null = null
+        const supportsDirectFolderAccess = isObsidianExportSupported()
 
         if (obsidianExportEnabled) {
-          if (!isObsidianExportSupported()) {
-            throw new Error(t('actions.obsidianUnsupported'))
-          }
+          if (supportsDirectFolderAccess) {
+            const directoryHandle = await loadObsidianDirectoryHandle()
+            if (!directoryHandle) {
+              throw new Error(t('actions.obsidianNotConfigured'))
+            }
 
-          const directoryHandle = await loadObsidianDirectoryHandle()
-          if (!directoryHandle) {
-            throw new Error(t('actions.obsidianNotConfigured'))
-          }
-
-          const granted = await ensureDirectoryPermission(directoryHandle, true)
-          if (!granted) {
-            throw new Error(t('actions.obsidianPermissionDenied'))
+            const granted = await ensureDirectoryPermission(directoryHandle, true)
+            if (!granted) {
+              throw new Error(t('actions.obsidianPermissionDenied'))
+            }
           }
 
           if (showTranslation && targetLanguage) {
@@ -395,20 +395,28 @@ export function ArticleReader({
         })
 
         if (obsidianExportEnabled) {
-          const directoryHandle = await loadObsidianDirectoryHandle()
-          if (!directoryHandle) {
-            throw new Error(t('actions.obsidianNotConfigured'))
-          }
           const markdown = buildObsidianMarkdown({
             entry,
             original: originalText || entry.summary || entry.title,
             translated: translatedText,
             targetLanguage,
           })
-          const fileName = await writeMarkdownToObsidianDirectory(directoryHandle, entry, markdown)
+          const fileName = supportsDirectFolderAccess
+            ? await (async () => {
+                const directoryHandle = await loadObsidianDirectoryHandle()
+                if (!directoryHandle) {
+                  throw new Error(t('actions.obsidianNotConfigured'))
+                }
+                return writeMarkdownToObsidianDirectory(directoryHandle, entry, markdown)
+              })()
+            : downloadMarkdownFile(entry, markdown)
           toastManager.add({
-            title: t('actions.obsidianExportSuccess'),
-            description: t('actions.obsidianExportSuccessDesc', { fileName }),
+            title: supportsDirectFolderAccess
+              ? t('actions.obsidianExportSuccess')
+              : t('actions.obsidianDownloadSuccess'),
+            description: supportsDirectFolderAccess
+              ? t('actions.obsidianExportSuccessDesc', { fileName })
+              : t('actions.obsidianDownloadSuccessDesc', { fileName }),
             type: 'success',
           })
         }

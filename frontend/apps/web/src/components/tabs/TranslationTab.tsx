@@ -90,12 +90,13 @@ export function TranslationTab() {
   const [isLinkingObsidian, setIsLinkingObsidian] = useState(false)
   const [isTestingObsidian, setIsTestingObsidian] = useState(false)
   const [hasObsidianHandle, setHasObsidianHandle] = useState(false)
+  const supportsDirectFolderAccess = isObsidianExportSupported()
 
   useEffect(() => {
     let cancelled = false
 
     const loadHandle = async () => {
-      if (!isObsidianExportSupported()) return
+      if (!supportsDirectFolderAccess) return
       try {
         const handle = await loadObsidianDirectoryHandle()
         if (cancelled) return
@@ -115,7 +116,7 @@ export function TranslationTab() {
     return () => {
       cancelled = true
     }
-  }, [directoryName, setDirectoryName])
+  }, [directoryName, setDirectoryName, supportsDirectFolderAccess])
 
   const needsKey = provider === 'deepl' || provider === 'openai'
   const hasKeyWarning = needsKey && !apiKey.trim()
@@ -320,13 +321,23 @@ export function TranslationTab() {
           <Switch
             checked={obsidianExportEnabled}
             onCheckedChange={setObsidianExportEnabled}
-            disabled={isLinkingObsidian || !isObsidianExportSupported()}
+            disabled={isLinkingObsidian}
           />
         </div>
 
-        {!isObsidianExportSupported() ? (
-          <div className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
-            {t('translation.obsidian.unsupported')}
+        {!supportsDirectFolderAccess ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border p-3">
+              <div className="text-foreground text-sm font-medium">
+                {t('translation.obsidian.downloadMode')}
+              </div>
+              <div className="text-muted-foreground mt-1 text-xs">
+                {t('translation.obsidian.downloadModeDesc')}
+              </div>
+            </div>
+            <div className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
+              {t('translation.obsidian.unsupported')}
+            </div>
           </div>
         ) : (
           <>

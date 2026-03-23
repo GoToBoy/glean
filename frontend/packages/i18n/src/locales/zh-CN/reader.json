@@ -37,7 +37,9 @@
     "obsidianPermissionDenied": "Obsidian 目录权限被拒绝。",
     "translationIncomplete": "译文未能补齐完成。",
     "obsidianExportSuccess": "已归档到 Obsidian",
-    "obsidianExportSuccessDesc": "已保存为 {{fileName}}"
+    "obsidianExportSuccessDesc": "已保存为 {{fileName}}",
+    "obsidianDownloadSuccess": "已下载 Obsidian Markdown",
+    "obsidianDownloadSuccessDesc": "已下载为 {{fileName}}"
   },
   "entries": {
     "loadError": "加载条目失败",

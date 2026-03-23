@@ -209,6 +209,20 @@ export function buildObsidianExportFileName(entry: EntryWithState): string {
   return `${datePrefix} ${sanitizeFileName(entry.title)} [${entry.id.slice(0, 8)}].md`
 }
 
+export function downloadMarkdownFile(entry: EntryWithState, markdown: string): string {
+  const fileName = buildObsidianExportFileName(entry)
+  const blob = new Blob([markdown], { type: 'text/markdown;charset=utf-8' })
+  const objectUrl = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = objectUrl
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(objectUrl)
+  return fileName
+}
+
 export function buildObsidianMarkdown({
   entry,
   original,

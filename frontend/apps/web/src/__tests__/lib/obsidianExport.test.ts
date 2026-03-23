@@ -4,6 +4,7 @@ import {
   buildObsidianExportFileName,
   buildObsidianMarkdown,
   clearObsidianDirectoryHandle,
+  downloadMarkdownFile,
   isObsidianExportSupported,
   loadObsidianDirectoryHandle,
   saveObsidianDirectoryHandle,
@@ -117,5 +118,41 @@ describe('obsidianExport', () => {
     await saveObsidianDirectoryHandle(handle)
 
     await expect(loadObsidianDirectoryHandle()).resolves.toBe(handle)
+  })
+
+  it('downloads markdown when direct folder access is unavailable', () => {
+    const entry = createMockEntry({
+      id: '12345678-aaaa-bbbb-cccc-1234567890ab',
+      title: 'Download me',
+      published_at: '2025-03-01T12:00:00.000Z',
+    })
+    const appendChildSpy = vi.spyOn(document.body, 'appendChild')
+    const originalCreateElement = document.createElement.bind(document)
+    const createElementSpy = vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
+      if (tagName === 'a') {
+        const anchor = originalCreateElement('a')
+        vi.spyOn(anchor, 'click').mockImplementation(() => {})
+        vi.spyOn(anchor, 'remove').mockImplementation(() => {})
+        return anchor
+      }
+      return originalCreateElement(tagName)
+    })
+    const createObjectURLSpy = vi
+      .spyOn(URL, 'createObjectURL')
+      .mockReturnValue('blob:glean-download')
+    const revokeObjectURLSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    const fileName = downloadMarkdownFile(entry, '# exported')
+
+    expect(fileName).toBe('2025-03-01 Download me [12345678].md')
+    expect(createObjectURLSpy).toHaveBeenCalledTimes(1)
+    expect(createElementSpy).toHaveBeenCalledWith('a')
+    const anchor = createElementSpy.mock.results[0]?.value as HTMLAnchorElement
+    expect(anchor.click).toHaveBeenCalledTimes(1)
+    expect(anchor.remove).toHaveBeenCalledTimes(1)
+    expect(revokeObjectURLSpy).toHaveBeenCalledWith('blob:glean-download')
+    expect(appendChildSpy).toHaveBeenCalledTimes(1)
+
+    createElementSpy.mockRestore()
   })
 })
