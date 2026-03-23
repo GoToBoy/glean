@@ -329,7 +329,7 @@ export function ArticleReader({
     if (!hasUnknown) {
       setTranslatePreUnknown(false)
     }
-  }, [displayContent, entry.id])
+  }, [contentRef, displayContent, entry.id])
 
   // Animation triggers for action buttons
   const readLaterAnimation = useAnimationTrigger(entry.read_later, 'action-btn-clock-active')

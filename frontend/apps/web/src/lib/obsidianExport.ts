@@ -189,8 +189,15 @@ function escapeFrontmatter(value: string): string {
 }
 
 function sanitizeFileName(value: string): string {
-  const cleaned = value
-    .replace(/[<>:"/\\|?*\x00-\x1f]/g, '-')
+  const withoutForbiddenChars = Array.from(value, (char) => {
+    const codePoint = char.codePointAt(0) ?? 0
+    if (codePoint < 32) {
+      return '-'
+    }
+    return /[<>:"/\\|?*]/.test(char) ? '-' : char
+  }).join('')
+
+  const cleaned = withoutForbiddenChars
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/[. ]+$/g, '')
