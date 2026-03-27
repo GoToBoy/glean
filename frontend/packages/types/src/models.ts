@@ -5,14 +5,6 @@
  * and are used throughout the frontend application.
  */
 
-/** User settings */
-export interface ReaderListResumePosition {
-  anchor_entry_id: string
-  anchor_index: number
-  updated_at: string
-}
-
-export type ReaderListResumeMap = Record<string, ReaderListResumePosition>
 export type TranslationTargetLanguage = 'zh-CN' | 'en'
 
 export interface UserSettings {
@@ -31,7 +23,6 @@ export interface UserSettings {
   translation_model?: string
   translation_base_url?: string
   discovery_tavily_api_key?: string
-  reader_list_resume_positions?: ReaderListResumeMap // Per-scope reader list anchors for cross-device resume
 }
 
 /** User account information */

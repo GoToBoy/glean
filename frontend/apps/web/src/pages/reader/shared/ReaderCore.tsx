@@ -7,7 +7,7 @@ import { ArticleReader, ArticleReaderSkeleton } from '../../../components/Articl
 import { useAuthStore } from '../../../stores/authStore'
 import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
-import type { EntryWithState, ReaderListResumeMap, TranslationTargetLanguage } from '@glean/types'
+import type { EntryWithState, TranslationTargetLanguage } from '@glean/types'
 import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription, cn } from '@glean/ui'
 import { useReaderController, type FilterType } from './useReaderController'
@@ -24,15 +24,10 @@ import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
-const READER_LIST_RESUME_MAX_SCOPES = 60
-const READER_LIST_RESUME_MAX_FETCH_ATTEMPTS = 30
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
 const VIRTUALIZATION_THRESHOLD = 80
 const VIRTUALIZATION_OVERSCAN = 8
 const ENTRY_FADE_ANIMATION_LIMIT = 24
-const RESUME_PERSIST_DEBOUNCE_MS = 1500
-const RESUME_PERSIST_MIN_INTERVAL_MS = 15000
-const RESUME_PERSIST_MIN_INDEX_DELTA = 5
 
 export function calculateVirtualWindow(params: {
   totalCount: number
@@ -71,7 +66,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     selectEntry,
     clearSelectedEntry,
   } = useReaderController()
-  const { user, updateSettingsSilently } = useAuthStore()
+  const { user } = useAuthStore()
   const { showPreferenceScore } = useUIStore()
 
   // Check vectorization status for Smart view
@@ -123,13 +118,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   >('idle')
   const [listScrollTop, setListScrollTop] = useState(0)
   const [listViewportHeight, setListViewportHeight] = useState(0)
-  const [newEntriesAboveCount, setNewEntriesAboveCount] = useState(0)
-  const restoredScopeKeyRef = useRef<string | null>(null)
-  const resumeFetchAttemptsRef = useRef(0)
-  const anchorPersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const pendingAnchorRef = useRef<{ scopeKey: string; entryId: string; index: number } | null>(null)
-  const lastPersistedAnchorRef = useRef<string | null>(null)
-  const lastPersistMetaRef = useRef<{ scopeKey: string; index: number; at: number } | null>(null)
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
@@ -188,13 +176,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
-  const listTrackingScopeKey = `${selectedFeedId || 'all'}:${selectedFolderId || 'none'}:${filterType}:${viewParam || 'timeline'}`
-  const listResumePositions = useMemo<ReaderListResumeMap>(() => {
-    const raw = user?.settings?.reader_list_resume_positions
-    if (!raw || typeof raw !== 'object') return {}
-    return raw
-  }, [user?.settings?.reader_list_resume_positions])
-  const currentResumeAnchor = listResumePositions[listTrackingScopeKey]
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -297,14 +278,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
   const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
 
-  const entryIndexById = useMemo(() => {
-    const map = new Map<string, number>()
-    visibleEntries.forEach((entry, index) => {
-      map.set(entry.id, index)
-    })
-    return map
-  }, [visibleEntries])
-
   const shouldVirtualize = visibleEntries.length >= VIRTUALIZATION_THRESHOLD
   const virtualizedList = useMemo(() => {
     if (!shouldVirtualize) {
@@ -354,125 +327,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     // Reset slide direction after animation completes
     setTimeout(() => setSlideDirection(null), 250)
   }
-
-  const scrollListToEntryIndex = useCallback(
-    (index: number) => {
-      const container = entryListRef.current
-      if (!container) return
-      if (visibleEntries.length === 0) {
-        container.scrollTop = 0
-        return
-      }
-
-      const clampedIndex = Math.max(0, Math.min(index, visibleEntries.length - 1))
-      container.scrollTo({
-        top: clampedIndex * ENTRY_ROW_ESTIMATED_HEIGHT,
-        behavior: 'auto',
-      })
-    },
-    [visibleEntries]
-  )
-
-  const persistResumeAnchor = useCallback(
-    async (scopeKey: string, anchorEntryId: string, anchorIndex: number) => {
-      if (!scopeKey || !anchorEntryId || anchorIndex < 0) return
-
-      const marker = `${scopeKey}|${anchorEntryId}|${anchorIndex}`
-      if (lastPersistedAnchorRef.current === marker) return
-      const now = Date.now()
-      const lastPersistMeta = lastPersistMetaRef.current
-      if (
-        lastPersistMeta &&
-        lastPersistMeta.scopeKey === scopeKey &&
-        now - lastPersistMeta.at < RESUME_PERSIST_MIN_INTERVAL_MS &&
-        Math.abs(anchorIndex - lastPersistMeta.index) < RESUME_PERSIST_MIN_INDEX_DELTA
-      ) {
-        return
-      }
-
-      const nowIso = new Date().toISOString()
-      const currentSettings = useAuthStore.getState().user?.settings
-      const currentPositions =
-        currentSettings?.reader_list_resume_positions &&
-        typeof currentSettings.reader_list_resume_positions === 'object'
-          ? currentSettings.reader_list_resume_positions
-          : {}
-      const normalizedCurrentPositions: ReaderListResumeMap = Object.fromEntries(
-        Object.entries(currentPositions).filter(([, value]: [string, unknown]) => {
-          if (!value || typeof value !== 'object') return false
-          const candidate = value as {
-            anchor_entry_id?: unknown
-            anchor_index?: unknown
-          }
-          return (
-            typeof candidate.anchor_entry_id === 'string' &&
-            typeof candidate.anchor_index === 'number'
-          )
-        })
-      )
-
-      const nextPositions: ReaderListResumeMap = {
-        ...normalizedCurrentPositions,
-        [scopeKey]: {
-          anchor_entry_id: anchorEntryId,
-          anchor_index: anchorIndex,
-          updated_at: nowIso,
-        },
-      }
-
-      const prunedEntries = Object.entries(nextPositions)
-        .sort(([, a], [, b]) => {
-          const ta = Date.parse(a.updated_at || '') || 0
-          const tb = Date.parse(b.updated_at || '') || 0
-          return tb - ta
-        })
-        .slice(0, READER_LIST_RESUME_MAX_SCOPES)
-      const pruned: ReaderListResumeMap = Object.fromEntries(prunedEntries)
-
-      await updateSettingsSilently({ reader_list_resume_positions: pruned })
-      lastPersistedAnchorRef.current = marker
-      lastPersistMetaRef.current = { scopeKey, index: anchorIndex, at: now }
-    },
-    [updateSettingsSilently]
-  )
-
-  const schedulePersistAnchor = useCallback(
-    (scopeKey: string, entryId: string, index: number) => {
-      pendingAnchorRef.current = { scopeKey, entryId, index }
-      if (anchorPersistTimerRef.current) {
-        clearTimeout(anchorPersistTimerRef.current)
-      }
-      anchorPersistTimerRef.current = setTimeout(() => {
-        const pending = pendingAnchorRef.current
-        if (!pending) return
-        void persistResumeAnchor(pending.scopeKey, pending.entryId, pending.index)
-      }, RESUME_PERSIST_DEBOUNCE_MS)
-    },
-    [persistResumeAnchor]
-  )
-
-  const flushPersistAnchor = useCallback(() => {
-    if (anchorPersistTimerRef.current) {
-      clearTimeout(anchorPersistTimerRef.current)
-      anchorPersistTimerRef.current = null
-    }
-    const pending = pendingAnchorRef.current
-    if (!pending) return
-    void persistResumeAnchor(pending.scopeKey, pending.entryId, pending.index)
-  }, [persistResumeAnchor])
-
-  const handleJumpToNewEntries = useCallback(() => {
-    const container = entryListRef.current
-    if (!container) return
-    container.scrollTop = 0
-    setNewEntriesAboveCount(0)
-
-    const firstEntry = visibleEntries[0]
-    if (firstEntry) {
-      schedulePersistAnchor(listTrackingScopeKey, firstEntry.id, 0)
-      flushPersistAnchor()
-    }
-  }, [visibleEntries, listTrackingScopeKey, schedulePersistAnchor, flushPersistAnchor])
 
   useEffect(() => {
     const container = entryListRef.current
@@ -531,34 +385,14 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     if (!container || isLoading) return
 
     const onScroll = () => {
-      const currentScrollTop = container.scrollTop
-      setListScrollTop(currentScrollTop)
-      if (currentScrollTop <= 4) {
-        setNewEntriesAboveCount((prev) => (prev > 0 ? 0 : prev))
-      }
-
-      const anchorIndex = Math.max(
-        0,
-        Math.min(visibleEntries.length - 1, Math.floor(currentScrollTop / ENTRY_ROW_ESTIMATED_HEIGHT))
-      )
-      const anchorEntry = visibleEntries[anchorIndex]
-      if (anchorEntry) {
-        schedulePersistAnchor(listTrackingScopeKey, anchorEntry.id, anchorIndex)
-      }
+      setListScrollTop(container.scrollTop)
     }
 
     container.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      flushPersistAnchor()
       container.removeEventListener('scroll', onScroll)
     }
-  }, [
-    isLoading,
-    listTrackingScopeKey,
-    schedulePersistAnchor,
-    flushPersistAnchor,
-    visibleEntries,
-  ])
+  }, [isLoading])
 
   // Initialize list translation toggle from persisted setting
   useEffect(() => {
@@ -897,79 +731,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
 
-  useEffect(() => {
-    restoredScopeKeyRef.current = null
-    resumeFetchAttemptsRef.current = 0
-    setNewEntriesAboveCount(0)
-  }, [listTrackingScopeKey])
-
-  // Restore list by anchor entry first, then fallback to anchor index.
-  useEffect(() => {
-    const container = entryListRef.current
-    if (!container || isLoading) return
-    if (restoredScopeKeyRef.current === listTrackingScopeKey) return
-
-    const anchorEntryId = currentResumeAnchor?.anchor_entry_id
-    const anchorIndex = Math.max(0, currentResumeAnchor?.anchor_index ?? 0)
-
-    if (!currentResumeAnchor) {
-      restoredScopeKeyRef.current = listTrackingScopeKey
-      container.scrollTop = 0
-      setNewEntriesAboveCount(0)
-      return
-    }
-
-    const anchorEntryIndex =
-      typeof anchorEntryId === 'string' && anchorEntryId.length > 0
-        ? entryIndexById.get(anchorEntryId)
-        : undefined
-
-    if (anchorEntryIndex !== undefined) {
-      const savedIndex = Math.max(0, anchorIndex)
-      const deltaAbove = anchorEntryIndex - savedIndex
-      setNewEntriesAboveCount(deltaAbove > 0 ? deltaAbove : 0)
-      window.requestAnimationFrame(() => {
-        scrollListToEntryIndex(anchorEntryIndex)
-        restoredScopeKeyRef.current = listTrackingScopeKey
-      })
-      return
-    }
-
-    const shouldTryLoadingMore =
-      hasNextPage &&
-      !isFetchingNextPage &&
-      resumeFetchAttemptsRef.current < READER_LIST_RESUME_MAX_FETCH_ATTEMPTS &&
-      (anchorEntryId || anchorIndex >= visibleEntries.length)
-
-    if (shouldTryLoadingMore) {
-      resumeFetchAttemptsRef.current += 1
-      void fetchNextPage()
-      return
-    }
-
-    window.requestAnimationFrame(() => {
-      scrollListToEntryIndex(anchorIndex)
-      restoredScopeKeyRef.current = listTrackingScopeKey
-      setNewEntriesAboveCount(0)
-    })
-  }, [
-    isLoading,
-    listTrackingScopeKey,
-    currentResumeAnchor,
-    entryIndexById,
-    hasNextPage,
-    isFetchingNextPage,
-    fetchNextPage,
-    visibleEntries.length,
-    scrollListToEntryIndex,
-  ])
-
-  useEffect(() => {
-    return () => {
-      flushPersistAnchor()
-    }
-  }, [flushPersistAnchor])
-
   // On mobile, keep list mounted to preserve scroll position and observer bindings.
   const isReaderVisibleOnMobile = isMobile && (!!selectedEntryId || isExitingArticle)
   const showReader = !isMobile || !!selectedEntryId
@@ -1133,19 +894,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                       : ''
                 }`}
               >
-                {newEntriesAboveCount > 0 && (
-                  <div className="sticky top-0 z-20 px-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleJumpToNewEntries}
-                      className="bg-primary text-primary-foreground hover:bg-primary/90 w-full rounded-lg px-3 py-2 text-xs font-medium shadow-sm transition-colors"
-                    >
-                      {t('entries.newAbove', { count: newEntriesAboveCount })} ·{' '}
-                      {t('entries.jumpToNew')}
-                    </button>
-                  </div>
-                )}
-
                 {isLoading && (
                   <div className="divide-border/40 divide-y px-1 py-0.5">
                     {Array.from({ length: 5 }).map((_, index) => (

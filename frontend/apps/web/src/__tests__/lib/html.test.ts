@@ -89,6 +89,32 @@ describe('processHtmlContent', () => {
     expect(result).toContain('title="Link"')
   })
 
+  it('forces anchors to open in a new tab with proper rel values', () => {
+    const result = processHtmlContent('<p><a href="https://example.com">link</a></p>')
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = result
+    const anchor = wrapper.querySelector('a')
+    expect(anchor).toBeTruthy()
+    expect(anchor?.getAttribute('target')).toBe('_blank')
+    const relValues = anchor
+      ?.getAttribute('rel')
+      ?.split(/\s+/)
+      .filter(Boolean)
+    expect(relValues).toEqual(expect.arrayContaining(['noopener', 'noreferrer']))
+  })
+
+  it('adds noopener/noreferrer without removing existing rel values', () => {
+    const result = processHtmlContent('<a href="https://example.com" rel="nofollow">link</a>')
+    const wrapper = document.createElement('div')
+    wrapper.innerHTML = result
+    const anchor = wrapper.querySelector('a')
+    const relValues = anchor
+      ?.getAttribute('rel')
+      ?.split(/\s+/)
+      .filter(Boolean)
+    expect(relValues).toEqual(expect.arrayContaining(['nofollow', 'noopener', 'noreferrer']))
+  })
+
   it('should decode entities for plain text content', () => {
     // Entity decoding happens via textarea, then DOMPurify re-sanitizes
     // The result wraps in <p> and the & gets re-encoded by DOMPurify

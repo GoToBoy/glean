@@ -46,7 +46,7 @@ export function processHtmlContent(html: string | null | undefined): string {
     // Content has HTML tags - sanitize to prevent XSS attacks
     // DOMPurify removes dangerous elements (script, iframe with javascript:, etc.)
     // while keeping safe HTML tags for article content
-    return DOMPurify.sanitize(html, {
+    const sanitized = DOMPurify.sanitize(html, {
       // Allow safe tags for article content
       ALLOWED_TAGS: [
         'p',
@@ -102,10 +102,14 @@ export function processHtmlContent(html: string | null | undefined): string {
         'decoding',
         'type',
         'media',
+        'target',
+        'rel',
       ],
       // Allow data URIs for images (base64 encoded images)
       ALLOW_DATA_ATTR: true,
     })
+
+    return enforceAnchorTargeting(sanitized)
   }
 
   // For plain text content, decode HTML entities
@@ -122,5 +126,28 @@ export function processHtmlContent(html: string | null | undefined): string {
     .join('')
 
   // Sanitize even plain text content to be safe
-  return DOMPurify.sanitize(wrapped)
+  const sanitized = DOMPurify.sanitize(wrapped)
+  return enforceAnchorTargeting(sanitized)
+}
+
+function enforceAnchorTargeting(html: string): string {
+  const wrapper = document.createElement('div')
+  wrapper.innerHTML = html
+
+  wrapper.querySelectorAll('a').forEach((anchor) => {
+    anchor.setAttribute('target', '_blank')
+    const relSet = new Set<string>()
+    anchor
+      .getAttribute('rel')
+      ?.split(/\s+/)
+      .filter(Boolean)
+      .forEach((value) => relSet.add(value))
+
+    relSet.add('noopener')
+    relSet.add('noreferrer')
+
+    anchor.setAttribute('rel', Array.from(relSet).join(' '))
+  })
+
+  return wrapper.innerHTML
 }

@@ -207,7 +207,7 @@ export function ArticleReader({
 
   const contentRef = useContentRenderer(displayContent)
   const [archiveFlowState, setArchiveFlowState] = useState<
-    'idle' | 'completing-translation' | 'archiving'
+    'idle' | 'completing-translation' | 'archiving' | 'unarchiving'
   >('idle')
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
@@ -354,13 +354,15 @@ export function ArticleReader({
   const handleToggleBookmark = async () => {
     try {
       if (entry.is_bookmarked && entry.bookmark_id) {
-        setArchiveFlowState('archiving')
+        setArchiveFlowState('unarchiving')
         // Remove bookmark
         await bookmarkService.deleteBookmark(entry.bookmark_id)
       } else {
+        setArchiveFlowState('archiving')
         let originalText = displayContent
-        let translatedText: string | null = null
+        let translatedText: string | undefined
         const supportsDirectFolderAccess = isObsidianExportSupported()
+        let markdownFileName: string | undefined
 
         if (obsidianExportEnabled) {
           if (supportsDirectFolderAccess) {
@@ -383,25 +385,22 @@ export function ArticleReader({
             }
             originalText = translationSnapshot.original
             translatedText = translationSnapshot.translated
+            setArchiveFlowState('archiving')
           } else if (contentRef.current) {
-            originalText = extractArticleTextBlocks(contentRef.current, translatePreUnknown).join('\n\n')
+            const extracted = extractArticleTextBlocks(contentRef.current, translatePreUnknown).join('\n\n')
+            if (extracted) {
+              originalText = extracted
+            }
           }
-        }
 
-        setArchiveFlowState('archiving')
-        // Create bookmark
-        await bookmarkService.createBookmark({
-          entry_id: entry.id,
-        })
-
-        if (obsidianExportEnabled) {
           const markdown = buildObsidianMarkdown({
             entry,
-            original: originalText || entry.summary || entry.title,
+            original: originalText || entry.summary || entry.title || '',
             translated: translatedText,
             targetLanguage,
           })
-          const fileName = supportsDirectFolderAccess
+
+          markdownFileName = supportsDirectFolderAccess
             ? await (async () => {
                 const directoryHandle = await loadObsidianDirectoryHandle()
                 if (!directoryHandle) {
@@ -410,13 +409,21 @@ export function ArticleReader({
                 return writeMarkdownToObsidianDirectory(directoryHandle, entry, markdown)
               })()
             : downloadMarkdownFile(entry, markdown)
+        }
+
+        // Create bookmark only after successful export (if enabled)
+        await bookmarkService.createBookmark({
+          entry_id: entry.id,
+        })
+
+        if (obsidianExportEnabled && markdownFileName) {
           toastManager.add({
             title: supportsDirectFolderAccess
               ? t('actions.obsidianExportSuccess')
               : t('actions.obsidianDownloadSuccess'),
             description: supportsDirectFolderAccess
-              ? t('actions.obsidianExportSuccessDesc', { fileName })
-              : t('actions.obsidianDownloadSuccessDesc', { fileName }),
+              ? t('actions.obsidianExportSuccessDesc', { fileName: markdownFileName })
+              : t('actions.obsidianDownloadSuccessDesc', { fileName: markdownFileName }),
             type: 'success',
           })
         }
@@ -476,11 +483,13 @@ export function ArticleReader({
   const bookmarkLabel =
     archiveFlowState === 'completing-translation'
       ? t('actions.completingTranslation')
-      : archiveFlowState === 'archiving'
-        ? t('actions.archiving')
-        : entry.is_bookmarked
-          ? t('actions.archived')
-          : t('actions.archive')
+      : archiveFlowState === 'unarchiving'
+        ? t('actions.unarchiving')
+        : archiveFlowState === 'archiving'
+          ? t('actions.archiving')
+          : entry.is_bookmarked
+            ? t('actions.archived')
+            : t('actions.archive')
 
   return (
     <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -634,7 +643,7 @@ export function ArticleReader({
               disabled={isBookmarking}
               className={bookmarkButtonClassName}
             >
-              {archiveFlowState === 'archiving' ? (
+              {archiveFlowState === 'archiving' || archiveFlowState === 'unarchiving' ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <span className="archive-action-btn__icon-wrap">
@@ -910,7 +919,7 @@ export function ArticleReader({
                   } disabled:opacity-50`}
                 >
                   <span className="flex items-center gap-2">
-                    {archiveFlowState === 'archiving' ? (
+                    {archiveFlowState === 'archiving' || archiveFlowState === 'unarchiving' ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <span className="archive-action-btn__icon-wrap">
