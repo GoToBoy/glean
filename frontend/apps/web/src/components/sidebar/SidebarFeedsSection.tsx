@@ -51,6 +51,12 @@ import {
 import { useMarkAllRead } from '../../hooks/useEntries'
 import { useFolderStore } from '../../stores/folderStore'
 import { SidebarItem } from './SidebarItem'
+import {
+  buildSiblingFolderOrders,
+  getFolderDropPlacement,
+  isFolderDropAreaActive,
+  type FolderDropPlacement,
+} from './SidebarFeedsSection.dnd'
 
 interface SidebarFeedsSectionProps {
   readonly isSidebarOpen: boolean
@@ -119,6 +125,11 @@ export function SidebarFeedsSection({
   const updateMutation = useUpdateSubscription()
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedSubscriptionIds, setSelectedSubscriptionIds] = useState<Set<string>>(new Set())
+  const [draggedFolderId, setDraggedFolderId] = useState<string | null>(null)
+  const [folderDropIndicator, setFolderDropIndicator] = useState<{
+    folderId: string
+    placement: FolderDropPlacement
+  } | null>(null)
   const batchDeleteMutation = useBatchDeleteSubscriptions()
 
   useEffect(() => {
@@ -127,8 +138,10 @@ export function SidebarFeedsSection({
     return () => {
       setDraggedFeed(null)
       setDragOverFolderId(null)
+      setDraggedFolderId(null)
+      setFolderDropIndicator(null)
     }
-  }, []) // Empty dependency array ensures this runs only on mount and unmount.
+  }, [setDragOverFolderId, setDraggedFeed]) // Setter identities are expected to be stable.
 
   const getSubscriptionsForFolder = (folderId: string) => subscriptionsByFolder[folderId] || []
   const selectedCount = selectedSubscriptionIds.size
@@ -305,6 +318,7 @@ export function SidebarFeedsSection({
                 <SidebarFolderItem
                   key={folder.id}
                   folder={folder}
+                  siblingFolders={feedFolders}
                   isExpanded={expandedFolders.has(folder.id)}
                   onToggle={() => toggleFolder(folder.id)}
                   onSelect={(folderId) => onFeedSelect(undefined, folderId)}
@@ -324,6 +338,10 @@ export function SidebarFeedsSection({
                   setDraggedFeed={setDraggedFeed}
                   dragOverFolderId={dragOverFolderId}
                   setDragOverFolderId={setDragOverFolderId}
+                  draggedFolderId={draggedFolderId}
+                  setDraggedFolderId={setDraggedFolderId}
+                  folderDropIndicator={folderDropIndicator}
+                  setFolderDropIndicator={setFolderDropIndicator}
                   isSelectionMode={isSidebarOpen && !isMobileSidebarOpen && isSelectionMode}
                   isCompact={isMobileSidebarOpen}
                   selectedSubscriptionIds={selectedSubscriptionIds}
@@ -402,6 +420,7 @@ export function SidebarFeedsSection({
 
 interface SidebarFolderItemProps {
   readonly folder: FolderTreeNode
+  readonly siblingFolders: FolderTreeNode[]
   readonly isExpanded: boolean
   readonly onToggle: () => void
   readonly onSelect: (folderId: string) => void
@@ -421,6 +440,12 @@ interface SidebarFolderItemProps {
   readonly setDraggedFeed: (feed: Subscription | null) => void
   readonly dragOverFolderId: string | null
   readonly setDragOverFolderId: (id: string | null) => void
+  readonly draggedFolderId: string | null
+  readonly setDraggedFolderId: (id: string | null) => void
+  readonly folderDropIndicator: { folderId: string; placement: FolderDropPlacement } | null
+  readonly setFolderDropIndicator: (
+    indicator: { folderId: string; placement: FolderDropPlacement } | null
+  ) => void
   readonly isSelectionMode: boolean
   readonly isCompact: boolean
   readonly selectedSubscriptionIds: Set<string>
@@ -429,6 +454,7 @@ interface SidebarFolderItemProps {
 
 function SidebarFolderItem({
   folder,
+  siblingFolders,
   isExpanded,
   onToggle,
   onSelect,
@@ -448,13 +474,17 @@ function SidebarFolderItem({
   setDraggedFeed,
   dragOverFolderId,
   setDragOverFolderId,
+  draggedFolderId,
+  setDraggedFolderId,
+  folderDropIndicator,
+  setFolderDropIndicator,
   isSelectionMode,
   isCompact,
   selectedSubscriptionIds,
   onToggleFeedSelection,
 }: SidebarFolderItemProps) {
   const { t } = useTranslation('feeds')
-  const { deleteFolder, updateFolder } = useFolderStore()
+  const { deleteFolder, updateFolder, reorderFolders } = useFolderStore()
   const updateMutation = useUpdateSubscription()
   const markAllReadMutation = useMarkAllRead()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -470,29 +500,77 @@ function SidebarFolderItem({
   const isFullySelected = folderSubscriptionIds.length > 0 && selectedCount === folderSubscriptionIds.length
   const isPartiallySelected = selectedCount > 0 && selectedCount < folderSubscriptionIds.length
 
-  const isDragTarget = dragOverFolderId === folder.id
-  const canReceiveDrop = draggedFeed && draggedFeed.folder_id !== folder.id
+  const isFeedDropTarget = isFolderDropAreaActive({
+    dragOverFolderId,
+    folderId: folder.id,
+    draggedFeedFolderId: draggedFeed?.folder_id ?? null,
+    draggedFolderId,
+  })
+  const canReceiveFeedDrop = draggedFeed && draggedFeed.folder_id !== folder.id
+  const canReceiveFolderDrop =
+    draggedFolderId !== null &&
+    draggedFolderId !== folder.id &&
+    siblingFolders.some((sibling) => sibling.id === draggedFolderId)
+  const isFolderDropTarget = folderDropIndicator?.folderId === folder.id && canReceiveFolderDrop
+  const isDropBefore = isFolderDropTarget && folderDropIndicator?.placement === 'before'
+  const isDropAfter = isFolderDropTarget && folderDropIndicator?.placement === 'after'
 
   const handleDragOver = (e: React.DragEvent) => {
     if (isSelectionMode) return
-    e.preventDefault()
-    e.dataTransfer.dropEffect = canReceiveDrop ? 'move' : 'none'
-    setDragOverFolderId(folder.id)
+    if (draggedFolderId) {
+      if (!canReceiveFolderDrop) return
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      setDragOverFolderId(null)
+      setFolderDropIndicator({
+        folderId: folder.id,
+        placement: getFolderDropPlacement(e.currentTarget.getBoundingClientRect(), e.clientY),
+      })
+      return
+    }
+
+    if (draggedFeed) {
+      e.preventDefault()
+      e.dataTransfer.dropEffect = canReceiveFeedDrop ? 'move' : 'none'
+      setFolderDropIndicator(null)
+      setDragOverFolderId(folder.id)
+    }
   }
 
-  const handleDragLeave = () => {
-    setDragOverFolderId(null)
+  const handleDragLeave = (e: React.DragEvent) => {
+    const nextTarget = e.relatedTarget
+    if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) {
+      return
+    }
+
+    if (dragOverFolderId === folder.id) {
+      setDragOverFolderId(null)
+    }
+    if (folderDropIndicator?.folderId === folder.id) {
+      setFolderDropIndicator(null)
+    }
   }
 
   const handleDrop = async (e: React.DragEvent) => {
     if (isSelectionMode) return
     e.preventDefault()
-    if (draggedFeed && draggedFeed.folder_id !== folder.id) {
+    if (draggedFolderId && canReceiveFolderDrop) {
+      const placement =
+        folderDropIndicator?.folderId === folder.id
+          ? folderDropIndicator.placement
+          : getFolderDropPlacement(e.currentTarget.getBoundingClientRect(), e.clientY)
+      const orders = buildSiblingFolderOrders(siblingFolders, draggedFolderId, folder.id, placement)
+      if (orders.length > 0) {
+        await reorderFolders(orders)
+      }
+    } else if (draggedFeed && draggedFeed.folder_id !== folder.id) {
       await updateMutation.mutateAsync({
         subscriptionId: draggedFeed.id,
         data: { folder_id: folder.id },
       })
     }
+    setDraggedFolderId(null)
+    setFolderDropIndicator(null)
     setDraggedFeed(null)
     setDragOverFolderId(null)
   }
@@ -540,7 +618,7 @@ function SidebarFolderItem({
   }
 
   const getContainerClasses = () => {
-    if (isDragTarget && canReceiveDrop) {
+    if (isFeedDropTarget && canReceiveFeedDrop) {
       return 'bg-primary/10 ring-primary/30 ring-2'
     }
     if (isActive) {
@@ -557,8 +635,23 @@ function SidebarFolderItem({
         className={cn(
           'group flex w-full items-center rounded-lg text-sm transition-all duration-200',
           isCompact ? 'gap-2 px-2 py-1.5 text-[13px]' : 'gap-3 px-3 py-2',
+          !isSelectionMode && 'cursor-grab active:cursor-grabbing',
+          isDropBefore && 'border-primary border-t-2',
+          isDropAfter && 'border-primary border-b-2',
           getContainerClasses()
         )}
+        draggable={!isSelectionMode}
+        onDragStart={(e) => {
+          if (isSelectionMode) return
+          e.dataTransfer.effectAllowed = 'move'
+          setDraggedFeed(null)
+          setDraggedFolderId(folder.id)
+        }}
+        onDragEnd={() => {
+          setDraggedFolderId(null)
+          setFolderDropIndicator(null)
+          setDragOverFolderId(null)
+        }}
         onContextMenu={handleContextMenu}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
@@ -661,11 +754,44 @@ function SidebarFolderItem({
       </div>
 
       {isExpanded && (
-        <div className="border-border mt-0.5 ml-4 space-y-0.5 border-l pl-2">
+        <div
+          className={cn(
+            'border-border mt-0.5 ml-4 space-y-0.5 border-l pl-2',
+            isFeedDropTarget && canReceiveFeedDrop && 'bg-primary/5 ring-primary/20 rounded-r-md ring-1'
+          )}
+          onDragOver={(e) => {
+            if (isSelectionMode || !draggedFeed || draggedFolderId) return
+            e.preventDefault()
+            e.dataTransfer.dropEffect = canReceiveFeedDrop ? 'move' : 'none'
+            setDragOverFolderId(folder.id)
+          }}
+          onDragLeave={(e) => {
+            const nextTarget = e.relatedTarget
+            if (nextTarget instanceof Node && e.currentTarget.contains(nextTarget)) {
+              return
+            }
+            if (dragOverFolderId === folder.id) {
+              setDragOverFolderId(null)
+            }
+          }}
+          onDrop={async (e) => {
+            if (isSelectionMode || !draggedFeed || draggedFeed.folder_id === folder.id || draggedFolderId) {
+              return
+            }
+            e.preventDefault()
+            await updateMutation.mutateAsync({
+              subscriptionId: draggedFeed.id,
+              data: { folder_id: folder.id },
+            })
+            setDraggedFeed(null)
+            setDragOverFolderId(null)
+          }}
+        >
           {folder.children.map((child) => (
             <SidebarFolderItem
               key={child.id}
               folder={child}
+              siblingFolders={folder.children}
               isExpanded={expandedFolders.has(child.id)}
               onToggle={() => toggleFolder(child.id)}
               onSelect={onSelect}
@@ -685,6 +811,10 @@ function SidebarFolderItem({
               setDraggedFeed={setDraggedFeed}
               dragOverFolderId={dragOverFolderId}
               setDragOverFolderId={setDragOverFolderId}
+              draggedFolderId={draggedFolderId}
+              setDraggedFolderId={setDraggedFolderId}
+              folderDropIndicator={folderDropIndicator}
+              setFolderDropIndicator={setFolderDropIndicator}
               isSelectionMode={isSelectionMode}
               isCompact={isCompact}
               selectedSubscriptionIds={selectedSubscriptionIds}
