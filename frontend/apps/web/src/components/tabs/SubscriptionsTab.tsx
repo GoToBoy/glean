@@ -10,9 +10,16 @@ import {
   useExportOPML,
 } from '../../hooks/useSubscriptions'
 import { useEntries } from '../../hooks/useEntries'
+import { useFeedFetchProgress, useFeedFetchProgressList } from '../../hooks/useFeedFetchProgress'
 import { useFolderStore } from '../../stores/folderStore'
 import { useAuthStore } from '../../stores/authStore'
-import type { EntryWithState, FolderTreeNode, RefreshStatusItem, Subscription } from '@glean/types'
+import type {
+  EntryWithState,
+  FeedFetchLatestRunResponse,
+  FolderTreeNode,
+  RefreshStatusItem,
+  Subscription,
+} from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import {
   Button,
@@ -32,6 +39,15 @@ import {
   MenuPopup,
   MenuItem,
   MenuSeparator,
+  Sheet,
+  SheetDescription,
+  SheetHeader,
+  SheetPanel,
+  SheetPopup,
+  SheetTitle,
+  SheetTrigger,
+  FeedFetchProgress,
+  FeedFetchInlineStatus,
   cn,
 } from '@glean/ui'
 import {
@@ -52,8 +68,15 @@ import {
   CheckSquare,
   Square,
   ChevronRight,
+  Activity,
 } from 'lucide-react'
-import { entryService } from '@glean/api-client'
+import {
+  buildFeedFetchHistoryItems,
+  buildFeedFetchProgressDetails,
+  entryService,
+  mapFeedFetchRunToViewModel,
+  mapFeedFetchStageEventsToItems,
+} from '@glean/api-client'
 import { shouldAutoTranslate } from '../../lib/translationLanguagePolicy'
 
 type FeedRefreshState = {
@@ -170,6 +193,11 @@ export function SubscriptionsTab() {
     () => new Set(visibleSubscriptions.map((subscription) => subscription.id)),
     [visibleSubscriptions]
   )
+  const visibleFeedIds = useMemo(
+    () => visibleSubscriptions.map((subscription) => subscription.feed_id),
+    [visibleSubscriptions]
+  )
+  const { latestRunsByFeedId } = useFeedFetchProgressList(visibleFeedIds, visibleFeedIds.length > 0)
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -630,6 +658,7 @@ export function SubscriptionsTab() {
                     onRefresh={handleRefresh}
                     refreshingId={refreshingId}
                     feedRefreshState={feedRefreshState}
+                    latestRunsByFeedId={latestRunsByFeedId}
                   />
                 )
               })}
@@ -653,6 +682,7 @@ export function SubscriptionsTab() {
                         onRefresh={handleRefresh}
                         refreshingId={refreshingId}
                         refreshState={feedRefreshState[subscription.feed_id]}
+                        latestRun={latestRunsByFeedId.get(subscription.feed_id)}
                       />
                     ))}
                   </div>
@@ -687,6 +717,7 @@ interface FolderBranchProps {
   onRefresh: (id: string) => Promise<void>
   refreshingId: string | null
   feedRefreshState: Record<string, FeedRefreshState>
+  latestRunsByFeedId: Map<string, FeedFetchLatestRunResponse>
 }
 
 function FolderBranch({
@@ -705,6 +736,7 @@ function FolderBranch({
   onRefresh,
   refreshingId,
   feedRefreshState,
+  latestRunsByFeedId,
 }: FolderBranchProps) {
   const { t } = useTranslation('settings')
   const count = folderStats.countMap.get(folder.id) ?? 0
@@ -768,6 +800,7 @@ function FolderBranch({
               onRefresh={onRefresh}
               refreshingId={refreshingId}
               feedRefreshState={feedRefreshState}
+              latestRunsByFeedId={latestRunsByFeedId}
             />
           ))}
 
@@ -784,6 +817,7 @@ function FolderBranch({
               onRefresh={onRefresh}
               refreshingId={refreshingId}
               refreshState={feedRefreshState[subscription.feed_id]}
+              latestRun={latestRunsByFeedId.get(subscription.feed_id)}
             />
           ))}
 
@@ -812,6 +846,7 @@ interface SubscriptionRowProps {
   onRefresh: (id: string) => Promise<void>
   refreshingId: string | null
   refreshState?: FeedRefreshState
+  latestRun?: FeedFetchLatestRunResponse
 }
 
 function SubscriptionRow({
@@ -825,9 +860,11 @@ function SubscriptionRow({
   onRefresh,
   refreshingId,
   refreshState,
+  latestRun,
 }: SubscriptionRowProps) {
   const { t } = useTranslation('settings')
   const isRefreshingRow = refreshState && isPendingRefreshStatus(refreshState.status)
+  const latestViewModel = mapFeedFetchRunToViewModel(latestRun)
   const isError = refreshState?.resultStatus === 'error'
   const isDone = refreshState?.status === 'complete' || refreshState?.status === 'not_found'
   const rowLogMessage =
@@ -882,6 +919,20 @@ function SubscriptionRow({
               />
             </div>
           )}
+          {latestViewModel && (
+            <div className="mt-2">
+              <FeedFetchInlineStatus
+                statusLabel={latestViewModel.statusLabel}
+                stageLabel={latestViewModel.stageLabel}
+                stageProgressLabel={latestViewModel.stageProgressLabel}
+                progressPercent={latestViewModel.progressPercent}
+                summaryText={latestViewModel.summaryText}
+                estimatedStartLabel={latestViewModel.estimatedStartLabel}
+                estimatedFinishLabel={latestViewModel.estimatedFinishLabel}
+                nextFetchLabel={latestViewModel.nextFetchLabel}
+              />
+            </div>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1">
@@ -902,6 +953,11 @@ function SubscriptionRow({
               <RecentEntriesPreview feedId={subscription.feed_id} feedUrl={subscription.feed.url} />
             </HoverCardContent>
           </HoverCard>
+          <SubscriptionFetchProgressButton
+            subscription={subscription}
+            refreshState={refreshState}
+            initialLatestRun={latestRun}
+          />
           <Button
             variant="ghost"
             size="icon-sm"
@@ -952,6 +1008,103 @@ function SubscriptionRow({
           </Menu>
         </div>
     </div>
+  )
+}
+
+function SubscriptionFetchProgressButton({
+  subscription,
+  refreshState,
+  initialLatestRun,
+}: {
+  subscription: Subscription
+  refreshState?: FeedRefreshState
+  initialLatestRun?: FeedFetchLatestRunResponse
+}) {
+  const { t } = useTranslation('settings')
+  const [open, setOpen] = useState(false)
+  const { latestRunQuery, historyQuery, viewModel, loadHistory } = useFeedFetchProgress(
+    subscription.feed_id,
+    open
+  )
+
+  const latestRun = latestRunQuery.data ?? initialLatestRun
+  const details = buildFeedFetchProgressDetails({
+    latestRun,
+    fallbackLastFinishedAt: subscription.feed.last_fetched_at,
+    fallbackLastSuccessAt: subscription.feed.last_fetch_success_at,
+  })
+  const historyItems = buildFeedFetchHistoryItems(historyQuery.data)
+
+  const isActiveRefresh = !!refreshState && isPendingRefreshStatus(refreshState.status)
+
+  return (
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (nextOpen) {
+          void loadHistory()
+        }
+      }}
+    >
+      <SheetTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            title="Fetch progress"
+            className={cn(ICON_BUTTON_CLASS, isActiveRefresh && 'text-primary')}
+          >
+            <Activity className={cn('h-4 w-4', isActiveRefresh && 'animate-pulse')} />
+          </Button>
+        }
+      />
+      <SheetPopup side="right" inset className="max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>
+            {subscription.custom_title || subscription.feed.title || t('manageFeeds.untitledFeed')}
+          </SheetTitle>
+          <SheetDescription>
+            Feed fetch progress, ETA, stage details, and recent history.
+          </SheetDescription>
+        </SheetHeader>
+        <SheetPanel className="space-y-4">
+          {latestRunQuery.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : viewModel ? (
+            <FeedFetchProgress
+              title="Current run"
+              statusLabel={viewModel.statusLabel}
+              stageLabel={viewModel.stageLabel}
+              stageProgressLabel={viewModel.stageProgressLabel}
+              progressPercent={viewModel.progressPercent}
+              summaryText={viewModel.summaryText}
+              estimatedStartLabel={viewModel.estimatedStartLabel}
+              estimatedFinishLabel={viewModel.estimatedFinishLabel}
+              predictionLabel={viewModel.predictionLabel}
+              stages={mapFeedFetchStageEventsToItems(latestRun?.stages)}
+              details={details}
+              history={historyItems}
+              historyLoading={historyQuery.isFetching && !historyQuery.data}
+            />
+          ) : (
+            <FeedFetchProgress
+              title="Current run"
+              statusLabel="Not started"
+              stageLabel="No persisted fetch run yet"
+              progressPercent={0}
+              summaryText={null}
+              details={details}
+              history={historyItems}
+              historyLoading={historyQuery.isFetching && !historyQuery.data}
+            />
+          )}
+        </SheetPanel>
+      </SheetPopup>
+    </Sheet>
   )
 }
 

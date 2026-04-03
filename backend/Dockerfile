@@ -25,8 +25,8 @@ RUN (sed -i "s|deb.debian.org|${APT_MIRROR}|g; s|security.debian.org|${APT_MIRRO
     openssl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+# Install uv directly from the configured Python index to avoid external GHCR dependency.
+RUN pip install --no-cache-dir --index-url "${UV_INDEX_URL}" uv
 
 # Keep uv artifacts across builds to avoid re-downloading large wheels.
 ENV UV_CACHE_DIR=/root/.cache/uv

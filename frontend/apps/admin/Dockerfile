@@ -1,7 +1,10 @@
 # Frontend Dockerfile for Glean Admin Dashboard
 
+ARG NODE_IMAGE=node:24-alpine
+ARG NGINX_IMAGE=nginx:alpine
+
 # Build stage
-FROM node:24-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 ARG PNPM_REGISTRY=${NPM_REGISTRY}
@@ -26,7 +29,7 @@ RUN pnpm config set registry "${PNPM_REGISTRY}" \
 RUN pnpm --filter=@glean/admin build
 
 # Production stage
-FROM nginx:alpine
+FROM ${NGINX_IMAGE}
 
 # Copy built files
 COPY --from=builder /app/apps/admin/dist /usr/share/nginx/html

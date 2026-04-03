@@ -156,6 +156,7 @@ export interface BatchDeleteSubscriptionsResponse {
 }
 
 export interface FeedRefreshJob {
+  run_id?: string
   subscription_id?: string
   feed_id: string
   job_id: string
@@ -164,6 +165,7 @@ export interface FeedRefreshJob {
 
 export interface RefreshFeedResponse {
   status: string
+  run_id?: string
   job_id: string
   feed_id: string
   feed_title?: string
@@ -199,4 +201,62 @@ export interface RefreshStatusItem {
 
 export interface RefreshStatusResponse {
   items: RefreshStatusItem[]
+}
+
+export interface FeedFetchStageEvent {
+  id: string
+  stage_order: number
+  stage_name: string
+  status: string
+  started_at: string | null
+  finished_at: string | null
+  summary: string | null
+  metrics_json: Record<string, unknown> | null
+}
+
+export interface FeedFetchRun {
+  id: string
+  feed_id: string
+  job_id: string | null
+  trigger_type: string
+  status: string
+  current_stage: string | null
+  path_kind: string | null
+  profile_key: string | null
+  queue_entered_at: string | null
+  predicted_start_at: string | null
+  predicted_finish_at: string | null
+  started_at: string | null
+  finished_at: string | null
+  summary_json: Record<string, unknown> | null
+  error_message: string | null
+  created_at: string | null
+  updated_at: string | null
+  next_fetch_at: string | null
+  last_fetch_attempt_at: string | null
+  last_fetch_success_at: string | null
+  last_fetched_at: string | null
+  stages: FeedFetchStageEvent[]
+}
+
+export interface FeedFetchLatestRunResponse extends Partial<FeedFetchRun> {
+  feed_id: string
+  next_fetch_at: string | null
+  last_fetch_attempt_at: string | null
+  last_fetch_success_at: string | null
+  last_fetched_at: string | null
+  stages: FeedFetchStageEvent[]
+}
+
+export interface FeedFetchRunHistoryResponse {
+  feed_id: string
+  next_fetch_at: string | null
+  last_fetch_attempt_at?: string | null
+  last_fetch_success_at?: string | null
+  last_fetched_at?: string | null
+  items: FeedFetchRun[]
+}
+
+export interface FeedFetchRunBatchLatestResponse {
+  items: FeedFetchLatestRunResponse[]
 }

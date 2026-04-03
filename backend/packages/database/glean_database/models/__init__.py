@@ -13,6 +13,8 @@ from .discovery_feedback import DiscoveryFeedback
 from .entry import Entry
 from .entry_translation import EntryTranslation
 from .feed import Feed, FeedStatus
+from .feed_fetch_run import FeedFetchRun
+from .feed_fetch_stage_event import FeedFetchStageEvent
 from .folder import Folder, FolderType
 from .junction import BookmarkFolder, BookmarkTag, UserEntryTag
 from .subscription import Subscription
@@ -29,6 +31,8 @@ __all__ = [
     "UserAuthProvider",
     "Feed",
     "FeedStatus",
+    "FeedFetchRun",
+    "FeedFetchStageEvent",
     "Entry",
     "Subscription",
     "UserEntry",

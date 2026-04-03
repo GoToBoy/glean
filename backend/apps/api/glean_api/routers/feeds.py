@@ -6,14 +6,15 @@ Provides endpoints for feed discovery, subscription management, and OPML import/
 
 import logging
 from datetime import UTC, datetime
-from uuid import UUID
 from typing import Annotated
+from uuid import UUID
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from glean_core.schemas import (
     BatchDeleteSubscriptionsRequest,
@@ -29,17 +30,18 @@ from glean_core.schemas import (
 )
 from glean_core.services import FeedService, FolderService, RSSHubService
 from glean_core.services.feed_service import UNSET
-from glean_database.models import Feed, Subscription
+from glean_database.models import Feed, FeedFetchRun, Subscription
 from glean_database.session import get_session
 from glean_rss import discover_feed, fetch_feed, generate_opml, parse_feed, parse_opml_with_folders
 
-from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 from ..dependencies import (
     get_current_user,
     get_feed_service,
     get_folder_service,
     get_redis_pool,
 )
+from ..feed_fetch_progress import load_latest_feed_fetch_runs, serialize_feed_fetch_run
+from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -69,6 +71,12 @@ class RefreshStatusRequest(BaseModel):
     """Refresh status query payload."""
 
     items: list[RefreshJobItem]
+
+
+class FeedFetchRunBatchRequest(BaseModel):
+    """Batch latest-run query payload."""
+
+    feed_ids: list[str] = Field(default_factory=list)
 
 
 @router.get("")
@@ -175,6 +183,7 @@ async def discover_feed_url(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> SubscriptionResponse:
     """
     Discover and subscribe to a feed from URL.
@@ -263,9 +272,14 @@ async def discover_feed_url(
             rsshub_path,
         )
 
-        # Always enqueue one fetch for each new subscription so first-time subscribers
-        # can sync current feed entries even when the shared feed was fetched before.
-        await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+        await enqueue_feed_refresh_job(
+            session=session,
+            redis=redis,
+            feed_id=subscription.feed.id,
+            feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
+            trigger_type="subscription_bootstrap",
+            subscription_id=subscription.id,
+        )
 
         return subscription
     except ValueError as e:
@@ -421,9 +435,11 @@ async def refresh_feed(
     try:
         subscription = await feed_service.get_subscription(str(subscription_id), current_user.id)
         job_payload = await enqueue_feed_refresh_job(
+            session=session,
             redis=redis,
             feed_id=subscription.feed.id,
             feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
+            trigger_type="manual_user",
             backfill_existing_entries=True,
         )
         feed = await session.get(Feed, subscription.feed.id)
@@ -458,14 +474,17 @@ async def refresh_all_feeds(
     jobs: list[dict[str, str]] = []
     queued_feed_ids: set[str] = set()
 
-    for subscription in subscriptions:
+    for index, subscription in enumerate(subscriptions):
         jobs.append(
             await enqueue_feed_refresh_job(
+                session=session,
                 redis=redis,
                 feed_id=subscription.feed.id,
                 feed_title=subscription.custom_title or subscription.feed.title or subscription.feed.url,
+                trigger_type="manual_user",
                 subscription_id=subscription.id,
                 backfill_existing_entries=True,
+                queue_depth_ahead=index,
             )
         )
         queued_count += 1
@@ -525,6 +544,163 @@ async def get_refresh_status(
     return {"items": status_items}
 
 
+@router.get("/{feed_id}/fetch-runs/latest")
+async def get_latest_feed_fetch_run(
+    feed_id: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object | None]:
+    """Return the latest persisted fetch run for one user-owned feed."""
+    ownership_result = await session.execute(
+        select(Subscription.id).where(
+            Subscription.user_id == current_user.id,
+            Subscription.feed_id == feed_id,
+        )
+    )
+    if ownership_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    feed = await session.get(Feed, feed_id)
+    if feed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    result = await session.execute(
+        select(FeedFetchRun)
+        .options(selectinload(FeedFetchRun.stage_events))
+        .where(FeedFetchRun.feed_id == feed_id)
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(1)
+    )
+    latest_run = result.scalar_one_or_none()
+    if latest_run is None:
+        return {
+            "feed_id": feed_id,
+            "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+            "last_fetch_attempt_at": feed.last_fetch_attempt_at.isoformat()
+            if feed.last_fetch_attempt_at
+            else None,
+            "last_fetch_success_at": feed.last_fetch_success_at.isoformat()
+            if feed.last_fetch_success_at
+            else None,
+            "last_fetched_at": feed.last_fetched_at.isoformat() if feed.last_fetched_at else None,
+            "stages": [],
+        }
+    return serialize_feed_fetch_run(
+        latest_run,
+        next_fetch_at=feed.next_fetch_at,
+        last_fetch_attempt_at=feed.last_fetch_attempt_at,
+        last_fetch_success_at=feed.last_fetch_success_at,
+        last_fetched_at=feed.last_fetched_at,
+    )
+
+
+@router.post("/fetch-runs/latest")
+async def get_latest_feed_fetch_runs(
+    request: FeedFetchRunBatchRequest,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, list[dict[str, object | None]]]:
+    """Return latest persisted fetch run snapshots for many user-owned feeds."""
+    if not request.feed_ids:
+        return {"items": []}
+
+    requested_feed_ids = list(dict.fromkeys(request.feed_ids))
+    ownership_result = await session.execute(
+        select(Subscription.feed_id).where(
+            Subscription.user_id == current_user.id,
+            Subscription.feed_id.in_(requested_feed_ids),
+        )
+    )
+    allowed_feed_ids = ownership_result.scalars().all()
+    if not allowed_feed_ids:
+        return {"items": []}
+
+    feeds_result = await session.execute(select(Feed).where(Feed.id.in_(allowed_feed_ids)))
+    feeds = {feed.id: feed for feed in feeds_result.scalars().all()}
+    latest_by_feed = await load_latest_feed_fetch_runs(session, allowed_feed_ids)
+
+    items: list[dict[str, object | None]] = []
+    for feed_id in requested_feed_ids:
+        feed = feeds.get(feed_id)
+        if feed is None:
+            continue
+        latest_run = latest_by_feed.get(feed_id)
+        if latest_run is None:
+            items.append(
+                {
+                    "feed_id": feed_id,
+                    "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+                    "last_fetch_attempt_at": feed.last_fetch_attempt_at.isoformat()
+                    if feed.last_fetch_attempt_at
+                    else None,
+                    "last_fetch_success_at": feed.last_fetch_success_at.isoformat()
+                    if feed.last_fetch_success_at
+                    else None,
+                    "last_fetched_at": feed.last_fetched_at.isoformat()
+                    if feed.last_fetched_at
+                    else None,
+                    "stages": [],
+                }
+            )
+            continue
+        items.append(
+            serialize_feed_fetch_run(
+                latest_run,
+                next_fetch_at=feed.next_fetch_at,
+                last_fetch_attempt_at=feed.last_fetch_attempt_at,
+                last_fetch_success_at=feed.last_fetch_success_at,
+                last_fetched_at=feed.last_fetched_at,
+                include_stages=False,
+            )
+        )
+
+    return {"items": items}
+
+
+@router.get("/{feed_id}/fetch-runs/history")
+async def get_feed_fetch_run_history(
+    feed_id: str,
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object]:
+    """Return recent persisted fetch run history for one user-owned feed."""
+    ownership_result = await session.execute(
+        select(Subscription.id).where(
+            Subscription.user_id == current_user.id,
+            Subscription.feed_id == feed_id,
+        )
+    )
+    if ownership_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    feed = await session.get(Feed, feed_id)
+    if feed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    result = await session.execute(
+        select(FeedFetchRun)
+        .options(selectinload(FeedFetchRun.stage_events))
+        .where(FeedFetchRun.feed_id == feed_id)
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(10)
+    )
+    runs = result.scalars().all()
+    return {
+        "feed_id": feed_id,
+        "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+        "items": [
+            serialize_feed_fetch_run(
+                run,
+                next_fetch_at=feed.next_fetch_at,
+                last_fetch_attempt_at=feed.last_fetch_attempt_at,
+                last_fetch_success_at=feed.last_fetch_success_at,
+                last_fetched_at=feed.last_fetched_at,
+            )
+            for run in runs
+        ],
+    }
+
+
 @router.post("/import")
 async def import_opml(
     file: UploadFile,
@@ -532,6 +708,7 @@ async def import_opml(
     feed_service: Annotated[FeedService, Depends(get_feed_service)],
     folder_service: Annotated[FolderService, Depends(get_folder_service)],
     redis: Annotated[ArqRedis, Depends(get_redis_pool)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> dict[str, int]:
     """
     Import subscriptions from OPML file with folder structure.
@@ -629,8 +806,16 @@ async def import_opml(
                     desired_title_by_url[feed_url],
                     folder_id,
                 )
-                # Same behavior as single subscribe: enqueue one fetch per new subscription.
-                await redis.enqueue_job("fetch_feed_task", subscription.feed.id)
+                await enqueue_feed_refresh_job(
+                    session=session,
+                    redis=redis,
+                    feed_id=subscription.feed.id,
+                    feed_title=subscription.custom_title
+                    or subscription.feed.title
+                    or subscription.feed.url,
+                    trigger_type="subscription_bootstrap",
+                    subscription_id=subscription.id,
+                )
                 success_count += 1
             except ValueError:
                 # Invalid feed or other create failure

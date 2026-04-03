@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   useFeeds,
+  useLatestFeedFetchRun,
+  useLatestFeedFetchRuns,
+  useFeedFetchRunHistory,
   useResetFeedError,
   useUpdateFeed,
   useDeleteFeed,
@@ -42,6 +45,15 @@ import {
   SelectValue,
   SelectContent,
   SelectItem,
+  Sheet,
+  SheetHeader,
+  SheetPanel,
+  SheetPopup,
+  SheetTitle,
+  SheetDescription,
+  SheetTrigger,
+  FeedFetchProgress,
+  FeedFetchInlineStatus,
 } from '@glean/ui'
 import {
   Search,
@@ -59,9 +71,17 @@ import {
   CheckSquare,
   Square,
   Wand2,
+  Activity,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
+import {
+  buildFeedFetchHistoryItems,
+  buildFeedFetchProgressDetails,
+  mapFeedFetchRunToViewModel,
+  mapFeedFetchStageEventsToItems,
+} from '@glean/api-client'
+import type { FeedFetchLatestRunResponse } from '@glean/types'
 
 type FeedStatus = 'all' | 'active' | 'disabled' | 'error'
 
@@ -133,6 +153,11 @@ export default function FeedsPage() {
   const enqueueBackfillMutation = useEnqueueFeedContentBackfill()
 
   const currentPageIds = useMemo(() => data?.items.map((f) => f.id) ?? [], [data?.items])
+  const latestRunsQuery = useLatestFeedFetchRuns(currentPageIds, currentPageIds.length > 0)
+  const latestRunsByFeedId = useMemo(
+    () => new Map((latestRunsQuery.data?.items ?? []).map((item) => [item.feed_id, item])),
+    [latestRunsQuery.data?.items]
+  )
   const allCurrentPageSelected =
     currentPageIds.length > 0 && currentPageIds.every((id) => selectedIds.has(id))
 
@@ -686,6 +711,8 @@ export default function FeedsPage() {
                 ) : data && data.items.length > 0 ? (
                   data.items.map((feed) => {
                     const refreshState = feedRefreshState[feed.id]
+                    const latestRun = latestRunsByFeedId.get(feed.id)
+                    const latestViewModel = mapFeedFetchRunToViewModel(latestRun)
                     const isRefreshing = !!refreshState && isPendingRefreshStatus(refreshState.status)
                     const effectiveLastFetchAttemptAt =
                       refreshState?.lastFetchAttemptAt ??
@@ -800,6 +827,20 @@ export default function FeedsPage() {
                                 )}
                               </div>
                             )}
+                            {latestViewModel && (
+                              <div className="mt-2">
+                                <FeedFetchInlineStatus
+                                  statusLabel={latestViewModel.statusLabel}
+                                  stageLabel={latestViewModel.stageLabel}
+                                  stageProgressLabel={latestViewModel.stageProgressLabel}
+                                  progressPercent={latestViewModel.progressPercent}
+                                  summaryText={latestViewModel.summaryText}
+                                  estimatedStartLabel={latestViewModel.estimatedStartLabel}
+                                  estimatedFinishLabel={latestViewModel.estimatedFinishLabel}
+                                  nextFetchLabel={latestViewModel.nextFetchLabel}
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
                       </td>
@@ -823,6 +864,11 @@ export default function FeedsPage() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2">
+                          <FeedFetchProgressButton
+                            feed={feed}
+                            refreshState={refreshState}
+                            initialLatestRun={latestRun}
+                          />
                           {/* Reset error button - only show if there are errors */}
                           {feed.error_count > 0 && (
                             <Button
@@ -1236,5 +1282,92 @@ export default function FeedsPage() {
         </DialogPopup>
       </Dialog>
     </div>
+  )
+}
+
+function FeedFetchProgressButton({
+  feed,
+  refreshState,
+  initialLatestRun,
+}: {
+  feed: AdminFeed
+  refreshState?: FeedRefreshState
+  initialLatestRun?: FeedFetchLatestRunResponse
+}) {
+  const [open, setOpen] = useState(false)
+  const latestRunQuery = useLatestFeedFetchRun(feed.id, open)
+  const historyQuery = useFeedFetchRunHistory(feed.id, open)
+  const latestRun = latestRunQuery.data ?? initialLatestRun
+  const viewModel = mapFeedFetchRunToViewModel(latestRun)
+
+  const details = buildFeedFetchProgressDetails({
+    latestRun,
+    fallbackLastFinishedAt: feed.last_fetched_at,
+    fallbackLastSuccessAt: feed.last_fetch_success_at,
+  })
+  const historyItems = buildFeedFetchHistoryItems(historyQuery.data)
+
+  const isActiveRefresh =
+    !!refreshState &&
+    (refreshState.status === 'queued' ||
+      refreshState.status === 'deferred' ||
+      refreshState.status === 'in_progress')
+
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger
+        render={
+          <Button
+            size="icon"
+            variant="outline"
+            title="Fetch progress"
+            className={isActiveRefresh ? 'border-primary/50 text-primary' : undefined}
+          >
+            <Activity className={`h-4 w-4 ${isActiveRefresh ? 'animate-pulse' : ''}`} />
+          </Button>
+        }
+      />
+      <SheetPopup side="right" inset className="max-w-2xl">
+        <SheetHeader>
+          <SheetTitle>{feed.title || feed.url}</SheetTitle>
+          <SheetDescription>Feed fetch progress, ETA, stage details, and recent history.</SheetDescription>
+        </SheetHeader>
+        <SheetPanel className="space-y-4">
+          {latestRunQuery.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-28 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : viewModel ? (
+            <FeedFetchProgress
+              title="Current run"
+              statusLabel={viewModel.statusLabel}
+              stageLabel={viewModel.stageLabel}
+              stageProgressLabel={viewModel.stageProgressLabel}
+              progressPercent={viewModel.progressPercent}
+              summaryText={viewModel.summaryText}
+              estimatedStartLabel={viewModel.estimatedStartLabel}
+              estimatedFinishLabel={viewModel.estimatedFinishLabel}
+              predictionLabel={viewModel.predictionLabel}
+              stages={mapFeedFetchStageEventsToItems(latestRun?.stages)}
+              details={details}
+              history={historyItems}
+              historyLoading={historyQuery.isFetching && !historyQuery.data}
+            />
+          ) : (
+            <FeedFetchProgress
+              title="Current run"
+              statusLabel="Not started"
+              stageLabel="No persisted fetch run yet"
+              progressPercent={0}
+              summaryText={null}
+              details={details}
+              history={historyItems}
+              historyLoading={historyQuery.isFetching && !historyQuery.data}
+            />
+          )}
+        </SheetPanel>
+      </SheetPopup>
+    </Sheet>
   )
 }

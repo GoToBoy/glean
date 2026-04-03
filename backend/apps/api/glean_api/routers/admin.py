@@ -14,6 +14,7 @@ from jose import jwt
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from glean_core.schemas import (
     EmbeddingConfigUpdateRequest,
@@ -44,7 +45,7 @@ from glean_core.schemas.admin import (
     UserListResponse,
 )
 from glean_core.services import AdminService, TypedConfigService
-from glean_database.models import Feed
+from glean_database.models import Feed, FeedFetchRun
 from glean_database.session import get_session
 
 from ..config import settings
@@ -54,6 +55,7 @@ from ..dependencies import (
     get_redis_pool,
     get_typed_config_service,
 )
+from ..feed_fetch_progress import load_latest_feed_fetch_runs, serialize_feed_fetch_run
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 
 router = APIRouter()
@@ -70,6 +72,12 @@ class AdminRefreshStatusRequest(BaseModel):
     """Admin refresh status query payload."""
 
     items: list[AdminRefreshJobItem]
+
+
+class AdminFeedFetchRunBatchRequest(BaseModel):
+    """Admin batch latest-run query payload."""
+
+    feed_ids: list[str] = Field(default_factory=list)
 
 
 @router.post("/auth/login", response_model=AdminLoginResponse)
@@ -622,9 +630,11 @@ async def refresh_feed_now(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
 
     job_payload = await enqueue_feed_refresh_job(
+        session=session,
         redis=redis,
         feed_id=feed_id,
         feed_title=feed.get("title") or feed.get("url") or feed_id,
+        trigger_type="manual_admin",
         backfill_existing_entries=True,
     )
     db_feed = await session.get(Feed, feed_id)
@@ -721,13 +731,16 @@ async def refresh_all_feeds_now(
 
     jobs: list[dict[str, str]] = []
     queued_feed_ids: set[str] = set()
-    for feed in feeds:
+    for index, feed in enumerate(feeds):
         jobs.append(
             await enqueue_feed_refresh_job(
+                session=session,
                 redis=redis,
                 feed_id=feed.id,
                 feed_title=feed.title or feed.url,
+                trigger_type="manual_admin",
                 backfill_existing_entries=True,
+                queue_depth_ahead=index,
             )
         )
         queued_feed_ids.add(feed.id)
@@ -756,13 +769,16 @@ async def refresh_errored_feeds_now(
 
     jobs: list[dict[str, str]] = []
     queued_feed_ids: set[str] = set()
-    for feed in feeds:
+    for index, feed in enumerate(feeds):
         jobs.append(
             await enqueue_feed_refresh_job(
+                session=session,
                 redis=redis,
                 feed_id=feed.id,
                 feed_title=feed.title or feed.url,
+                trigger_type="manual_admin",
                 backfill_existing_entries=True,
+                queue_depth_ahead=index,
             )
         )
         queued_feed_ids.add(feed.id)
@@ -800,6 +816,134 @@ async def refresh_status(
     )
 
     return {"items": items}
+
+
+@router.get("/feeds/{feed_id}/fetch-runs/latest")
+async def get_latest_feed_fetch_run_admin(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object | None]:
+    """Return the latest persisted fetch run for one feed."""
+    feed = await session.get(Feed, feed_id)
+    if feed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    result = await session.execute(
+        select(FeedFetchRun)
+        .options(selectinload(FeedFetchRun.stage_events))
+        .where(FeedFetchRun.feed_id == feed_id)
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(1)
+    )
+    latest_run = result.scalar_one_or_none()
+    if latest_run is None:
+        return {
+            "feed_id": feed_id,
+            "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+            "last_fetch_attempt_at": feed.last_fetch_attempt_at.isoformat()
+            if feed.last_fetch_attempt_at
+            else None,
+            "last_fetch_success_at": feed.last_fetch_success_at.isoformat()
+            if feed.last_fetch_success_at
+            else None,
+            "last_fetched_at": feed.last_fetched_at.isoformat() if feed.last_fetched_at else None,
+            "stages": [],
+        }
+    return serialize_feed_fetch_run(
+        latest_run,
+        next_fetch_at=feed.next_fetch_at,
+        last_fetch_attempt_at=feed.last_fetch_attempt_at,
+        last_fetch_success_at=feed.last_fetch_success_at,
+        last_fetched_at=feed.last_fetched_at,
+    )
+
+
+@router.post("/feeds/fetch-runs/latest")
+async def get_latest_feed_fetch_runs_admin(
+    request: AdminFeedFetchRunBatchRequest,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, list[dict[str, object | None]]]:
+    """Return latest persisted fetch run snapshots for many feeds."""
+    if not request.feed_ids:
+        return {"items": []}
+
+    requested_feed_ids = list(dict.fromkeys(request.feed_ids))
+    feeds_result = await session.execute(select(Feed).where(Feed.id.in_(requested_feed_ids)))
+    feeds = {feed.id: feed for feed in feeds_result.scalars().all()}
+    latest_by_feed = await load_latest_feed_fetch_runs(session, list(feeds.keys()))
+
+    items: list[dict[str, object | None]] = []
+    for feed_id in requested_feed_ids:
+        feed = feeds.get(feed_id)
+        if feed is None:
+            continue
+        latest_run = latest_by_feed.get(feed_id)
+        if latest_run is None:
+            items.append(
+                {
+                    "feed_id": feed_id,
+                    "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+                    "last_fetch_attempt_at": feed.last_fetch_attempt_at.isoformat()
+                    if feed.last_fetch_attempt_at
+                    else None,
+                    "last_fetch_success_at": feed.last_fetch_success_at.isoformat()
+                    if feed.last_fetch_success_at
+                    else None,
+                    "last_fetched_at": feed.last_fetched_at.isoformat()
+                    if feed.last_fetched_at
+                    else None,
+                    "stages": [],
+                }
+            )
+            continue
+        items.append(
+            serialize_feed_fetch_run(
+                latest_run,
+                next_fetch_at=feed.next_fetch_at,
+                last_fetch_attempt_at=feed.last_fetch_attempt_at,
+                last_fetch_success_at=feed.last_fetch_success_at,
+                last_fetched_at=feed.last_fetched_at,
+                include_stages=False,
+            )
+        )
+    return {"items": items}
+
+
+@router.get("/feeds/{feed_id}/fetch-runs/history")
+async def get_feed_fetch_run_history_admin(
+    feed_id: str,
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, object]:
+    """Return recent persisted fetch run history for one feed."""
+    feed = await session.get(Feed, feed_id)
+    if feed is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Feed not found")
+
+    result = await session.execute(
+        select(FeedFetchRun)
+        .options(selectinload(FeedFetchRun.stage_events))
+        .where(FeedFetchRun.feed_id == feed_id)
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(10)
+    )
+    runs = result.scalars().all()
+    return {
+        "feed_id": feed_id,
+        "next_fetch_at": feed.next_fetch_at.isoformat() if feed.next_fetch_at else None,
+        "items": [
+            serialize_feed_fetch_run(
+                run,
+                next_fetch_at=feed.next_fetch_at,
+                last_fetch_attempt_at=feed.last_fetch_attempt_at,
+                last_fetch_success_at=feed.last_fetch_success_at,
+                last_fetched_at=feed.last_fetched_at,
+            )
+            for run in runs
+        ],
+    }
 
 
 # M2: Entry management endpoints

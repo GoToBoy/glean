@@ -8,6 +8,21 @@ export { AuthService } from './services/auth'
 export { FeedService } from './services/feeds'
 export { EntryService } from './services/entries'
 export { DiscoverService } from './services/discover'
+export {
+  FEED_FETCH_STAGE_SEQUENCE,
+  buildFeedFetchHistoryItems,
+  buildFeedFetchProgressDetails,
+  formatFeedFetchDateTime,
+  formatFeedFetchDuration,
+  formatFeedFetchStageLabel,
+  getFeedFetchStatusLabel,
+  mapFeedFetchRunToViewModel,
+  mapFeedFetchStageEventsToItems,
+  type FeedFetchProgressDetailItem,
+  type FeedFetchProgressHistoryItem,
+  type FeedFetchProgressViewModel,
+  type FeedFetchProgressStageItem,
+} from './feed-fetch-progress'
 // M2 services
 export { FolderService } from './services/folders'
 export { TagService } from './services/tags'

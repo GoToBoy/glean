@@ -149,6 +149,38 @@ describe('FeedService', () => {
     expect(result).toEqual(response)
   })
 
+  it('should fetch latest feed fetch run', async () => {
+    const response = { id: 'run-1', feed_id: 'f1', stages: [] }
+    vi.mocked(mockClient.get).mockResolvedValue(response)
+
+    const result = await service.getLatestFeedFetchRun('f1')
+
+    expect(mockClient.get).toHaveBeenCalledWith('/feeds/f1/fetch-runs/latest')
+    expect(result).toEqual(response)
+  })
+
+  it('should fetch latest feed fetch runs in batch', async () => {
+    const response = { items: [{ feed_id: 'f1', stages: [] }] }
+    vi.mocked(mockClient.post).mockResolvedValue(response)
+
+    const result = await service.getLatestFeedFetchRuns(['f1'])
+
+    expect(mockClient.post).toHaveBeenCalledWith('/feeds/fetch-runs/latest', {
+      feed_ids: ['f1'],
+    })
+    expect(result).toEqual(response)
+  })
+
+  it('should fetch feed fetch run history', async () => {
+    const response = { feed_id: 'f1', next_fetch_at: null, items: [] }
+    vi.mocked(mockClient.get).mockResolvedValue(response)
+
+    const result = await service.getFeedFetchRunHistory('f1')
+
+    expect(mockClient.get).toHaveBeenCalledWith('/feeds/f1/fetch-runs/history')
+    expect(result).toEqual(response)
+  })
+
   it('should import OPML', async () => {
     const response = { imported: 3, skipped: 1 }
     vi.mocked(mockClient.post).mockResolvedValue(response)

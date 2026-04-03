@@ -32,13 +32,16 @@ class MockArqRedis:
 
     def __init__(self):
         self.enqueued_jobs: list[tuple[str, tuple[Any, ...]]] = []
+        self._job_counter = 0
         self._store: dict[str, Any] = {}
         self._ttl: dict[str, int] = {}
         self._incr_counts: dict[str, int] = {}
 
-    async def enqueue_job(self, func_name: str, *args: Any, **kwargs: Any) -> None:
+    async def enqueue_job(self, func_name: str, *args: Any, **kwargs: Any) -> Any:
         """Mock enqueue_job that records calls without actually queuing."""
         self.enqueued_jobs.append((func_name, args))
+        self._job_counter += 1
+        return type("MockArqJob", (), {"job_id": f"mock-job-{self._job_counter}"})()
 
     async def setex(self, key: str, ttl_seconds: int, value: Any) -> bool:
         self._store[key] = value
@@ -81,6 +84,7 @@ class MockArqRedis:
     def reset(self) -> None:
         """Reset all in-memory redis state."""
         self.enqueued_jobs.clear()
+        self._job_counter = 0
         self._store.clear()
         self._ttl.clear()
         self._incr_counts.clear()

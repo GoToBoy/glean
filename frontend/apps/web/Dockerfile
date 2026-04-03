@@ -1,7 +1,10 @@
 # Frontend Dockerfile for Glean Web App
 
+ARG NODE_IMAGE=node:24-alpine
+ARG NGINX_IMAGE=nginx:alpine
+
 # Build stage
-FROM node:24-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 
 ARG NPM_REGISTRY=https://registry.npmjs.org/
 ARG PNPM_REGISTRY=${NPM_REGISTRY}
@@ -31,7 +34,7 @@ RUN pnpm --filter=@glean/web lint \
 RUN pnpm --filter=@glean/web compress:assets
 
 # Production stage
-FROM nginx:alpine
+FROM ${NGINX_IMAGE}
 
 # Copy built files
 COPY --from=builder /app/apps/web/dist /usr/share/nginx/html

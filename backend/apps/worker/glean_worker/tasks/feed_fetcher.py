@@ -14,14 +14,26 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from glean_api.feed_fetch_progress import create_estimated_queued_feed_fetch_run
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import RSSHubService, TypedConfigService
 from glean_database.models import Entry, Feed, FeedStatus
 from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
+
 from ..config import settings
 from .content_extraction import extract_entry_content_update, should_backfill_entry
+from .feed_fetch_progress import (
+    advance_feed_fetch_stage,
+    build_feed_fetch_summary,
+    classify_feed_fetch_path_kind,
+    finalize_feed_fetch_run,
+    get_profile_key_for_path,
+    load_feed_fetch_run,
+    refresh_running_eta,
+    start_feed_fetch_run,
+)
 
 logger = get_logger(__name__)
 MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
@@ -64,7 +76,11 @@ async def _is_vectorization_enabled(session: AsyncSession) -> bool:
 
 
 async def fetch_feed_task(
-    ctx: dict[str, Any], feed_id: str, backfill_existing_entries: bool = False
+    ctx: dict[str, Any],
+    feed_id: str,
+    backfill_existing_entries: bool = False,
+    run_id: str | None = None,
+    trigger_type: str | None = None,
 ) -> dict[str, str | int]:
     """
     Fetch and parse a single RSS feed.
@@ -77,6 +93,18 @@ async def fetch_feed_task(
         Dictionary with fetch results.
     """
     async with get_session_context() as session:
+        effective_run_id = run_id or ctx.get("run_id")
+        effective_trigger_type = trigger_type or ctx.get("trigger_type")
+        persisted_run = await load_feed_fetch_run(session, effective_run_id)
+        active_stage = await start_feed_fetch_run(
+            session,
+            persisted_run,
+            trigger_type=effective_trigger_type,
+        )
+        run_summary = build_feed_fetch_summary()
+        fallback_urls: list[str] = []
+        used_url = ""
+
         try:
             fetch_attempt_at = datetime.now(UTC)
 
@@ -86,6 +114,19 @@ async def fetch_feed_task(
             feed = result.scalar_one_or_none()
 
             if not feed:
+                await finalize_feed_fetch_run(
+                    session,
+                    persisted_run,
+                    active_stage,
+                    run_status="error",
+                    summary_json=run_summary,
+                    error_message="Feed not found",
+                    active_stage_status="error",
+                    active_stage_summary="Feed row could not be loaded.",
+                    completion_summary="Feed fetch failed before processing started.",
+                    completion_metrics_json=run_summary,
+                    skipped_stage_summary="Skipped because the feed no longer exists.",
+                )
                 logger.error("Feed not found", extra={"feed_id": feed_id})
                 return {"status": "error", "message": "Feed not found"}
 
@@ -102,7 +143,17 @@ async def fetch_feed_task(
                 if fallback_url not in attempt_urls:
                     attempt_urls.append(fallback_url)
 
+            active_stage = await advance_feed_fetch_stage(
+                session,
+                persisted_run,
+                active_stage,
+                "fetch_xml",
+                summary="Resolved candidate feed URLs.",
+                metrics_json={"attempt_url_count": len(attempt_urls)},
+            )
+
             parsed_feed = None
+            feed_content: str | bytes | None = None
             cache_headers: dict[str, str] | None = None
             used_url = feed.url
             last_error: Exception | None = None
@@ -127,10 +178,33 @@ async def fetch_feed_task(
                         feed.last_fetch_success_at = fetch_attempt_at
                         feed.last_fetched_at = fetch_attempt_at
                         feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                        run_summary["used_url"] = attempt_url
+                        run_summary["fallback_used"] = attempt_url != feed.url
+                        if persisted_run is not None:
+                            persisted_run.path_kind = classify_feed_fetch_path_kind(
+                                feed_url=feed.url,
+                                used_url=attempt_url,
+                                fallback_urls=fallback_urls,
+                            )
+                            persisted_run.profile_key = get_profile_key_for_path(
+                                persisted_run.path_kind,
+                                attempt_url,
+                            )
+                        await finalize_feed_fetch_run(
+                            session,
+                            persisted_run,
+                            active_stage,
+                            run_status="not_modified",
+                            summary_json=run_summary,
+                            active_stage_summary="Feed returned 304 Not Modified.",
+                            completion_summary="Feed fetch completed with no content changes.",
+                            completion_metrics_json=run_summary,
+                            skipped_stage_summary="Skipped because the feed was not modified.",
+                        )
                         return {"status": "not_modified", "new_entries": 0}
 
                     content, headers = fetch_result
-                    parsed_feed = await parse_feed(content, attempt_url)
+                    feed_content = content
                     cache_headers = headers
                     used_url = attempt_url
                     break
@@ -142,10 +216,32 @@ async def fetch_feed_task(
                     )
                     continue
 
-            if parsed_feed is None:
+            if feed_content is None:
                 if last_error:
                     raise last_error
                 raise ValueError("Failed to fetch and parse feed")
+
+            path_kind = classify_feed_fetch_path_kind(
+                feed_url=feed.url,
+                used_url=used_url,
+                fallback_urls=fallback_urls,
+            )
+            run_summary["used_url"] = used_url
+            run_summary["fallback_used"] = used_url != feed.url
+            if persisted_run is not None:
+                persisted_run.path_kind = path_kind
+                persisted_run.profile_key = get_profile_key_for_path(path_kind, used_url)
+                await refresh_running_eta(session, persisted_run, active_stage)
+
+            active_stage = await advance_feed_fetch_stage(
+                session,
+                persisted_run,
+                active_stage,
+                "parse_feed",
+                summary="Fetched feed XML successfully.",
+                metrics_json={"path_kind": path_kind},
+            )
+            parsed_feed = await parse_feed(feed_content, used_url)
 
             if used_url != feed.url:
                 logger.info(
@@ -172,6 +268,16 @@ async def fetch_feed_task(
             if used_url == feed.url and cache_headers and "last-modified" in cache_headers:
                 feed.last_modified = cache_headers["last-modified"]
 
+            run_summary["total_entries"] = len(parsed_feed.entries)
+            active_stage = await advance_feed_fetch_stage(
+                session,
+                persisted_run,
+                active_stage,
+                "process_entries",
+                summary="Parsed feed payload.",
+                metrics_json={"total_entries": run_summary["total_entries"]},
+            )
+
             # Process entries
             new_entries = 0
             latest_entry_time = feed.last_entry_at
@@ -190,11 +296,14 @@ async def fetch_feed_task(
                 # Determine content: fetch full text if feed only provides summary
                 entry_content = parsed_entry.content
                 content_source = "feed_fulltext" if parsed_entry.has_full_content else "feed_summary_only"
+                if not parsed_entry.has_full_content:
+                    run_summary["summary_only_count"] += 1
                 content_backfill_status = "done" if parsed_entry.has_full_content else "pending"
                 content_backfill_attempts = 0
                 content_backfill_error = None
                 content_backfill_at = None
                 if not parsed_entry.has_full_content and parsed_entry.url:
+                    run_summary["backfill_attempted_count"] += 1
                     try:
                         extraction_result = await extract_entry_content_update(parsed_entry.url)
                         content_backfill_attempts = 1
@@ -203,9 +312,14 @@ async def fetch_feed_task(
                             content_source = extraction_result.source
                             content_backfill_status = "done"
                             content_backfill_at = datetime.now(UTC)
+                            if extraction_result.source == "backfill_http":
+                                run_summary["backfill_success_http_count"] += 1
+                            elif extraction_result.source == "backfill_browser":
+                                run_summary["backfill_success_browser_count"] += 1
                         else:
                             content_backfill_status = "failed"
                             content_backfill_error = extraction_result.error or "empty_extraction"
+                            run_summary["backfill_failed_count"] += 1
                             logger.warning(
                                 "Entry content extraction failed for "
                                 f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
@@ -215,6 +329,7 @@ async def fetch_feed_task(
                         content_backfill_attempts = 1
                         content_backfill_status = "failed"
                         content_backfill_error = str(extract_err)
+                        run_summary["backfill_failed_count"] += 1
                         logger.warning(
                             "Entry content extraction raised for "
                             f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
@@ -281,6 +396,7 @@ async def fetch_feed_task(
 
                 new_entries += 1
                 pending_inserts_since_commit += 1
+                run_summary["new_entries"] = new_entries
 
                 # M3: Queue embedding task for new entry (only if vectorization enabled)
                 if vectorization_enabled:
@@ -296,12 +412,46 @@ async def fetch_feed_task(
                     await session.commit()
                     pending_inserts_since_commit = 0
 
+            active_stage = await advance_feed_fetch_stage(
+                session,
+                persisted_run,
+                active_stage,
+                "backfill_content",
+                summary="Finished entry backfill attempts.",
+                metrics_json={
+                    "backfill_attempted_count": run_summary["backfill_attempted_count"],
+                    "backfill_success_http_count": run_summary["backfill_success_http_count"],
+                    "backfill_success_browser_count": run_summary["backfill_success_browser_count"],
+                    "backfill_failed_count": run_summary["backfill_failed_count"],
+                },
+            )
+            active_stage = await advance_feed_fetch_stage(
+                session,
+                persisted_run,
+                active_stage,
+                "store_results",
+                summary="Processed feed entries.",
+                metrics_json=run_summary,
+            )
+
             # Update last_entry_at and schedule next fetch
             if latest_entry_time:
                 feed.last_entry_at = latest_entry_time
 
             # Schedule next fetch (15 minutes from now)
             feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+
+            await finalize_feed_fetch_run(
+                session,
+                persisted_run,
+                active_stage,
+                run_status="success",
+                summary_json=run_summary,
+                active_stage_summary="Stored feed updates.",
+                active_stage_metrics_json=run_summary,
+                completion_summary="Feed fetch completed successfully.",
+                completion_metrics_json=run_summary,
+            )
 
             logger.info(
                 "Feed fetch complete: "
@@ -323,6 +473,21 @@ async def fetch_feed_task(
                 f"feed_id={feed_id} timeout_s={settings.worker_job_timeout_seconds} "
                 f"cancelled_at_utc={datetime.now(UTC).isoformat()}"
             )
+            if persisted_run is not None:
+                await finalize_feed_fetch_run(
+                    session,
+                    persisted_run,
+                    active_stage,
+                    run_status="error",
+                    summary_json=run_summary,
+                    error_message="job_timeout",
+                    active_stage_status="error",
+                    active_stage_summary="Worker timed out while processing the feed.",
+                    completion_summary="Feed fetch timed out.",
+                    completion_metrics_json=run_summary,
+                    skipped_stage_summary="Skipped after the worker timed out.",
+                )
+                await session.commit()
             raise
         except Exception as e:
             logger.exception(
@@ -347,6 +512,29 @@ async def fetch_feed_task(
                     feed.fetch_error_message = None
                     feed.last_fetch_success_at = fetch_attempt_at
                     feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    if persisted_run is not None:
+                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
+                            feed_url=feed.url,
+                            used_url=used_url or feed.url,
+                            fallback_urls=fallback_urls,
+                        )
+                        persisted_run.path_kind = path_kind
+                        persisted_run.profile_key = get_profile_key_for_path(
+                            path_kind,
+                            used_url or feed.url,
+                        )
+                    await finalize_feed_fetch_run(
+                        session,
+                        persisted_run,
+                        active_stage,
+                        run_status="success",
+                        summary_json=run_summary,
+                        active_stage_status="error",
+                        active_stage_summary="Duplicate guid race detected.",
+                        completion_summary="Feed fetch finished after a duplicate-entry race.",
+                        completion_metrics_json=run_summary,
+                        skipped_stage_summary="Skipped after duplicate entry race.",
+                    )
                     await session.commit()
                     return {"status": "success", "feed_id": feed_id, "new_entries": 0, "total_entries": 0}
 
@@ -362,6 +550,30 @@ async def fetch_feed_task(
                         "Database index ix_entries_url is corrupted. Run REINDEX INDEX CONCURRENTLY ix_entries_url."
                     )
                     feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    if persisted_run is not None:
+                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
+                            feed_url=feed.url,
+                            used_url=used_url or feed.url,
+                            fallback_urls=fallback_urls,
+                        )
+                        persisted_run.path_kind = path_kind
+                        persisted_run.profile_key = get_profile_key_for_path(
+                            path_kind,
+                            used_url or feed.url,
+                        )
+                    await finalize_feed_fetch_run(
+                        session,
+                        persisted_run,
+                        active_stage,
+                        run_status="error",
+                        summary_json=run_summary,
+                        error_message="database_index_corrupted",
+                        active_stage_status="error",
+                        active_stage_summary="Database index corruption interrupted the run.",
+                        completion_summary="Feed fetch failed due to database index corruption.",
+                        completion_metrics_json=run_summary,
+                        skipped_stage_summary="Skipped after the infrastructure error.",
+                    )
                     await session.commit()
                     return {"status": "error", "message": "database_index_corrupted"}
 
@@ -379,6 +591,7 @@ async def fetch_feed_task(
                 # Schedule retry with exponential backoff
                 retry_minutes = min(60, 15 * (2 ** min(feed.error_count - 1, 5)))
                 feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=retry_minutes)
+                run_summary["retry_minutes"] = retry_minutes
 
                 logger.warning(
                     "Feed fetch scheduled for retry",
@@ -388,12 +601,36 @@ async def fetch_feed_task(
                         "error_count": feed.error_count,
                     },
                 )
+                if persisted_run is not None:
+                    path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
+                        feed_url=feed.url,
+                        used_url=used_url or feed.url,
+                        fallback_urls=fallback_urls,
+                    )
+                    persisted_run.path_kind = path_kind
+                    persisted_run.profile_key = get_profile_key_for_path(
+                        path_kind,
+                        used_url or feed.url,
+                    )
+                await finalize_feed_fetch_run(
+                    session,
+                    persisted_run,
+                    active_stage,
+                    run_status="error",
+                    summary_json=run_summary,
+                    error_message=str(e),
+                    active_stage_status="error",
+                    active_stage_summary="Worker stage failed and the run will be retried.",
+                    completion_summary="Feed fetch failed and was scheduled for retry.",
+                    completion_metrics_json=run_summary,
+                    skipped_stage_summary="Skipped after the worker stage failed.",
+                )
                 # Persist error status before raising Retry; otherwise context rollback
                 # would discard these updates.
                 await session.commit()
 
             # Retry the task
-            raise Retry(defer=timedelta(minutes=5)) from None
+            raise Retry(defer=timedelta(minutes=retry_minutes if feed else 5)) from None
 
 
 async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
@@ -416,12 +653,41 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
         result = await session.execute(stmt)
         feeds = result.scalars().all()
 
-        # Queue fetch tasks for each feed
+        # Queue tracked fetch tasks for each due feed so the UI can show ETA before
+        # the worker starts processing.
+        queued_count = 0
         for feed in feeds:
-            await ctx["redis"].enqueue_job("fetch_feed_task", feed.id)
+            try:
+                run, stage_event = await create_estimated_queued_feed_fetch_run(
+                    session,
+                    feed_id=feed.id,
+                    trigger_type="scheduled",
+                    queue_depth_ahead=queued_count,
+                )
+                session.add(run)
+                session.add(stage_event)
+                await session.flush()
 
-        logger.info("Queued due feeds for fetching", extra={"count": len(feeds)})
-        return {"feeds_queued": len(feeds)}
+                job = await ctx["redis"].enqueue_job(
+                    "fetch_feed_task",
+                    feed.id,
+                    run_id=run.id,
+                    trigger_type="scheduled",
+                )
+                job_id = getattr(job, "job_id", None) if job is not None else None
+                if not job_id:
+                    raise RuntimeError("Failed to enqueue scheduled feed refresh job")
+
+                run.job_id = job_id
+                feed.last_fetch_attempt_at = now
+                await session.commit()
+                queued_count += 1
+            except Exception:
+                await session.rollback()
+                logger.exception("Failed to queue scheduled feed", extra={"feed_id": feed.id})
+
+        logger.info("Queued due feeds for fetching", extra={"count": queued_count})
+        return {"feeds_queued": queued_count}
 
 
 async def scheduled_fetch(ctx: dict[str, Any]) -> dict[str, int]:

@@ -44,6 +44,8 @@ services:
       context: ./frontend
       dockerfile: apps/admin/Dockerfile
       args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:24-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
         PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com/}
     image: glean-admin:local
@@ -54,6 +56,8 @@ services:
       context: ./frontend
       dockerfile: apps/web/Dockerfile
       args:
+        NODE_IMAGE: ${NODE_IMAGE:-docker.m.daocloud.io/library/node:24-alpine}
+        NGINX_IMAGE: ${NGINX_IMAGE:-docker.m.daocloud.io/library/nginx:alpine}
         NPM_REGISTRY: ${NPM_REGISTRY:-https://registry.npmmirror.com/}
         PNPM_REGISTRY: ${PNPM_REGISTRY:-https://registry.npmmirror.com/}
     image: glean-web:local

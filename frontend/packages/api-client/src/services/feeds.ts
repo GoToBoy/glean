@@ -8,6 +8,9 @@ import type {
   OPMLImportResponse,
   BatchDeleteSubscriptionsRequest,
   BatchDeleteSubscriptionsResponse,
+  FeedFetchLatestRunResponse,
+  FeedFetchRunBatchLatestResponse,
+  FeedFetchRunHistoryResponse,
   RefreshAllFeedsResponse,
   RefreshFeedResponse,
   RefreshStatusRequest,
@@ -125,6 +128,29 @@ export class FeedService {
    */
   async getRefreshStatus(data: RefreshStatusRequest): Promise<RefreshStatusResponse> {
     return this.client.post<RefreshStatusResponse>('/feeds/refresh-status', data)
+  }
+
+  /**
+   * Get the latest persisted feed fetch run for one feed.
+   */
+  async getLatestFeedFetchRun(feedId: string): Promise<FeedFetchLatestRunResponse> {
+    return this.client.get<FeedFetchLatestRunResponse>(`/feeds/${feedId}/fetch-runs/latest`)
+  }
+
+  /**
+   * Get latest persisted fetch run snapshots for many feeds.
+   */
+  async getLatestFeedFetchRuns(feedIds: string[]): Promise<FeedFetchRunBatchLatestResponse> {
+    return this.client.post<FeedFetchRunBatchLatestResponse>('/feeds/fetch-runs/latest', {
+      feed_ids: feedIds,
+    })
+  }
+
+  /**
+   * Get recent persisted feed fetch run history for one feed.
+   */
+  async getFeedFetchRunHistory(feedId: string): Promise<FeedFetchRunHistoryResponse> {
+    return this.client.get<FeedFetchRunHistoryResponse>(`/feeds/${feedId}/fetch-runs/history`)
   }
 
   /**

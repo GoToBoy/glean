@@ -49,6 +49,7 @@ class Settings(BaseSettings):
 
     # Redis settings
     redis_url: str = "redis://localhost:6379/0"
+    worker_max_jobs: int = 4
 
     # JWT settings
     jwt_algorithm: str = "HS256"

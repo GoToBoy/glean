@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
-import type { FeedRefreshJob, RefreshStatusItem } from '@glean/types'
+import type {
+  FeedFetchLatestRunResponse,
+  FeedFetchRun,
+  FeedFetchRunBatchLatestResponse,
+  FeedFetchRunHistoryResponse,
+  FeedRefreshJob,
+  RefreshStatusItem,
+} from '@glean/types'
 
 interface Feed {
   id: string
@@ -42,6 +49,7 @@ interface FeedListParams {
 export type AdminFeedRefreshJob = FeedRefreshJob
 export type AdminFeedRefreshStatusItem = RefreshStatusItem
 export type AdminFeed = Feed
+export type AdminFeedFetchRun = FeedFetchRun
 
 export interface AdminContentBackfillCandidate {
   id: string
@@ -204,6 +212,43 @@ export function useRefreshFeedStatus() {
       const response = await api.post('/feeds/refresh/status', { items })
       return response.data as { items: AdminFeedRefreshStatusItem[] }
     },
+  })
+}
+
+export function useLatestFeedFetchRun(feedId: string, enabled = true) {
+  return useQuery<FeedFetchLatestRunResponse>({
+    queryKey: ['admin', 'feed-fetch-progress', 'latest', feedId],
+    queryFn: async () => {
+      const response = await api.get(`/feeds/${feedId}/fetch-runs/latest`)
+      return response.data
+    },
+    enabled: enabled && !!feedId,
+    refetchInterval: enabled ? 15000 : false,
+  })
+}
+
+export function useLatestFeedFetchRuns(feedIds: string[], enabled = true) {
+  const normalizedFeedIds = Array.from(new Set(feedIds)).sort()
+
+  return useQuery<FeedFetchRunBatchLatestResponse>({
+    queryKey: ['admin', 'feed-fetch-progress', 'latest-batch', ...normalizedFeedIds],
+    queryFn: async () => {
+      const response = await api.post('/feeds/fetch-runs/latest', { feed_ids: normalizedFeedIds })
+      return response.data
+    },
+    enabled: enabled && normalizedFeedIds.length > 0,
+    refetchInterval: enabled ? 15000 : false,
+  })
+}
+
+export function useFeedFetchRunHistory(feedId: string, enabled = true) {
+  return useQuery<FeedFetchRunHistoryResponse>({
+    queryKey: ['admin', 'feed-fetch-progress', 'history', feedId],
+    queryFn: async () => {
+      const response = await api.get(`/feeds/${feedId}/fetch-runs/history`)
+      return response.data
+    },
+    enabled: enabled && !!feedId,
   })
 }
 

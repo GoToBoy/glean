@@ -2,24 +2,56 @@
 
 from arq.connections import ArqRedis
 from arq.jobs import Job
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Feed
 
+from .feed_fetch_progress import create_estimated_queued_feed_fetch_run
+
 
 async def enqueue_feed_refresh_job(
+    session: AsyncSession,
     redis: ArqRedis,
     feed_id: str,
     feed_title: str,
+    trigger_type: str,
     subscription_id: str | None = None,
     backfill_existing_entries: bool = False,
+    queue_depth_ahead: int = 0,
 ) -> dict[str, str]:
     """Enqueue one feed refresh job and return unified payload."""
-    job = await redis.enqueue_job(
-        "fetch_feed_task", feed_id, backfill_existing_entries=backfill_existing_entries
+    run, stage_event = await create_estimated_queued_feed_fetch_run(
+        session,
+        feed_id=feed_id,
+        trigger_type=trigger_type,
+        queue_depth_ahead=queue_depth_ahead,
     )
+    session.add(run)
+    session.add(stage_event)
+    await session.flush()
+
+    job_id = ""
+    try:
+        job = await redis.enqueue_job(
+            "fetch_feed_task",
+            feed_id,
+            backfill_existing_entries=backfill_existing_entries,
+            run_id=run.id,
+            trigger_type=trigger_type,
+        )
+        job_id = getattr(job, "job_id", None) if job is not None else None
+        if not job_id:
+            raise RuntimeError("Failed to enqueue feed refresh job")
+
+        run.job_id = job_id
+    except Exception:
+        await session.rollback()
+        raise
+
     payload: dict[str, str] = {
+        "run_id": run.id,
         "feed_id": feed_id,
-        "job_id": job.job_id if job else "unknown",
+        "job_id": job_id,
         "feed_title": feed_title,
     }
     if subscription_id:

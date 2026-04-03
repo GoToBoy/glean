@@ -19,7 +19,7 @@ RUN apt-get update \
     tini \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+RUN pip install --no-cache-dir --index-url "${UV_INDEX_URL}" uv
 
 COPY pyproject.toml uv.lock ./
 COPY apps/api/pyproject.toml apps/api/pyproject.toml
