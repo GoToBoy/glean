@@ -15,6 +15,15 @@ export const feedFetchProgressKeys = {
   active: () => [...feedFetchProgressKeys.all, 'active'] as const,
 }
 
+export function useActiveFeedFetchRuns(enabled = true) {
+  return useQuery({
+    queryKey: feedFetchProgressKeys.active(),
+    queryFn: () => feedService.getActiveFeedFetchRuns(),
+    enabled,
+    refetchInterval: enabled ? 15000 : false,
+  })
+}
+
 export function useFeedFetchProgress(feedId: string, enabled = true) {
   const latestRunQuery = useQuery({
     queryKey: feedFetchProgressKeys.latest(feedId),
@@ -29,17 +38,9 @@ export function useFeedFetchProgress(feedId: string, enabled = true) {
     enabled: false,
   })
 
-  const activeRunsQuery = useQuery({
-    queryKey: feedFetchProgressKeys.active(),
-    queryFn: () => feedService.getActiveFeedFetchRuns(),
-    enabled: enabled && !!feedId,
-    refetchInterval: enabled ? 15000 : false,
-  })
-
   return {
     latestRunQuery,
     historyQuery,
-    activeRunsQuery,
     viewModel: mapFeedFetchRunToViewModel(latestRunQuery.data),
     loadHistory: () => historyQuery.refetch(),
   }

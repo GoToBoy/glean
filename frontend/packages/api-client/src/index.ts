@@ -10,6 +10,8 @@ export { EntryService } from './services/entries'
 export { DiscoverService } from './services/discover'
 export {
   buildFeedFetchSummaryParts,
+  buildFeedFetchQueueSections,
+  buildFeedFetchQueueSummary,
   buildFeedFetchQueuePreviewItems,
   FEED_FETCH_STAGE_SEQUENCE,
   buildFeedFetchHistoryItems,
@@ -25,6 +27,8 @@ export {
   mapFeedFetchRunToViewModel,
   mapFeedFetchStageEventsToItems,
   type FeedFetchQueuePreviewItem,
+  type FeedFetchQueueSection,
+  type FeedFetchQueueSummary,
   type FeedFetchSummaryPart,
   type FeedFetchProgressDetailItem,
   type FeedFetchProgressHistoryItem,

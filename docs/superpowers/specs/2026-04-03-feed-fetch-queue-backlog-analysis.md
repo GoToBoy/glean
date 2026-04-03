@@ -259,6 +259,59 @@ Add a bulk refresh test proving:
 
 - repeated scheduler/manual entry points do not multiply active runs for the same feed
 
+## UI Follow-Up Requirements
+
+These are interaction updates for the feed fetch progress sheet in the settings subscriptions UI. They are not part of the queue-dedup backend fix, but they should guide the later frontend change.
+
+Current relevant UI surfaces:
+
+- [feed-fetch-progress.tsx](/Users/taro/Sites/github/glean/frontend/packages/ui/src/components/feed-fetch-progress.tsx)
+- [SubscriptionsTab.tsx](/Users/taro/Sites/github/glean/frontend/apps/web/src/components/tabs/SubscriptionsTab.tsx)
+
+### 1. Rework the "Recent runs queue" presentation
+
+Current problems:
+
+- the queue list can become visually too tall
+- the list is dominated by repeated `queued` items
+- timestamps are taking too much visual space relative to the actual queue state
+
+Required interaction changes:
+
+- keep the queue area at a fixed height and make the inner list scroll
+- classify queue items by state instead of rendering one flat mixed list
+- show `running` and `queued` as separate groups, with `running` first
+- make timestamp information visually secondary and compact instead of giving each item a large repeated time line
+
+Preferred rendering direction:
+
+- group header example: `Running (4)` and `Queued (128)`
+- each item should prioritize feed title, state, stage, and short summary
+- ETA/timestamp text should stay as a small secondary line or compact metadata row
+
+The goal is to reduce visual noise when the queue is large and prevent dozens of near-identical queued rows from overwhelming the panel.
+
+### 2. Move "Ahead in queue" out of each feed panel
+
+Current problem:
+
+- `Ahead in queue` is shown inside each feed's queue detail context, which makes the metric feel local even though it is really describing shared global worker pressure
+
+Required interaction change:
+
+- move the `Ahead in queue` indicator to the subscriptions search/filter bar row
+- treat it as one shared queue-health indicator for the whole page, not per-feed detail text
+
+Preferred meaning:
+
+- the search bar row should expose overall queue pressure at page scope
+- the per-feed panel should focus on the selected feed's current run, stage details, recent history, and grouped queue context
+
+This separation makes the information architecture clearer:
+
+- page-level row shows global backlog pressure
+- feed detail sheet shows feed-specific execution details
+
 ## Recommended Implementation Order
 
 1. add shared active-run lookup helper

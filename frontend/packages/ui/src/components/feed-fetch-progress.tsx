@@ -35,8 +35,14 @@ export interface FeedFetchQueueItem {
   statusLabel: string
   statusTone: 'success' | 'error' | 'secondary' | 'info'
   stageLabel: string
-  etaLabel?: string | null
+  metaLabel?: string | null
   summary?: string | null
+}
+
+export interface FeedFetchQueueSection {
+  key: string
+  title: string
+  items: FeedFetchQueueItem[]
 }
 
 export interface FeedFetchProgressProps {
@@ -68,12 +74,8 @@ export interface FeedFetchProgressProps {
   historyLoading?: boolean
   historyLoadingLabel?: string
   queueTitle?: string
-  queueItems?: FeedFetchQueueItem[]
+  queueSections?: FeedFetchQueueSection[]
   emptyQueueLabel?: string
-  queueFilter?: 'all' | 'running' | 'queued'
-  onQueueFilterChange?: (filter: 'all' | 'running' | 'queued') => void
-  queueFilterLabels?: Record<'all' | 'running' | 'queued', string>
-  queueEtaPrefix?: string
 }
 
 export interface FeedFetchInlineStatusProps {
@@ -121,16 +123,8 @@ export function FeedFetchProgress({
   historyLoading = false,
   historyLoadingLabel = 'Loading recent runs…',
   queueTitle,
-  queueItems = [],
+  queueSections = [],
   emptyQueueLabel = 'No queued or running tasks ahead.',
-  queueFilter,
-  onQueueFilterChange,
-  queueFilterLabels = {
-    all: 'All',
-    running: 'Running',
-    queued: 'Queued',
-  },
-  queueEtaPrefix = 'ETA finish',
 }: FeedFetchProgressProps) {
   return (
     <Card className="border-border/80">
@@ -239,39 +233,32 @@ export function FeedFetchProgress({
         </div>
         {queueTitle ? (
           <div className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-muted-foreground text-xs uppercase tracking-wide">{queueTitle}</p>
-              {queueFilter && onQueueFilterChange ? (
-                <div className="flex items-center gap-1">
-                  {(['all', 'running', 'queued'] as const).map((filter) => (
-                    <button
-                      key={filter}
-                      type="button"
-                      onClick={() => onQueueFilterChange(filter)}
-                      className={`rounded-md px-2 py-1 text-xs ${queueFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
-                    >
-                      {queueFilterLabels[filter]}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-            {queueItems.length > 0 ? (
-              queueItems.map((item) => (
-                <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2">
-                  <div className="space-y-1">
-                    <p className="font-medium">{item.title}</p>
-                    <p className="text-muted-foreground text-xs">{item.stageLabel}</p>
-                    {item.summary ? <p className="text-muted-foreground text-xs">{item.summary}</p> : null}
-                    {item.etaLabel ? (
-                      <p className="text-muted-foreground text-xs">{queueEtaPrefix}: {item.etaLabel}</p>
-                    ) : null}
+            <p className="text-muted-foreground text-xs uppercase tracking-wide">{queueTitle}</p>
+            {queueSections.length > 0 ? (
+              <div data-testid="feed-fetch-queue-scroll" className="max-h-72 space-y-3 overflow-y-auto pr-1">
+                {queueSections.map((section) => (
+                  <div key={section.key} className="space-y-2">
+                    <p className="text-muted-foreground text-[11px] uppercase tracking-wide">{section.title}</p>
+                    {section.items.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2"
+                      >
+                        <div className="space-y-1">
+                          <p className="font-medium">{item.title}</p>
+                          <p className="text-muted-foreground text-xs">
+                            {[item.stageLabel, item.metaLabel].filter(Boolean).join(' · ')}
+                          </p>
+                          {item.summary ? <p className="text-muted-foreground text-xs">{item.summary}</p> : null}
+                        </div>
+                        <Badge size="sm" variant={item.statusTone}>
+                          {item.statusLabel}
+                        </Badge>
+                      </div>
+                    ))}
                   </div>
-                  <Badge size="sm" variant={item.statusTone}>
-                    {item.statusLabel}
-                  </Badge>
-                </div>
-              ))
+                ))}
+              </div>
             ) : (
               <p className="text-muted-foreground text-sm">{emptyQueueLabel}</p>
             )}

@@ -10,7 +10,11 @@ import {
   useExportOPML,
 } from '../../hooks/useSubscriptions'
 import { useEntries } from '../../hooks/useEntries'
-import { useFeedFetchProgress, useFeedFetchProgressList } from '../../hooks/useFeedFetchProgress'
+import {
+  useActiveFeedFetchRuns,
+  useFeedFetchProgress,
+  useFeedFetchProgressList,
+} from '../../hooks/useFeedFetchProgress'
 import { useFolderStore } from '../../stores/folderStore'
 import { useAuthStore } from '../../stores/authStore'
 import type {
@@ -74,6 +78,8 @@ import {
   Activity,
 } from 'lucide-react'
 import {
+  buildFeedFetchQueueSections,
+  buildFeedFetchQueueSummary,
   buildFeedFetchSummaryParts,
   findCurrentFeedFetchStage,
   formatFeedFetchDateTime,
@@ -105,7 +111,6 @@ const SEARCH_CLASS =
 const TREE_ROW_CLASS =
   'flex min-w-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors'
 const ICON_BUTTON_CLASS = 'h-8 w-8'
-type QueueFilter = 'all' | 'running' | 'queued'
 const allFolderIds = (folders: FolderTreeNode[]): string[] =>
   folders.flatMap((folder) => [folder.id, ...allFolderIds(folder.children)])
 
@@ -203,6 +208,11 @@ export function SubscriptionsTab() {
     [visibleSubscriptions]
   )
   const { latestRunsByFeedId } = useFeedFetchProgressList(visibleFeedIds, visibleFeedIds.length > 0)
+  const activeRunsQuery = useActiveFeedFetchRuns(allSubscriptions.length > 0)
+  const activeQueueSummary = useMemo(
+    () => buildFeedFetchQueueSummary(activeRunsQuery.data?.items ?? []),
+    [activeRunsQuery.data?.items]
+  )
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -480,15 +490,31 @@ export function SubscriptionsTab() {
       )}
 
       <div className={TOOLBAR_CLASS}>
-        <div className="relative w-full flex-1 sm:max-w-64">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-          <input
-            type="text"
-            placeholder={t('manageFeeds.searchPlaceholder')}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={SEARCH_CLASS}
-          />
+        <div className="flex w-full flex-1 flex-wrap items-center gap-2">
+          <div className="relative w-full flex-1 sm:max-w-64">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+            <input
+              type="text"
+              placeholder={t('manageFeeds.searchPlaceholder')}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className={SEARCH_CLASS}
+            />
+          </div>
+          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+            <Activity className="h-3.5 w-3.5 text-primary" />
+            <span className="text-muted-foreground">
+              {t('manageFeeds.feedFetchProgress.globalQueueLabel')}
+            </span>
+            <span className="font-medium text-foreground">
+              {activeQueueSummary.totalCount > 0
+                ? t('manageFeeds.feedFetchProgress.globalQueueSummary', {
+                    running: activeQueueSummary.runningCount,
+                    queued: activeQueueSummary.queuedCount,
+                  })
+                : t('manageFeeds.feedFetchProgress.globalQueueIdle')}
+            </span>
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -664,6 +690,7 @@ export function SubscriptionsTab() {
                     refreshingId={refreshingId}
                     feedRefreshState={feedRefreshState}
                     latestRunsByFeedId={latestRunsByFeedId}
+                    activeRuns={activeRunsQuery.data?.items ?? []}
                   />
                 )
               })}
@@ -688,6 +715,7 @@ export function SubscriptionsTab() {
                         refreshingId={refreshingId}
                         refreshState={feedRefreshState[subscription.feed_id]}
                         latestRun={latestRunsByFeedId.get(subscription.feed_id)}
+                        activeRuns={activeRunsQuery.data?.items ?? []}
                       />
                     ))}
                   </div>
@@ -723,6 +751,7 @@ interface FolderBranchProps {
   refreshingId: string | null
   feedRefreshState: Record<string, FeedRefreshState>
   latestRunsByFeedId: Map<string, FeedFetchLatestRunResponse>
+  activeRuns: FeedFetchActiveRunItem[]
 }
 
 function FolderBranch({
@@ -742,6 +771,7 @@ function FolderBranch({
   refreshingId,
   feedRefreshState,
   latestRunsByFeedId,
+  activeRuns,
 }: FolderBranchProps) {
   const { t } = useTranslation('settings')
   const count = folderStats.countMap.get(folder.id) ?? 0
@@ -806,6 +836,7 @@ function FolderBranch({
               refreshingId={refreshingId}
               feedRefreshState={feedRefreshState}
               latestRunsByFeedId={latestRunsByFeedId}
+              activeRuns={activeRuns}
             />
           ))}
 
@@ -823,6 +854,7 @@ function FolderBranch({
               refreshingId={refreshingId}
               refreshState={feedRefreshState[subscription.feed_id]}
               latestRun={latestRunsByFeedId.get(subscription.feed_id)}
+              activeRuns={activeRuns}
             />
           ))}
 
@@ -852,6 +884,7 @@ interface SubscriptionRowProps {
   refreshingId: string | null
   refreshState?: FeedRefreshState
   latestRun?: FeedFetchLatestRunResponse
+  activeRuns: FeedFetchActiveRunItem[]
 }
 
 function SubscriptionRow({
@@ -866,6 +899,7 @@ function SubscriptionRow({
   refreshingId,
   refreshState,
   latestRun,
+  activeRuns,
 }: SubscriptionRowProps) {
   const { t } = useTranslation('settings')
   const isRefreshingRow = refreshState && isPendingRefreshStatus(refreshState.status)
@@ -977,6 +1011,7 @@ function SubscriptionRow({
             subscription={subscription}
             refreshState={refreshState}
             initialLatestRun={latestRun}
+            activeRuns={activeRuns}
           />
           <Button
             variant="ghost"
@@ -1035,28 +1070,25 @@ function SubscriptionFetchProgressButton({
   subscription,
   refreshState,
   initialLatestRun,
+  activeRuns,
 }: {
   subscription: Subscription
   refreshState?: FeedRefreshState
   initialLatestRun?: FeedFetchLatestRunResponse
+  activeRuns: FeedFetchActiveRunItem[]
 }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
-  const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
-  const { latestRunQuery, historyQuery, activeRunsQuery, viewModel, loadHistory } = useFeedFetchProgress(
-    subscription.feed_id,
-    open
-  )
+  const { latestRunQuery, historyQuery, viewModel, loadHistory } = useFeedFetchProgress(subscription.feed_id, open)
 
   const latestRun = latestRunQuery.data ?? initialLatestRun
   const details = buildSettingsFeedFetchDetails(t, latestRun, subscription)
   const historyItems = buildSettingsFeedFetchHistoryItems(t, historyQuery.data?.items ?? [])
   const stageItems = buildSettingsFeedFetchStageItems(t, latestRun?.stages ?? [])
-  const queueItems = buildSettingsFeedFetchQueueItems(
+  const queueSections = buildSettingsFeedFetchQueueSections(
     t,
-    activeRunsQuery.data?.items ?? [],
-    latestRun?.id ?? null,
-    queueFilter
+    activeRuns,
+    latestRun?.id ?? null
   )
   const currentDiagnosticText = buildSettingsDiagnosticText(t, latestRun)
   const summaryText = buildSettingsFeedFetchSummary(t, latestRun)
@@ -1141,17 +1173,9 @@ function SubscriptionFetchProgressButton({
               emptyHistoryLabel={t('manageFeeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
               historyLoadingLabel={t('manageFeeds.feedFetchProgress.historyLoading')}
-              queueTitle={t('manageFeeds.feedFetchProgress.queueTitle')}
-              queueItems={queueItems}
+              queueTitle={t('manageFeeds.feedFetchProgress.queueSectionTitle')}
+              queueSections={queueSections}
               emptyQueueLabel={t('manageFeeds.feedFetchProgress.queueEmpty')}
-              queueFilter={queueFilter}
-              onQueueFilterChange={setQueueFilter}
-              queueFilterLabels={{
-                all: t('manageFeeds.feedFetchProgress.filters.all'),
-                running: t('manageFeeds.feedFetchProgress.filters.running'),
-                queued: t('manageFeeds.feedFetchProgress.filters.queued'),
-              }}
-              queueEtaPrefix={t('manageFeeds.feedFetchProgress.queueEta')}
             />
           ) : (
             <FeedFetchProgress
@@ -1167,17 +1191,9 @@ function SubscriptionFetchProgressButton({
               emptyHistoryLabel={t('manageFeeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
               historyLoadingLabel={t('manageFeeds.feedFetchProgress.historyLoading')}
-              queueTitle={t('manageFeeds.feedFetchProgress.queueTitle')}
-              queueItems={queueItems}
+              queueTitle={t('manageFeeds.feedFetchProgress.queueSectionTitle')}
+              queueSections={queueSections}
               emptyQueueLabel={t('manageFeeds.feedFetchProgress.queueEmpty')}
-              queueFilter={queueFilter}
-              onQueueFilterChange={setQueueFilter}
-              queueFilterLabels={{
-                all: t('manageFeeds.feedFetchProgress.filters.all'),
-                running: t('manageFeeds.feedFetchProgress.filters.running'),
-                queued: t('manageFeeds.feedFetchProgress.filters.queued'),
-              }}
-              queueEtaPrefix={t('manageFeeds.feedFetchProgress.queueEta')}
             />
           )}
         </SheetPanel>
@@ -1330,27 +1346,32 @@ function buildSettingsFeedFetchHistoryItems(
   })
 }
 
-function buildSettingsFeedFetchQueueItems(
+function buildSettingsFeedFetchQueueSections(
   t: ReturnType<typeof useTranslation>['t'],
   activeRuns: FeedFetchActiveRunItem[],
-  currentRunId: string | null,
-  filter: QueueFilter
+  currentRunId: string | null
 ) {
-  return activeRuns
-    .filter((run) => run.id !== currentRunId)
-    .filter((run) => {
-      if (filter === 'all') return true
-      return filter === 'running' ? run.status === 'in_progress' : run.status === 'queued'
-    })
-    .map((run) => ({
-      id: run.id,
-      title: run.feed_title || run.feed_url || run.feed_id,
-      statusLabel: localizeSettingsFeedFetchStatus(t, run.status, run.status ?? ''),
-      statusTone: getFeedFetchStatusTone(run.status),
-      stageLabel: localizeSettingsFeedFetchStage(t, run.current_stage, run.current_stage ?? ''),
-      etaLabel: formatFeedFetchDateTime(run.predicted_finish_at),
-      summary: buildSettingsFeedFetchSummary(t, run),
-    }))
+  return buildFeedFetchQueueSections({
+    currentRunId,
+    activeRuns,
+  }).map((section) => ({
+    key: section.key,
+    title:
+      section.key === 'running'
+        ? t('manageFeeds.feedFetchProgress.queueGroups.running', { count: section.count })
+        : t('manageFeeds.feedFetchProgress.queueGroups.queued', { count: section.count }),
+    items: section.items.map((item) => ({
+      id: item.id,
+      title: item.title,
+      statusLabel: localizeSettingsFeedFetchStatus(t, item.statusKey, item.statusLabel),
+      statusTone: item.statusTone,
+      stageLabel: localizeSettingsFeedFetchStage(t, item.stageKey, item.stageLabel),
+      metaLabel: item.etaLabel
+        ? `${t('manageFeeds.feedFetchProgress.queueEta')}: ${item.etaLabel}`
+        : null,
+      summary: item.summary ?? null,
+    })),
+  }))
 }
 
 function buildSettingsDiagnosticText(

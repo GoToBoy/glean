@@ -99,6 +99,18 @@ export interface FeedFetchQueuePreviewItem {
   summaryParts?: FeedFetchSummaryPart[]
 }
 
+export interface FeedFetchQueueSection {
+  key: 'running' | 'queued'
+  count: number
+  items: FeedFetchQueuePreviewItem[]
+}
+
+export interface FeedFetchQueueSummary {
+  totalCount: number
+  runningCount: number
+  queuedCount: number
+}
+
 export function formatFeedFetchDateTime(value: string | null | undefined): string | null {
   if (!value) return null
   return new Date(value).toLocaleString()
@@ -351,6 +363,53 @@ export function buildFeedFetchQueuePreviewItems(args: {
       summaryParts: buildFeedFetchSummaryParts(run),
     }
   })
+}
+
+export function buildFeedFetchQueueSections(args: {
+  currentRunId?: string | null
+  activeRuns: FeedFetchActiveRunItem[] | null | undefined
+}): FeedFetchQueueSection[] {
+  const { currentRunId, activeRuns } = args
+  const runningItems = buildFeedFetchQueuePreviewItems({
+    currentRunId,
+    activeRuns,
+    filter: 'running',
+  })
+  const queuedItems = buildFeedFetchQueuePreviewItems({
+    currentRunId,
+    activeRuns,
+    filter: 'queued',
+  })
+
+  return [
+    runningItems.length > 0
+      ? {
+          key: 'running',
+          count: runningItems.length,
+          items: runningItems,
+        }
+      : null,
+    queuedItems.length > 0
+      ? {
+          key: 'queued',
+          count: queuedItems.length,
+          items: queuedItems,
+        }
+      : null,
+  ].filter((section): section is FeedFetchQueueSection => section !== null)
+}
+
+export function buildFeedFetchQueueSummary(
+  activeRuns: FeedFetchActiveRunItem[] | null | undefined
+): FeedFetchQueueSummary {
+  const runs = activeRuns ?? []
+  const runningCount = runs.filter((run) => run.status === 'in_progress').length
+  const queuedCount = runs.filter((run) => run.status === 'queued').length
+  return {
+    totalCount: runs.length,
+    runningCount,
+    queuedCount,
+  }
 }
 
 function normalizeStageStatus(
