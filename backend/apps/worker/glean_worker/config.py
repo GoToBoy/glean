@@ -18,6 +18,7 @@ class Settings(BaseSettings):
         redis_url: Redis connection URL for task queue.
         worker_job_timeout_seconds: Per-job timeout in seconds for arq worker.
         worker_max_jobs: Maximum concurrent arq jobs for the worker process.
+        feed_refresh_interval_minutes: Default delay before the next scheduled feed refresh.
     """
 
     model_config = SettingsConfigDict(
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     worker_job_timeout_seconds: int = 1800
     worker_max_jobs: int = 4
+    feed_refresh_interval_minutes: int = 60
 
 
 @lru_cache

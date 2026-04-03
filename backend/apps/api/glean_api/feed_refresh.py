@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Feed
 
-from .feed_fetch_progress import create_estimated_queued_feed_fetch_run
+from .feed_fetch_progress import create_estimated_queued_feed_fetch_run, find_active_feed_fetch_run
 
 
 async def enqueue_feed_refresh_job(
@@ -20,6 +20,18 @@ async def enqueue_feed_refresh_job(
     queue_depth_ahead: int = 0,
 ) -> dict[str, str]:
     """Enqueue one feed refresh job and return unified payload."""
+    existing_run = await find_active_feed_fetch_run(session, feed_id)
+    if existing_run is not None and existing_run.job_id:
+        payload: dict[str, str] = {
+            "run_id": existing_run.id,
+            "feed_id": feed_id,
+            "job_id": existing_run.job_id,
+            "feed_title": feed_title,
+        }
+        if subscription_id:
+            payload["subscription_id"] = subscription_id
+        return payload
+
     run, stage_event = await create_estimated_queued_feed_fetch_run(
         session,
         feed_id=feed_id,

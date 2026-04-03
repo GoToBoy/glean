@@ -37,6 +37,20 @@ logger = get_logger(__name__)
 TaskFunction = Callable[..., Awaitable[Any]]
 
 
+def _group_refresh_schedule_hours(interval_minutes: int) -> dict[int, set[int]]:
+    """Return one day of cron hour buckets grouped by minute."""
+    if interval_minutes <= 0:
+        raise ValueError("feed_refresh_interval_minutes must be positive")
+    if 1440 % interval_minutes != 0:
+        raise ValueError("feed_refresh_interval_minutes must evenly divide 1440")
+
+    grouped_hours: dict[int, set[int]] = {}
+    for minute_of_day in range(0, 1440, interval_minutes):
+        hour, minute = divmod(minute_of_day, 60)
+        grouped_hours.setdefault(minute, set()).add(hour)
+    return grouped_hours
+
+
 async def startup(ctx: dict[str, Any]) -> None:
     """
     Worker startup handler.
@@ -57,6 +71,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     logger.info("Vector storage: pgvector (uses existing PostgreSQL database)")
     logger.info(f"Worker job timeout: {settings.worker_job_timeout_seconds}s")
     logger.info(f"Worker max jobs: {settings.worker_max_jobs}")
+    logger.info(f"Feed refresh interval: {settings.feed_refresh_interval_minutes}m")
 
     # Store Redis client for distributed locks (arq provides it via ctx['redis'])
     logger.info("Redis client available for distributed locks")
@@ -119,12 +134,21 @@ def get_oss_functions() -> list[TaskFunction]:
 
 def get_oss_cron_jobs() -> list[CronJob]:
     """Return all OSS cron jobs."""
-    return [
-        # Feed fetch (every 15 minutes)
-        cron(feed_fetcher.scheduled_fetch, minute={0, 15, 30, 45}),
+    cron_jobs: list[CronJob] = []
+    for minute, hours in sorted(_group_refresh_schedule_hours(settings.feed_refresh_interval_minutes).items()):
+        cron_jobs.append(
+            cron(
+                feed_fetcher.scheduled_fetch,
+                hour=hours if len(hours) < 24 else None,
+                minute=minute,
+            )
+        )
+
+    cron_jobs.append(
         # Read-later cleanup (hourly at minute 0)
-        cron(cleanup.scheduled_cleanup, minute=0),
-    ]
+        cron(cleanup.scheduled_cleanup, minute=0)
+    )
+    return cron_jobs
 
 
 class WorkerSettings:

@@ -14,7 +14,10 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_api.feed_fetch_progress import create_estimated_queued_feed_fetch_run
+from glean_api.feed_fetch_progress import (
+    create_estimated_queued_feed_fetch_run,
+    find_active_feed_fetch_run,
+)
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import RSSHubService, TypedConfigService
@@ -38,6 +41,11 @@ from .feed_fetch_progress import (
 logger = get_logger(__name__)
 MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
 ENTRY_COMMIT_BATCH_SIZE = 20
+
+
+def _default_next_fetch_at() -> datetime:
+    """Return the next scheduled refresh timestamp using worker settings."""
+    return datetime.now(UTC) + timedelta(minutes=settings.feed_refresh_interval_minutes)
 
 
 def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
@@ -177,7 +185,7 @@ async def fetch_feed_task(
                         feed.last_fetch_attempt_at = fetch_attempt_at
                         feed.last_fetch_success_at = fetch_attempt_at
                         feed.last_fetched_at = fetch_attempt_at
-                        feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                        feed.next_fetch_at = _default_next_fetch_at()
                         run_summary["used_url"] = attempt_url
                         run_summary["fallback_used"] = attempt_url != feed.url
                         if persisted_run is not None:
@@ -439,7 +447,7 @@ async def fetch_feed_task(
                 feed.last_entry_at = latest_entry_time
 
             # Schedule next fetch (15 minutes from now)
-            feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+            feed.next_fetch_at = _default_next_fetch_at()
 
             await finalize_feed_fetch_run(
                 session,
@@ -511,7 +519,7 @@ async def fetch_feed_task(
                     feed.error_count = 0
                     feed.fetch_error_message = None
                     feed.last_fetch_success_at = fetch_attempt_at
-                    feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    feed.next_fetch_at = _default_next_fetch_at()
                     if persisted_run is not None:
                         path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
                             feed_url=feed.url,
@@ -549,7 +557,7 @@ async def fetch_feed_task(
                     feed.fetch_error_message = (
                         "Database index ix_entries_url is corrupted. Run REINDEX INDEX CONCURRENTLY ix_entries_url."
                     )
-                    feed.next_fetch_at = datetime.now(UTC) + timedelta(minutes=15)
+                    feed.next_fetch_at = _default_next_fetch_at()
                     if persisted_run is not None:
                         path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
                             feed_url=feed.url,
@@ -658,6 +666,9 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
         queued_count = 0
         for feed in feeds:
             try:
+                if await find_active_feed_fetch_run(session, feed.id):
+                    continue
+
                 run, stage_event = await create_estimated_queued_feed_fetch_run(
                     session,
                     feed_id=feed.id,

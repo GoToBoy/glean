@@ -120,6 +120,23 @@ async def create_estimated_queued_feed_fetch_run(
     return run, stage_event
 
 
+async def find_active_feed_fetch_run(
+    session: AsyncSession,
+    feed_id: str,
+) -> FeedFetchRun | None:
+    """Return the newest queued or in-progress run for one feed."""
+    result = await session.execute(
+        select(FeedFetchRun)
+        .where(
+            FeedFetchRun.feed_id == feed_id,
+            FeedFetchRun.status.in_(ACTIVE_RUN_STATUSES),
+        )
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
 async def estimate_run_duration_for_feed(
     session: AsyncSession,
     *,
