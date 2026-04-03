@@ -212,6 +212,12 @@ export interface FeedFetchStageEvent {
   finished_at: string | null
   summary: string | null
   metrics_json: Record<string, unknown> | null
+  last_progress_at?: string | null
+  is_slow?: boolean
+  slow_threshold_seconds?: number | null
+  elapsed_seconds?: number | null
+  public_diagnostic?: string | null
+  admin_diagnostic?: string | null
 }
 
 export interface FeedFetchRun {
@@ -259,4 +265,13 @@ export interface FeedFetchRunHistoryResponse {
 
 export interface FeedFetchRunBatchLatestResponse {
   items: FeedFetchLatestRunResponse[]
+}
+
+export interface FeedFetchActiveRunItem extends FeedFetchRun {
+  feed_title: string | null
+  feed_url: string
+}
+
+export interface FeedFetchActiveRunsResponse {
+  items: FeedFetchActiveRunItem[]
 }

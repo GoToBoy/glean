@@ -55,7 +55,11 @@ from ..dependencies import (
     get_redis_pool,
     get_typed_config_service,
 )
-from ..feed_fetch_progress import load_latest_feed_fetch_runs, serialize_feed_fetch_run
+from ..feed_fetch_progress import (
+    load_active_feed_fetch_runs,
+    load_latest_feed_fetch_runs,
+    serialize_feed_fetch_run,
+)
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
 
 router = APIRouter()
@@ -856,6 +860,7 @@ async def get_latest_feed_fetch_run_admin(
         last_fetch_attempt_at=feed.last_fetch_attempt_at,
         last_fetch_success_at=feed.last_fetch_success_at,
         last_fetched_at=feed.last_fetched_at,
+        include_admin_diagnostic=True,
     )
 
 
@@ -905,9 +910,35 @@ async def get_latest_feed_fetch_runs_admin(
                 last_fetch_attempt_at=feed.last_fetch_attempt_at,
                 last_fetch_success_at=feed.last_fetch_success_at,
                 last_fetched_at=feed.last_fetched_at,
+                include_admin_diagnostic=True,
                 include_stages=False,
             )
         )
+    return {"items": items}
+
+
+@router.get("/feeds/fetch-runs/active")
+async def get_active_feed_fetch_runs_admin(
+    current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+) -> dict[str, list[dict[str, object | None]]]:
+    """Return all queued/running fetch runs for admin diagnostics."""
+    del current_admin
+    active_runs = await load_active_feed_fetch_runs(session)
+
+    items: list[dict[str, object | None]] = []
+    for run, feed in active_runs:
+        item = serialize_feed_fetch_run(
+            run,
+            next_fetch_at=feed.next_fetch_at,
+            last_fetch_attempt_at=feed.last_fetch_attempt_at,
+            last_fetch_success_at=feed.last_fetch_success_at,
+            last_fetched_at=feed.last_fetched_at,
+            include_admin_diagnostic=True,
+        )
+        item["feed_title"] = feed.title
+        item["feed_url"] = feed.url
+        items.append(item)
     return {"items": items}
 
 
@@ -940,6 +971,7 @@ async def get_feed_fetch_run_history_admin(
                 last_fetch_attempt_at=feed.last_fetch_attempt_at,
                 last_fetch_success_at=feed.last_fetch_success_at,
                 last_fetched_at=feed.last_fetched_at,
+                include_admin_diagnostic=True,
             )
             for run in runs
         ],

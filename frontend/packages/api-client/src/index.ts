@@ -9,15 +9,23 @@ export { FeedService } from './services/feeds'
 export { EntryService } from './services/entries'
 export { DiscoverService } from './services/discover'
 export {
+  buildFeedFetchSummaryParts,
+  buildFeedFetchQueuePreviewItems,
   FEED_FETCH_STAGE_SEQUENCE,
   buildFeedFetchHistoryItems,
   buildFeedFetchProgressDetails,
+  findCurrentFeedFetchStage,
   formatFeedFetchDateTime,
   formatFeedFetchDuration,
+  getFeedFetchStageKey,
   formatFeedFetchStageLabel,
+  getFeedFetchStatusKey,
   getFeedFetchStatusLabel,
+  getFeedFetchStatusTone,
   mapFeedFetchRunToViewModel,
   mapFeedFetchStageEventsToItems,
+  type FeedFetchQueuePreviewItem,
+  type FeedFetchSummaryPart,
   type FeedFetchProgressDetailItem,
   type FeedFetchProgressHistoryItem,
   type FeedFetchProgressViewModel,

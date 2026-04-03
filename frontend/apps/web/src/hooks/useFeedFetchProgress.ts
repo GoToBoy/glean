@@ -5,12 +5,14 @@ import {
   type FeedFetchProgressViewModel,
 } from '@glean/api-client'
 import type { FeedFetchLatestRunResponse, FeedFetchRunBatchLatestResponse, FeedFetchRunHistoryResponse } from '@glean/types'
+import type { FeedFetchActiveRunsResponse } from '@glean/types'
 
 export const feedFetchProgressKeys = {
   all: ['feed-fetch-progress'] as const,
   latest: (feedId: string) => [...feedFetchProgressKeys.all, 'latest', feedId] as const,
   latestBatch: (feedIds: string[]) => [...feedFetchProgressKeys.all, 'latest-batch', ...feedIds] as const,
   history: (feedId: string) => [...feedFetchProgressKeys.all, 'history', feedId] as const,
+  active: () => [...feedFetchProgressKeys.all, 'active'] as const,
 }
 
 export function useFeedFetchProgress(feedId: string, enabled = true) {
@@ -27,9 +29,17 @@ export function useFeedFetchProgress(feedId: string, enabled = true) {
     enabled: false,
   })
 
+  const activeRunsQuery = useQuery({
+    queryKey: feedFetchProgressKeys.active(),
+    queryFn: () => feedService.getActiveFeedFetchRuns(),
+    enabled: enabled && !!feedId,
+    refetchInterval: enabled ? 15000 : false,
+  })
+
   return {
     latestRunQuery,
     historyQuery,
+    activeRunsQuery,
     viewModel: mapFeedFetchRunToViewModel(latestRunQuery.data),
     loadHistory: () => historyQuery.refetch(),
   }
@@ -56,3 +66,4 @@ export function useFeedFetchProgressList(feedIds: string[], enabled = true) {
 }
 export { mapFeedFetchRunToViewModel, type FeedFetchProgressViewModel }
 export type { FeedFetchRunBatchLatestResponse, FeedFetchRunHistoryResponse }
+export type { FeedFetchActiveRunsResponse }

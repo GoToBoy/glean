@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   useFeeds,
+  useActiveFeedFetchRuns,
   useLatestFeedFetchRun,
   useLatestFeedFetchRuns,
   useFeedFetchRunHistory,
@@ -76,12 +77,18 @@ import {
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
 import {
-  buildFeedFetchHistoryItems,
-  buildFeedFetchProgressDetails,
+  buildFeedFetchSummaryParts,
+  findCurrentFeedFetchStage,
+  formatFeedFetchDateTime,
+  getFeedFetchStatusTone,
   mapFeedFetchRunToViewModel,
-  mapFeedFetchStageEventsToItems,
 } from '@glean/api-client'
-import type { FeedFetchLatestRunResponse } from '@glean/types'
+import type {
+  FeedFetchActiveRunItem,
+  FeedFetchLatestRunResponse,
+  FeedFetchRun,
+  FeedFetchStageEvent,
+} from '@glean/types'
 
 type FeedStatus = 'all' | 'active' | 'disabled' | 'error'
 
@@ -100,6 +107,7 @@ type FeedRefreshState = {
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const
+type QueueFilter = 'all' | 'running' | 'queued'
 
 /**
  * Feed management page.
@@ -830,14 +838,29 @@ export default function FeedsPage() {
                             {latestViewModel && (
                               <div className="mt-2">
                                 <FeedFetchInlineStatus
-                                  statusLabel={latestViewModel.statusLabel}
-                                  stageLabel={latestViewModel.stageLabel}
+                                  statusLabel={localizeAdminFeedFetchStatus(
+                                    t,
+                                    latestViewModel.statusKey ?? (latestRun?.next_fetch_at ? 'scheduled' : 'not_started'),
+                                    latestViewModel.statusLabel
+                                  )}
+                                  statusTone={latestViewModel.statusTone}
+                                  stageLabel={localizeAdminFeedFetchStage(
+                                    t,
+                                    latestViewModel.stageKey,
+                                    latestRun?.next_fetch_at
+                                      ? t('feeds.feedFetchProgress.emptyStates.waitingWindow')
+                                      : t('feeds.feedFetchProgress.emptyStates.noRunYet')
+                                  )}
                                   stageProgressLabel={latestViewModel.stageProgressLabel}
                                   progressPercent={latestViewModel.progressPercent}
-                                  summaryText={latestViewModel.summaryText}
+                                  summaryText={buildAdminFeedFetchSummary(t, latestRun)}
                                   estimatedStartLabel={latestViewModel.estimatedStartLabel}
                                   estimatedFinishLabel={latestViewModel.estimatedFinishLabel}
                                   nextFetchLabel={latestViewModel.nextFetchLabel}
+                                  stagePrefix={t('feeds.feedFetchProgress.inline.stage')}
+                                  estimatedStartPrefix={t('feeds.feedFetchProgress.inline.etaStart')}
+                                  estimatedFinishPrefix={t('feeds.feedFetchProgress.inline.etaFinish')}
+                                  nextFetchPrefix={t('feeds.feedFetchProgress.inline.nextFetch')}
                                 />
                               </div>
                             )}
@@ -1294,18 +1317,37 @@ function FeedFetchProgressButton({
   refreshState?: FeedRefreshState
   initialLatestRun?: FeedFetchLatestRunResponse
 }) {
+  const { t } = useTranslation('admin')
   const [open, setOpen] = useState(false)
+  const [queueFilter, setQueueFilter] = useState<QueueFilter>('all')
   const latestRunQuery = useLatestFeedFetchRun(feed.id, open)
   const historyQuery = useFeedFetchRunHistory(feed.id, open)
+  const activeRunsQuery = useActiveFeedFetchRuns(open)
   const latestRun = latestRunQuery.data ?? initialLatestRun
   const viewModel = mapFeedFetchRunToViewModel(latestRun)
-
-  const details = buildFeedFetchProgressDetails({
-    latestRun,
-    fallbackLastFinishedAt: feed.last_fetched_at,
-    fallbackLastSuccessAt: feed.last_fetch_success_at,
-  })
-  const historyItems = buildFeedFetchHistoryItems(historyQuery.data)
+  const details = buildAdminFeedFetchDetails(t, latestRun, feed)
+  const historyItems = buildAdminFeedFetchHistoryItems(t, historyQuery.data?.items ?? [])
+  const stageItems = buildAdminFeedFetchStageItems(t, latestRun?.stages ?? [])
+  const queueItems = buildAdminFeedFetchQueueItems(
+    t,
+    activeRunsQuery.data?.items ?? [],
+    latestRun?.id ?? null,
+    queueFilter
+  )
+  const currentDiagnosticText = buildAdminDiagnosticText(t, latestRun)
+  const summaryText = buildAdminFeedFetchSummary(t, latestRun)
+  const statusLabel = localizeAdminFeedFetchStatus(
+    t,
+    viewModel?.statusKey,
+    latestRun?.next_fetch_at ? 'scheduled' : 'not_started'
+  )
+  const stageLabel = localizeAdminFeedFetchStage(
+    t,
+    viewModel?.stageKey,
+    latestRun?.next_fetch_at
+      ? t('feeds.feedFetchProgress.emptyStates.waitingWindow')
+      : t('feeds.feedFetchProgress.emptyStates.noRunYet')
+  )
 
   const isActiveRefresh =
     !!refreshState &&
@@ -1320,7 +1362,7 @@ function FeedFetchProgressButton({
           <Button
             size="icon"
             variant="outline"
-            title="Fetch progress"
+            title={t('feeds.feedFetchProgress.button')}
             className={isActiveRefresh ? 'border-primary/50 text-primary' : undefined}
           >
             <Activity className={`h-4 w-4 ${isActiveRefresh ? 'animate-pulse' : ''}`} />
@@ -1330,7 +1372,7 @@ function FeedFetchProgressButton({
       <SheetPopup side="right" inset className="max-w-2xl">
         <SheetHeader>
           <SheetTitle>{feed.title || feed.url}</SheetTitle>
-          <SheetDescription>Feed fetch progress, ETA, stage details, and recent history.</SheetDescription>
+          <SheetDescription>{t('feeds.feedFetchProgress.description')}</SheetDescription>
         </SheetHeader>
         <SheetPanel className="space-y-4">
           {latestRunQuery.isLoading ? (
@@ -1340,34 +1382,279 @@ function FeedFetchProgressButton({
             </div>
           ) : viewModel ? (
             <FeedFetchProgress
-              title="Current run"
-              statusLabel={viewModel.statusLabel}
-              stageLabel={viewModel.stageLabel}
+              title={t('feeds.feedFetchProgress.currentRun')}
+              statusLabel={statusLabel}
+              statusTone={viewModel.statusTone}
+              stageLabel={stageLabel}
               stageProgressLabel={viewModel.stageProgressLabel}
               progressPercent={viewModel.progressPercent}
-              summaryText={viewModel.summaryText}
+              summaryText={summaryText}
               estimatedStartLabel={viewModel.estimatedStartLabel}
               estimatedFinishLabel={viewModel.estimatedFinishLabel}
-              predictionLabel={viewModel.predictionLabel}
-              stages={mapFeedFetchStageEventsToItems(latestRun?.stages)}
+              predictionLabel={
+                viewModel.predictionLabel ? t('feeds.feedFetchProgress.predictionLabel') : null
+              }
+              progressLabel={t('feeds.feedFetchProgress.progressLabel')}
+              estimatedStartPrefix={t('feeds.feedFetchProgress.estimatedStart')}
+              estimatedFinishPrefix={t('feeds.feedFetchProgress.estimatedFinish')}
+              stages={stageItems}
+              stageTimingPrefixes={{
+                start: t('feeds.feedFetchProgress.stageTiming.start'),
+                finish: t('feeds.feedFetchProgress.stageTiming.finish'),
+                duration: t('feeds.feedFetchProgress.stageTiming.duration'),
+              }}
               details={details}
+              currentDiagnosticTitle={t('feeds.feedFetchProgress.diagnosticTitle')}
+              currentDiagnosticText={currentDiagnosticText}
               history={historyItems}
+              historyTitle={t('feeds.feedFetchProgress.historyTitle')}
+              emptyHistoryLabel={t('feeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
+              historyLoadingLabel={t('feeds.feedFetchProgress.historyLoading')}
+              queueTitle={t('feeds.feedFetchProgress.queueTitle')}
+              queueItems={queueItems}
+              emptyQueueLabel={t('feeds.feedFetchProgress.queueEmpty')}
+              queueFilter={queueFilter}
+              onQueueFilterChange={setQueueFilter}
+              queueFilterLabels={{
+                all: t('feeds.feedFetchProgress.filters.all'),
+                running: t('feeds.feedFetchProgress.filters.running'),
+                queued: t('feeds.feedFetchProgress.filters.queued'),
+              }}
+              queueEtaPrefix={t('feeds.feedFetchProgress.queueEta')}
             />
           ) : (
             <FeedFetchProgress
-              title="Current run"
-              statusLabel="Not started"
-              stageLabel="No persisted fetch run yet"
+              title={t('feeds.feedFetchProgress.currentRun')}
+              statusLabel={statusLabel}
+              statusTone={latestRun?.next_fetch_at ? 'info' : 'secondary'}
+              stageLabel={stageLabel}
               progressPercent={0}
               summaryText={null}
               details={details}
               history={historyItems}
+              historyTitle={t('feeds.feedFetchProgress.historyTitle')}
+              emptyHistoryLabel={t('feeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
+              historyLoadingLabel={t('feeds.feedFetchProgress.historyLoading')}
+              queueTitle={t('feeds.feedFetchProgress.queueTitle')}
+              queueItems={queueItems}
+              emptyQueueLabel={t('feeds.feedFetchProgress.queueEmpty')}
+              queueFilter={queueFilter}
+              onQueueFilterChange={setQueueFilter}
+              queueFilterLabels={{
+                all: t('feeds.feedFetchProgress.filters.all'),
+                running: t('feeds.feedFetchProgress.filters.running'),
+                queued: t('feeds.feedFetchProgress.filters.queued'),
+              }}
+              queueEtaPrefix={t('feeds.feedFetchProgress.queueEta')}
             />
           )}
         </SheetPanel>
       </SheetPopup>
     </Sheet>
   )
+}
+
+function localizeAdminFeedFetchStatus(
+  t: ReturnType<typeof useTranslation>['t'],
+  statusKey: string | null | undefined,
+  fallback: string
+) {
+  if (!statusKey) return fallback
+  return t(`feeds.feedFetchProgress.statuses.${statusKey}`, { defaultValue: fallback })
+}
+
+function localizeAdminFeedFetchStage(
+  t: ReturnType<typeof useTranslation>['t'],
+  stageKey: string | null | undefined,
+  fallback: string
+) {
+  if (!stageKey) return fallback
+  return t(`feeds.feedFetchProgress.stages.${stageKey}`, { defaultValue: fallback })
+}
+
+function localizeAdminFeedFetchStageStatus(
+  t: ReturnType<typeof useTranslation>['t'],
+  statusKey: string,
+) {
+  return t(`feeds.feedFetchProgress.stageStatuses.${statusKey}`, { defaultValue: statusKey })
+}
+
+function buildAdminFeedFetchSummary(
+  t: ReturnType<typeof useTranslation>['t'],
+  run: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined
+) {
+  const parts = buildFeedFetchSummaryParts(run)
+  if (!parts.length) return null
+  return parts
+    .map((part) => {
+      if (part.kind === 'new_entries') {
+        return t('feeds.feedFetchProgress.summary.newEntries', { count: part.value ?? 0 })
+      }
+      if (part.kind === 'total_entries') {
+        return t('feeds.feedFetchProgress.summary.totalEntries', { count: part.value ?? 0 })
+      }
+      if (part.kind === 'backfill_failed_count') {
+        return t('feeds.feedFetchProgress.summary.backfillFailed', { count: part.value ?? 0 })
+      }
+      return t('feeds.feedFetchProgress.summary.fallbackUsed')
+    })
+    .join(' · ')
+}
+
+function buildAdminFeedFetchDetails(
+  t: ReturnType<typeof useTranslation>['t'],
+  latestRun: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined,
+  feed: Pick<AdminFeed, 'last_fetched_at' | 'last_fetch_success_at'>
+) {
+  const lastFinished =
+    formatFeedFetchDateTime(latestRun?.finished_at) ??
+    formatFeedFetchDateTime(feed.last_fetched_at) ??
+    t('feeds.feedFetchProgress.firstFetch')
+  const lastSuccess =
+    formatFeedFetchDateTime(latestRun?.last_fetch_success_at ?? feed.last_fetch_success_at) ??
+    t('feeds.feedFetchProgress.firstFetch')
+  const nextFetch =
+    formatFeedFetchDateTime(latestRun?.next_fetch_at) ?? t('feeds.feedFetchProgress.nextFetchAfterRun')
+  const pathValueKey =
+    latestRun?.path_kind === 'direct_feed'
+      ? 'directFeed'
+      : latestRun?.path_kind === 'rsshub_primary'
+        ? 'rsshubPrimary'
+        : latestRun?.path_kind === 'rsshub_fallback'
+          ? 'rsshubFallback'
+          : 'unknown'
+
+  return [
+    {
+      label: t('feeds.feedFetchProgress.path'),
+      value: t(`feeds.feedFetchProgress.pathValues.${pathValueKey}`),
+    },
+    {
+      label: t('feeds.feedFetchProgress.lastFinished'),
+      value: lastFinished,
+    },
+    {
+      label: t('feeds.feedFetchProgress.lastSuccess'),
+      value: lastSuccess,
+    },
+    {
+      label: t('feeds.feedFetchProgress.nextFetch'),
+      value: nextFetch,
+    },
+  ]
+}
+
+function buildAdminFeedFetchStageItems(
+  t: ReturnType<typeof useTranslation>['t'],
+  stages: FeedFetchStageEvent[]
+) {
+  return stages.map((stage) => ({
+    stageKey: stage.stage_name,
+    label: localizeAdminFeedFetchStage(t, stage.stage_name, stage.stage_name),
+    status: normalizeAdminStageStatus(stage.status),
+    statusLabel: localizeAdminFeedFetchStageStatus(t, normalizeAdminStageStatus(stage.status)),
+    summary: stage.summary,
+    startedLabel: formatFeedFetchDateTime(stage.started_at),
+    finishedLabel: formatFeedFetchDateTime(stage.finished_at),
+    durationLabel:
+      stage.started_at && stage.finished_at
+        ? formatDurationBetween(stage.started_at, stage.finished_at)
+        : null,
+  }))
+}
+
+function buildAdminFeedFetchHistoryItems(
+  t: ReturnType<typeof useTranslation>['t'],
+  runs: FeedFetchRun[]
+) {
+  return runs.slice(0, 10).map((run) => {
+    const statusLabel = localizeAdminFeedFetchStatus(
+      t,
+      run.status,
+      run.status ?? t('feeds.feedFetchProgress.statuses.not_started')
+    )
+    const stageLabel = localizeAdminFeedFetchStage(
+      t,
+      run.current_stage,
+      run.current_stage ?? t('feeds.feedFetchProgress.emptyStates.noRunYet')
+    )
+    const timestampLabel =
+      formatFeedFetchDateTime(run.finished_at ?? run.started_at ?? run.queue_entered_at) ?? null
+    const summaryText = buildAdminFeedFetchSummary(t, run)
+
+    return {
+      id: run.id,
+      title: `${statusLabel} · ${stageLabel}`,
+      description: [timestampLabel, summaryText].filter(Boolean).join(' · ') || null,
+      statusLabel,
+      statusTone: getFeedFetchStatusTone(run.status),
+      durationLabel:
+        run.started_at && run.finished_at ? formatDurationBetween(run.started_at, run.finished_at) : null,
+    }
+  })
+}
+
+function buildAdminFeedFetchQueueItems(
+  t: ReturnType<typeof useTranslation>['t'],
+  activeRuns: FeedFetchActiveRunItem[],
+  currentRunId: string | null,
+  filter: QueueFilter
+) {
+  return activeRuns
+    .filter((run) => run.id !== currentRunId)
+    .filter((run) => {
+      if (filter === 'all') return true
+      return filter === 'running' ? run.status === 'in_progress' : run.status === 'queued'
+    })
+    .map((run) => ({
+      id: run.id,
+      title: run.feed_title || run.feed_url || run.feed_id,
+      statusLabel: localizeAdminFeedFetchStatus(t, run.status, run.status ?? ''),
+      statusTone: getFeedFetchStatusTone(run.status),
+      stageLabel: localizeAdminFeedFetchStage(t, run.current_stage, run.current_stage ?? ''),
+      etaLabel: formatFeedFetchDateTime(run.predicted_finish_at),
+      summary: buildAdminFeedFetchSummary(t, run),
+    }))
+}
+
+function buildAdminDiagnosticText(
+  t: ReturnType<typeof useTranslation>['t'],
+  latestRun: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined
+) {
+  const stage = findCurrentFeedFetchStage(latestRun)
+  if (!stage) return null
+  const base =
+    stage.admin_diagnostic ||
+    (stage.is_slow
+      ? t(`feeds.feedFetchProgress.slowDiagnostics.${stage.stage_name}`, {
+          defaultValue: stage.public_diagnostic ?? '',
+        })
+      : null)
+  if (!base) return null
+  const lastProgress = formatFeedFetchDateTime(stage.last_progress_at)
+  return lastProgress
+    ? `${base} · ${t('feeds.feedFetchProgress.lastProgress')}: ${lastProgress}`
+    : base
+}
+
+function normalizeAdminStageStatus(
+  status: string
+): 'pending' | 'running' | 'success' | 'error' | 'skipped' {
+  if (status === 'running') return 'running'
+  if (status === 'success') return 'success'
+  if (status === 'error') return 'error'
+  if (status === 'skipped') return 'skipped'
+  return 'pending'
+}
+
+function formatDurationBetween(startedAt: string, finishedAt: string) {
+  const durationMs = new Date(finishedAt).getTime() - new Date(startedAt).getTime()
+  if (!Number.isFinite(durationMs) || durationMs < 0) return null
+  const totalSeconds = Math.round(durationMs / 1000)
+  if (totalSeconds < 60) return `${totalSeconds}s`
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`
 }

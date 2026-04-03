@@ -341,3 +341,75 @@ async def test_admin_can_get_latest_feed_fetch_runs_batch(
     assert len(data["items"]) == 1
     assert data["items"][0]["feed_id"] == test_feed.id
     assert data["items"][0]["status"] == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_user_can_get_active_feed_fetch_runs_for_visible_feeds(
+    client: AsyncClient, auth_headers, db_session, test_subscription, test_feed, test_user
+):
+    visible_run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-visible",
+        trigger_type="manual_user",
+        status="queued",
+        current_stage="queue_wait",
+        queue_entered_at=datetime.now(UTC),
+    )
+    hidden_feed = Feed(
+        url="https://example.com/hidden-feed.xml",
+        title="Hidden Feed",
+        description="Hidden",
+        status="active",
+    )
+    db_session.add_all([visible_run, hidden_feed])
+    await db_session.flush()
+    hidden_run = FeedFetchRun(
+        feed_id=hidden_feed.id,
+        job_id="job-hidden",
+        trigger_type="manual_user",
+        status="in_progress",
+        current_stage="fetch_xml",
+        queue_entered_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+    )
+    db_session.add(hidden_run)
+    await db_session.commit()
+
+    response = await client.get("/api/feeds/fetch-runs/active", headers=auth_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert [item["feed_id"] for item in data["items"]] == [test_feed.id]
+    assert data["items"][0]["feed_title"] == test_feed.title
+
+
+@pytest.mark.asyncio
+async def test_admin_can_get_all_active_feed_fetch_runs(
+    client: AsyncClient, admin_headers, db_session, test_feed
+):
+    queued_run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-queued",
+        trigger_type="scheduled",
+        status="queued",
+        current_stage="queue_wait",
+        queue_entered_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    running_run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-running",
+        trigger_type="scheduled",
+        status="in_progress",
+        current_stage="fetch_xml",
+        queue_entered_at=datetime.now(UTC),
+        started_at=datetime.now(UTC),
+    )
+    db_session.add_all([queued_run, running_run])
+    await db_session.commit()
+
+    response = await client.get("/api/admin/feeds/fetch-runs/active", headers=admin_headers)
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 2
+    assert {item["status"] for item in data["items"]} == {"queued", "in_progress"}

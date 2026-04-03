@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './Car
 import { Progress, ProgressIndicator, ProgressTrack } from './progress'
 
 export interface FeedFetchProgressStageItem {
+  stageKey?: string | null
   label: string
   status: 'pending' | 'running' | 'success' | 'error' | 'skipped'
+  statusLabel?: string
   summary?: string | null
   startedLabel?: string | null
   finishedLabel?: string | null
@@ -24,11 +26,23 @@ export interface FeedFetchProgressHistoryItem {
   description?: string | null
   statusLabel?: string | null
   durationLabel?: string | null
+  statusTone?: 'success' | 'error' | 'secondary' | 'info'
+}
+
+export interface FeedFetchQueueItem {
+  id: string
+  title: string
+  statusLabel: string
+  statusTone: 'success' | 'error' | 'secondary' | 'info'
+  stageLabel: string
+  etaLabel?: string | null
+  summary?: string | null
 }
 
 export interface FeedFetchProgressProps {
   title: string
   statusLabel: string
+  statusTone?: 'success' | 'error' | 'secondary' | 'info'
   stageLabel: string
   stageProgressLabel?: string | null
   progressPercent: number
@@ -36,16 +50,35 @@ export interface FeedFetchProgressProps {
   estimatedStartLabel?: string | null
   estimatedFinishLabel?: string | null
   predictionLabel?: string | null
+  progressLabel?: string
+  estimatedStartPrefix?: string
+  estimatedFinishPrefix?: string
   stages?: FeedFetchProgressStageItem[]
+  stageTimingPrefixes?: {
+    start: string
+    finish: string
+    duration: string
+  }
   details?: FeedFetchProgressDetailItem[]
+  currentDiagnosticTitle?: string
+  currentDiagnosticText?: string | null
   history?: FeedFetchProgressHistoryItem[]
   historyTitle?: string
   emptyHistoryLabel?: string
   historyLoading?: boolean
+  historyLoadingLabel?: string
+  queueTitle?: string
+  queueItems?: FeedFetchQueueItem[]
+  emptyQueueLabel?: string
+  queueFilter?: 'all' | 'running' | 'queued'
+  onQueueFilterChange?: (filter: 'all' | 'running' | 'queued') => void
+  queueFilterLabels?: Record<'all' | 'running' | 'queued', string>
+  queueEtaPrefix?: string
 }
 
 export interface FeedFetchInlineStatusProps {
   statusLabel: string
+  statusTone?: 'success' | 'error' | 'secondary' | 'info'
   stageLabel: string
   stageProgressLabel?: string | null
   progressPercent: number
@@ -53,11 +86,16 @@ export interface FeedFetchInlineStatusProps {
   estimatedStartLabel?: string | null
   estimatedFinishLabel?: string | null
   nextFetchLabel?: string | null
+  stagePrefix?: string
+  estimatedStartPrefix?: string
+  estimatedFinishPrefix?: string
+  nextFetchPrefix?: string
 }
 
 export function FeedFetchProgress({
   title,
   statusLabel,
+  statusTone = 'info',
   stageLabel,
   stageProgressLabel,
   progressPercent,
@@ -65,12 +103,34 @@ export function FeedFetchProgress({
   estimatedStartLabel,
   estimatedFinishLabel,
   predictionLabel,
+  progressLabel = 'Stage progress',
+  estimatedStartPrefix = 'Estimated start',
+  estimatedFinishPrefix = 'Estimated finish',
   stages = [],
+  stageTimingPrefixes = {
+    start: 'Start',
+    finish: 'Finish',
+    duration: 'Duration',
+  },
   details = [],
+  currentDiagnosticTitle,
+  currentDiagnosticText,
   history = [],
   historyTitle = 'Recent runs',
   emptyHistoryLabel = 'No fetch history yet.',
   historyLoading = false,
+  historyLoadingLabel = 'Loading recent runs…',
+  queueTitle,
+  queueItems = [],
+  emptyQueueLabel = 'No queued or running tasks ahead.',
+  queueFilter,
+  onQueueFilterChange,
+  queueFilterLabels = {
+    all: 'All',
+    running: 'Running',
+    queued: 'Queued',
+  },
+  queueEtaPrefix = 'ETA finish',
 }: FeedFetchProgressProps) {
   return (
     <Card className="border-border/80">
@@ -80,10 +140,10 @@ export function FeedFetchProgress({
             <CardTitle className="text-base">{title}</CardTitle>
             <CardDescription>{stageLabel}</CardDescription>
             {stageProgressLabel ? (
-              <p className="text-muted-foreground text-xs">Stage progress: {stageProgressLabel}</p>
+              <p className="text-muted-foreground text-xs">{progressLabel}: {stageProgressLabel}</p>
             ) : null}
           </div>
-          <Badge variant={statusVariant(statusLabel)}>{statusLabel}</Badge>
+          <Badge variant={statusTone}>{statusLabel}</Badge>
         </div>
         <Progress aria-label={title} value={progressPercent}>
           <ProgressTrack>
@@ -95,9 +155,15 @@ export function FeedFetchProgress({
         {summaryText ? <p className="text-foreground/80">{summaryText}</p> : null}
         {estimatedStartLabel || estimatedFinishLabel ? (
           <div className="text-muted-foreground grid gap-1">
-            {estimatedStartLabel ? <p>Estimated start: {estimatedStartLabel}</p> : null}
-            {estimatedFinishLabel ? <p>Estimated finish: {estimatedFinishLabel}</p> : null}
+            {estimatedStartLabel ? <p>{estimatedStartPrefix}: {estimatedStartLabel}</p> : null}
+            {estimatedFinishLabel ? <p>{estimatedFinishPrefix}: {estimatedFinishLabel}</p> : null}
             {predictionLabel ? <p>{predictionLabel}</p> : null}
+          </div>
+        ) : null}
+        {currentDiagnosticTitle && currentDiagnosticText ? (
+          <div className="rounded-lg border border-amber-300/60 bg-amber-50/80 px-3 py-2 text-sm text-amber-950">
+            <p className="text-xs font-semibold uppercase tracking-wide">{currentDiagnosticTitle}</p>
+            <p className="mt-1">{currentDiagnosticText}</p>
           </div>
         ) : null}
         {details.length > 0 ? (
@@ -124,14 +190,18 @@ export function FeedFetchProgress({
                   ) : null}
                   {(stage.startedLabel || stage.finishedLabel || stage.durationLabel) ? (
                     <p className="text-muted-foreground text-xs">
-                      {[stage.startedLabel ? `Start ${stage.startedLabel}` : null, stage.finishedLabel ? `Finish ${stage.finishedLabel}` : null, stage.durationLabel ? `Duration ${stage.durationLabel}` : null]
+                      {[
+                        stage.startedLabel ? `${stageTimingPrefixes.start} ${stage.startedLabel}` : null,
+                        stage.finishedLabel ? `${stageTimingPrefixes.finish} ${stage.finishedLabel}` : null,
+                        stage.durationLabel ? `${stageTimingPrefixes.duration} ${stage.durationLabel}` : null,
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </p>
                   ) : null}
                 </div>
                 <Badge size="sm" variant={stageVariant(stage.status)}>
-                  {stage.status}
+                  {stage.statusLabel ?? stage.status}
                 </Badge>
               </div>
             ))}
@@ -140,7 +210,7 @@ export function FeedFetchProgress({
         <div className="space-y-2">
           <p className="text-muted-foreground text-xs uppercase tracking-wide">{historyTitle}</p>
           {historyLoading ? (
-            <p className="text-muted-foreground text-sm">Loading recent runs…</p>
+            <p className="text-muted-foreground text-sm">{historyLoadingLabel}</p>
           ) : history.length > 0 ? (
             history.map((item) => (
               <div
@@ -157,7 +227,7 @@ export function FeedFetchProgress({
                   ) : null}
                 </div>
                 {item.statusLabel ? (
-                  <Badge size="sm" variant={statusVariant(item.statusLabel)}>
+                  <Badge size="sm" variant={item.statusTone ?? statusVariant(item.statusLabel)}>
                     {item.statusLabel}
                   </Badge>
                 ) : null}
@@ -167,6 +237,46 @@ export function FeedFetchProgress({
             <p className="text-muted-foreground text-sm">{emptyHistoryLabel}</p>
           )}
         </div>
+        {queueTitle ? (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-muted-foreground text-xs uppercase tracking-wide">{queueTitle}</p>
+              {queueFilter && onQueueFilterChange ? (
+                <div className="flex items-center gap-1">
+                  {(['all', 'running', 'queued'] as const).map((filter) => (
+                    <button
+                      key={filter}
+                      type="button"
+                      onClick={() => onQueueFilterChange(filter)}
+                      className={`rounded-md px-2 py-1 text-xs ${queueFilter === filter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}
+                    >
+                      {queueFilterLabels[filter]}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {queueItems.length > 0 ? (
+              queueItems.map((item) => (
+                <div key={item.id} className="flex items-start justify-between gap-3 rounded-lg border px-3 py-2">
+                  <div className="space-y-1">
+                    <p className="font-medium">{item.title}</p>
+                    <p className="text-muted-foreground text-xs">{item.stageLabel}</p>
+                    {item.summary ? <p className="text-muted-foreground text-xs">{item.summary}</p> : null}
+                    {item.etaLabel ? (
+                      <p className="text-muted-foreground text-xs">{queueEtaPrefix}: {item.etaLabel}</p>
+                    ) : null}
+                  </div>
+                  <Badge size="sm" variant={item.statusTone}>
+                    {item.statusLabel}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-muted-foreground text-sm">{emptyQueueLabel}</p>
+            )}
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   )
@@ -174,6 +284,7 @@ export function FeedFetchProgress({
 
 export function FeedFetchInlineStatus({
   statusLabel,
+  statusTone = 'info',
   stageLabel,
   stageProgressLabel,
   progressPercent,
@@ -181,25 +292,29 @@ export function FeedFetchInlineStatus({
   estimatedStartLabel,
   estimatedFinishLabel,
   nextFetchLabel,
+  stagePrefix = 'Stage',
+  estimatedStartPrefix = 'ETA start',
+  estimatedFinishPrefix = 'ETA finish',
+  nextFetchPrefix = 'Next fetch',
 }: FeedFetchInlineStatusProps) {
   return (
     <div className="space-y-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge size="sm" variant={statusVariant(statusLabel)}>
+        <Badge size="sm" variant={statusTone}>
           {statusLabel}
         </Badge>
         <span className="text-muted-foreground text-xs">{stageLabel}</span>
         {stageProgressLabel ? (
-          <span className="text-muted-foreground text-xs">Stage {stageProgressLabel}</span>
+          <span className="text-muted-foreground text-xs">{stagePrefix} {stageProgressLabel}</span>
         ) : null}
         {estimatedStartLabel ? (
-          <span className="text-muted-foreground text-xs">ETA start: {estimatedStartLabel}</span>
+          <span className="text-muted-foreground text-xs">{estimatedStartPrefix}: {estimatedStartLabel}</span>
         ) : null}
         {estimatedFinishLabel ? (
-          <span className="text-muted-foreground text-xs">ETA finish: {estimatedFinishLabel}</span>
+          <span className="text-muted-foreground text-xs">{estimatedFinishPrefix}: {estimatedFinishLabel}</span>
         ) : null}
         {nextFetchLabel ? (
-          <span className="text-muted-foreground text-xs">Next fetch: {nextFetchLabel}</span>
+          <span className="text-muted-foreground text-xs">{nextFetchPrefix}: {nextFetchLabel}</span>
         ) : null}
       </div>
       {summaryText ? <p className="text-xs text-foreground/80">{summaryText}</p> : null}

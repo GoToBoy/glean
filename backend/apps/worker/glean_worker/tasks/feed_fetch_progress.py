@@ -44,6 +44,16 @@ DEFAULT_STAGE_DURATIONS = {
 }
 
 
+def _with_progress_metrics(
+    metrics_json: dict[str, int | str] | None,
+    *,
+    now: datetime,
+) -> dict[str, int | str]:
+    payload = dict(metrics_json or {})
+    payload["last_progress_at"] = now.isoformat()
+    return payload
+
+
 def build_feed_fetch_summary(
     **overrides: int | bool | str | None,
 ) -> dict[str, int | bool | str | None]:
@@ -187,6 +197,7 @@ async def start_feed_fetch_run(
         queue_stage.status = "success"
         queue_stage.finished_at = now
         queue_stage.summary = "Worker started processing the queued run."
+        queue_stage.metrics_json = _with_progress_metrics(queue_stage.metrics_json, now=now)
 
     if trigger_type:
         run.trigger_type = trigger_type
@@ -226,8 +237,7 @@ async def advance_feed_fetch_stage(
         active_stage.finished_at = now
         if summary is not None:
             active_stage.summary = summary
-        if metrics_json is not None:
-            active_stage.metrics_json = dict(metrics_json)
+        active_stage.metrics_json = _with_progress_metrics(metrics_json, now=now)
 
     run.current_stage = next_stage_name
     run.status = "in_progress"
@@ -268,8 +278,7 @@ async def finalize_feed_fetch_run(
         final_active_stage.finished_at = now
         if active_stage_summary is not None:
             final_active_stage.summary = active_stage_summary
-        if active_stage_metrics_json is not None:
-            final_active_stage.metrics_json = dict(active_stage_metrics_json)
+        final_active_stage.metrics_json = _with_progress_metrics(active_stage_metrics_json, now=now)
 
     if final_active_stage is not None and final_active_stage.stage_name != "complete":
         for stage_name in _remaining_stage_names_before_complete(final_active_stage.stage_name):
@@ -295,8 +304,7 @@ async def finalize_feed_fetch_run(
         final_active_stage.finished_at = now
         if completion_summary is not None:
             final_active_stage.summary = completion_summary
-        if completion_metrics_json is not None:
-            final_active_stage.metrics_json = dict(completion_metrics_json)
+        final_active_stage.metrics_json = _with_progress_metrics(completion_metrics_json, now=now)
 
     run.status = run_status
     run.current_stage = "complete"
@@ -363,7 +371,7 @@ def _append_stage_event(
         started_at=started_at,
         finished_at=finished_at,
         summary=summary,
-        metrics_json=dict(metrics_json) if metrics_json is not None else None,
+        metrics_json=_with_progress_metrics(metrics_json, now=started_at),
     )
     return stage_event
 

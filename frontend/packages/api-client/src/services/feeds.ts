@@ -9,6 +9,7 @@ import type {
   BatchDeleteSubscriptionsRequest,
   BatchDeleteSubscriptionsResponse,
   FeedFetchLatestRunResponse,
+  FeedFetchActiveRunsResponse,
   FeedFetchRunBatchLatestResponse,
   FeedFetchRunHistoryResponse,
   RefreshAllFeedsResponse,
@@ -151,6 +152,13 @@ export class FeedService {
    */
   async getFeedFetchRunHistory(feedId: string): Promise<FeedFetchRunHistoryResponse> {
     return this.client.get<FeedFetchRunHistoryResponse>(`/feeds/${feedId}/fetch-runs/history`)
+  }
+
+  /**
+   * Get active queued/running feed fetch runs visible to the current user.
+   */
+  async getActiveFeedFetchRuns(): Promise<FeedFetchActiveRunsResponse> {
+    return this.client.get<FeedFetchActiveRunsResponse>('/feeds/fetch-runs/active')
   }
 
   /**

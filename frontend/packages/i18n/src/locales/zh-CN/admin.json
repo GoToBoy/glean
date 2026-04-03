@@ -179,6 +179,98 @@
       "failed": "失败"
     },
     "lastSuccessLabel": "最后成功",
+    "feedFetchProgress": {
+      "button": "抓取进度",
+      "currentRun": "当前运行",
+      "description": "查看抓取进度、预计时间、阶段详情和最近历史。",
+      "progressLabel": "阶段进度",
+      "currentStage": "当前阶段",
+      "estimatedStart": "预计开始",
+      "estimatedFinish": "预计完成",
+      "predictionLabel": "基于最近运行记录的预测",
+      "path": "路径",
+      "pathValues": {
+        "directFeed": "直接订阅源",
+        "rsshubPrimary": "RSSHub 主路径",
+        "rsshubFallback": "RSSHub 回退路径",
+        "unknown": "未知"
+      },
+      "lastFinished": "上次完成",
+      "lastSuccess": "上次成功",
+      "nextFetch": "下次抓取",
+      "firstFetch": "首次抓取",
+      "nextFetchAfterRun": "当前运行完成后计算",
+      "historyTitle": "最近运行",
+      "historyEmpty": "还没有抓取历史。",
+      "historyLoading": "正在加载最近运行…",
+      "diagnosticTitle": "详细诊断",
+      "lastProgress": "最近进展",
+      "queueTitle": "前方队列",
+      "queueEmpty": "前方没有排队或进行中的任务。",
+      "queueEta": "预计完成",
+      "filters": {
+        "all": "全部",
+        "running": "进行中",
+        "queued": "排队中"
+      },
+      "inline": {
+        "stage": "阶段",
+        "etaStart": "预计开始",
+        "etaFinish": "预计完成",
+        "nextFetch": "下次抓取"
+      },
+      "stageTiming": {
+        "start": "开始",
+        "finish": "结束",
+        "duration": "耗时"
+      },
+      "statuses": {
+        "queued": "已排队",
+        "in_progress": "刷新中",
+        "not_modified": "无变化",
+        "success": "已完成",
+        "error": "失败",
+        "scheduled": "已计划",
+        "not_started": "未开始"
+      },
+      "stageStatuses": {
+        "pending": "等待中",
+        "running": "进行中",
+        "success": "已完成",
+        "error": "失败",
+        "skipped": "已跳过"
+      },
+      "stages": {
+        "queue_wait": "排队等待",
+        "resolve_attempt_urls": "解析源路径",
+        "fetch_xml": "抓取 Feed XML",
+        "parse_feed": "解析 Feed",
+        "process_entries": "处理条目",
+        "backfill_content": "回填正文",
+        "store_results": "写入结果",
+        "complete": "完成"
+      },
+      "slowDiagnostics": {
+        "queue_wait": "正在等待 worker 空闲。",
+        "resolve_attempt_urls": "正在解析可用的订阅源路径。",
+        "fetch_xml": "正在等待订阅源响应。",
+        "parse_feed": "正在解析订阅内容。",
+        "process_entries": "正在处理订阅条目。",
+        "backfill_content": "正在回填文章正文。",
+        "store_results": "正在写入抓取结果。",
+        "complete": "正在完成本次抓取。"
+      },
+      "emptyStates": {
+        "noRunYet": "还没有持久化的抓取记录",
+        "waitingWindow": "正在等待下一个抓取窗口"
+      },
+      "summary": {
+        "newEntries": "新增 {{count}}",
+        "totalEntries": "共 {{count}}",
+        "backfillFailed": "正文回填失败 {{count}}",
+        "fallbackUsed": "已使用 RSSHub 回退路径"
+      }
+    },
     "logLabel": "日志",
     "disableTooltip": "禁用订阅",
     "enableTooltip": "启用订阅",

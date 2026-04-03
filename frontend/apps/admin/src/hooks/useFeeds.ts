@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
 import type {
+  FeedFetchActiveRunsResponse,
   FeedFetchLatestRunResponse,
   FeedFetchRun,
   FeedFetchRunBatchLatestResponse,
@@ -249,6 +250,18 @@ export function useFeedFetchRunHistory(feedId: string, enabled = true) {
       return response.data
     },
     enabled: enabled && !!feedId,
+  })
+}
+
+export function useActiveFeedFetchRuns(enabled = true) {
+  return useQuery<FeedFetchActiveRunsResponse>({
+    queryKey: ['admin', 'feed-fetch-progress', 'active'],
+    queryFn: async () => {
+      const response = await api.get('/feeds/fetch-runs/active')
+      return response.data
+    },
+    enabled,
+    refetchInterval: enabled ? 15000 : false,
   })
 }
 

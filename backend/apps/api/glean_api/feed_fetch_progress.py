@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from glean_database.models import Feed, FeedFetchRun, FeedFetchStageEvent
 
@@ -20,6 +21,16 @@ QUEUE_STAGE_NAME = "queue_wait"
 QUEUE_STAGE_STATUS = "running"
 COMPLETED_RUN_STATUSES = {"success", "not_modified", "error"}
 ACTIVE_RUN_STATUSES = {"queued", "in_progress"}
+DEFAULT_STAGE_SLOW_THRESHOLDS = {
+    "queue_wait": timedelta(minutes=3),
+    "resolve_attempt_urls": timedelta(seconds=20),
+    "fetch_xml": timedelta(minutes=2),
+    "parse_feed": timedelta(seconds=30),
+    "process_entries": timedelta(minutes=2),
+    "backfill_content": timedelta(minutes=5),
+    "store_results": timedelta(minutes=1),
+    "complete": timedelta(seconds=30),
+}
 
 
 def compute_initial_eta_fields(
@@ -232,8 +243,15 @@ async def infer_eta_bucket(
     return "direct_feed", f"direct:{host}" if host else None
 
 
-def serialize_feed_fetch_stage_event(stage_event: FeedFetchStageEvent) -> dict[str, Any]:
+def serialize_feed_fetch_stage_event(
+    stage_event: FeedFetchStageEvent,
+    *,
+    include_admin_diagnostic: bool = False,
+) -> dict[str, Any]:
     """Serialize one persisted stage event for API responses."""
+    diagnostics = _build_stage_diagnostics(stage_event)
+    if not include_admin_diagnostic:
+        diagnostics["admin_diagnostic"] = None
     return {
         "id": stage_event.id,
         "stage_order": stage_event.stage_order,
@@ -243,6 +261,7 @@ def serialize_feed_fetch_stage_event(stage_event: FeedFetchStageEvent) -> dict[s
         "finished_at": stage_event.finished_at.isoformat() if stage_event.finished_at else None,
         "summary": stage_event.summary,
         "metrics_json": stage_event.metrics_json,
+        **diagnostics,
     }
 
 
@@ -253,6 +272,7 @@ def serialize_feed_fetch_run(
     last_fetch_attempt_at: datetime | None = None,
     last_fetch_success_at: datetime | None = None,
     last_fetched_at: datetime | None = None,
+    include_admin_diagnostic: bool = False,
     include_stages: bool = True,
 ) -> dict[str, Any]:
     """Serialize one persisted feed fetch run for API responses."""
@@ -281,7 +301,11 @@ def serialize_feed_fetch_run(
     }
     if include_stages:
         payload["stages"] = [
-            serialize_feed_fetch_stage_event(stage_event) for stage_event in run.stage_events
+            serialize_feed_fetch_stage_event(
+                stage_event,
+                include_admin_diagnostic=include_admin_diagnostic,
+            )
+            for stage_event in run.stage_events
         ]
     else:
         payload["stages"] = []
@@ -305,6 +329,31 @@ async def load_latest_feed_fetch_runs(
     for run in result.scalars().all():
         latest_by_feed.setdefault(run.feed_id, run)
     return latest_by_feed
+
+
+async def load_active_feed_fetch_runs(
+    session: AsyncSession,
+    *,
+    feed_ids: list[str] | None = None,
+) -> list[tuple[FeedFetchRun, Feed]]:
+    """Load queued or running fetch runs with feed metadata."""
+    stmt = (
+        select(FeedFetchRun, Feed)
+        .join(Feed, Feed.id == FeedFetchRun.feed_id)
+        .options(selectinload(FeedFetchRun.stage_events))
+        .where(FeedFetchRun.status.in_(ACTIVE_RUN_STATUSES))
+        .order_by(
+            FeedFetchRun.started_at.is_(None),
+            FeedFetchRun.queue_entered_at.asc().nulls_last(),
+            FeedFetchRun.created_at.asc(),
+        )
+    )
+    if feed_ids is not None:
+        if not feed_ids:
+            return []
+        stmt = stmt.where(FeedFetchRun.feed_id.in_(feed_ids))
+    result = await session.execute(stmt)
+    return list(result.all())
 
 
 def _weighted_average_run_duration(runs: list[FeedFetchRun]) -> timedelta:
@@ -348,6 +397,71 @@ def _derive_rsshub_route_family(path: str) -> str | None:
     if len(segments) >= 2:
         return "_".join(segments[:2])
     return segments[0]
+
+
+def _build_stage_diagnostics(stage_event: FeedFetchStageEvent) -> dict[str, Any]:
+    metrics = stage_event.metrics_json or {}
+    now = datetime.now(UTC)
+    threshold = DEFAULT_STAGE_SLOW_THRESHOLDS.get(stage_event.stage_name, timedelta(minutes=2))
+    if stage_event.started_at is None:
+        elapsed_seconds: int | None = None
+        is_slow = False
+    else:
+        effective_end = stage_event.finished_at or now
+        elapsed_seconds = max(int((effective_end - stage_event.started_at).total_seconds()), 0)
+        is_slow = stage_event.status == "running" and elapsed_seconds > int(threshold.total_seconds())
+
+    public_diagnostic = metrics.get("public_diagnostic")
+    admin_diagnostic = metrics.get("admin_diagnostic")
+    if not isinstance(public_diagnostic, str) or not public_diagnostic:
+        public_diagnostic = _default_public_diagnostic(stage_event.stage_name, is_slow)
+    if not isinstance(admin_diagnostic, str) or not admin_diagnostic:
+        admin_diagnostic = _default_admin_diagnostic(
+            stage_event.stage_name,
+            is_slow,
+            elapsed_seconds,
+            int(threshold.total_seconds()),
+        )
+
+    return {
+        "last_progress_at": _coerce_iso_datetime(metrics.get("last_progress_at")),
+        "is_slow": is_slow,
+        "slow_threshold_seconds": int(threshold.total_seconds()),
+        "elapsed_seconds": elapsed_seconds,
+        "public_diagnostic": public_diagnostic,
+        "admin_diagnostic": admin_diagnostic,
+    }
+
+
+def _coerce_iso_datetime(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None
+
+
+def _default_public_diagnostic(stage_name: str, is_slow: bool) -> str | None:
+    if not is_slow:
+        return None
+    return {
+        "queue_wait": "Waiting for worker capacity.",
+        "resolve_attempt_urls": "Resolving feed source paths.",
+        "fetch_xml": "Waiting for the feed source to respond.",
+        "parse_feed": "Parsing the feed payload.",
+        "process_entries": "Processing feed entries.",
+        "backfill_content": "Backfilling article content.",
+        "store_results": "Writing feed updates to storage.",
+        "complete": "Finalizing the fetch run.",
+    }.get(stage_name, "This stage is taking longer than expected.")
+
+
+def _default_admin_diagnostic(
+    stage_name: str,
+    is_slow: bool,
+    elapsed_seconds: int | None,
+    threshold_seconds: int,
+) -> str | None:
+    if not is_slow:
+        return None
+    elapsed_suffix = f" elapsed={elapsed_seconds}s threshold={threshold_seconds}s" if elapsed_seconds is not None else ""
+    return f"Stage {stage_name} is running longer than expected.{elapsed_suffix}"
 
 
 async def trim_feed_fetch_run_history(

@@ -132,6 +132,98 @@
     },
     "entriesSuffix": "entries",
     "lastSuccessLabel": "Last success",
+    "feedFetchProgress": {
+      "button": "Fetch progress",
+      "currentRun": "Current run",
+      "description": "Feed fetch progress, ETA, stage details, and recent history.",
+      "progressLabel": "Stage progress",
+      "currentStage": "Current stage",
+      "estimatedStart": "Estimated start",
+      "estimatedFinish": "Estimated finish",
+      "predictionLabel": "Prediction based on recent runs",
+      "path": "Path",
+      "pathValues": {
+        "directFeed": "Direct feed",
+        "rsshubPrimary": "RSSHub primary",
+        "rsshubFallback": "RSSHub fallback",
+        "unknown": "Unknown"
+      },
+      "lastFinished": "Last finished",
+      "lastSuccess": "Last success",
+      "nextFetch": "Next fetch",
+      "firstFetch": "First fetch",
+      "nextFetchAfterRun": "Calculated after the current run finishes",
+      "historyTitle": "Recent runs",
+      "historyEmpty": "No fetch history yet.",
+      "historyLoading": "Loading recent runs…",
+      "diagnosticTitle": "Stage diagnostic",
+      "lastProgress": "Last progress",
+      "queueTitle": "Ahead in queue",
+      "queueEmpty": "No queued or running tasks ahead.",
+      "queueEta": "ETA finish",
+      "filters": {
+        "all": "All",
+        "running": "Running",
+        "queued": "Queued"
+      },
+      "inline": {
+        "stage": "Stage",
+        "etaStart": "ETA start",
+        "etaFinish": "ETA finish",
+        "nextFetch": "Next fetch"
+      },
+      "stageTiming": {
+        "start": "Start",
+        "finish": "Finish",
+        "duration": "Duration"
+      },
+      "statuses": {
+        "queued": "Queued",
+        "in_progress": "Refreshing",
+        "not_modified": "No changes",
+        "success": "Completed",
+        "error": "Failed",
+        "scheduled": "Scheduled",
+        "not_started": "Not started"
+      },
+      "stageStatuses": {
+        "pending": "Pending",
+        "running": "Running",
+        "success": "Done",
+        "error": "Failed",
+        "skipped": "Skipped"
+      },
+      "stages": {
+        "queue_wait": "Queue wait",
+        "resolve_attempt_urls": "Resolve source path",
+        "fetch_xml": "Fetch feed XML",
+        "parse_feed": "Parse feed",
+        "process_entries": "Process entries",
+        "backfill_content": "Backfill content",
+        "store_results": "Store results",
+        "complete": "Complete"
+      },
+      "slowDiagnostics": {
+        "queue_wait": "Waiting for worker capacity.",
+        "resolve_attempt_urls": "Resolving available feed source paths.",
+        "fetch_xml": "Waiting for the feed source to respond.",
+        "parse_feed": "Parsing the feed payload.",
+        "process_entries": "Processing feed entries.",
+        "backfill_content": "Backfilling article content.",
+        "store_results": "Writing feed updates to storage.",
+        "complete": "Finalizing the fetch run."
+      },
+      "emptyStates": {
+        "noRunYet": "No persisted fetch run yet",
+        "waitingWindow": "Waiting for the next fetch window"
+      },
+      "summary": {
+        "newEntries": "New {{count}}",
+        "totalEntries": "Total {{count}}",
+        "backfillFailed": "Backfill failed {{count}}",
+        "fallbackUsed": "RSSHub fallback used"
+      }
+    },
     "edit": "Edit",
     "unsubscribe": "Unsubscribe",
     "noSubscriptionsFound": "No subscriptions found",

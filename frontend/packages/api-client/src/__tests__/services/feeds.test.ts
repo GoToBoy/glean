@@ -181,6 +181,16 @@ describe('FeedService', () => {
     expect(result).toEqual(response)
   })
 
+  it('should fetch active feed fetch runs', async () => {
+    const response = { items: [{ id: 'run-1', feed_id: 'f1', feed_url: 'https://example.com/feed.xml', feed_title: 'Feed', stages: [] }] }
+    vi.mocked(mockClient.get).mockResolvedValue(response)
+
+    const result = await service.getActiveFeedFetchRuns()
+
+    expect(mockClient.get).toHaveBeenCalledWith('/feeds/fetch-runs/active')
+    expect(result).toEqual(response)
+  })
+
   it('should import OPML', async () => {
     const response = { imported: 3, skipped: 1 }
     vi.mocked(mockClient.post).mockResolvedValue(response)
