@@ -206,8 +206,16 @@
       "diagnosticTitle": "Detailed diagnostic",
       "lastProgress": "Last progress",
       "queueTitle": "Ahead in queue",
+      "queueSectionTitle": "Queue activity",
       "queueEmpty": "No queued or running tasks ahead.",
       "queueEta": "ETA finish",
+      "globalQueueLabel": "Queue",
+      "globalQueueSummary": "{{running}} running · {{queued}} queued",
+      "globalQueueIdle": "Idle",
+      "queueGroups": {
+        "running": "Running ({{count}})",
+        "queued": "Queued ({{count}})"
+      },
       "filters": {
         "all": "All",
         "running": "Running",
