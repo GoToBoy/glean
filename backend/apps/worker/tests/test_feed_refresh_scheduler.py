@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from glean_database.models.feed_fetch_run import FeedFetchRun
+from glean_worker.config import Settings
 from glean_worker.main import get_oss_cron_jobs
 from glean_worker.tasks.feed_fetcher import fetch_all_feeds
 
@@ -63,9 +64,22 @@ async def test_fetch_all_feeds_skips_feed_with_active_run():
     assert redis.enqueue_job.await_args.args[1] == "feed-2"
 
 
-def test_get_oss_cron_jobs_uses_hourly_feed_schedule():
+def test_worker_settings_default_to_twelve_hour_refresh_interval():
+    settings = Settings()
+
+    assert settings.feed_refresh_interval_minutes == 720
+
+
+def test_worker_settings_allow_refresh_interval_override():
+    settings = Settings(feed_refresh_interval_minutes=360)
+
+    assert settings.feed_refresh_interval_minutes == 360
+
+
+def test_get_oss_cron_jobs_uses_twelve_hour_feed_schedule():
     cron_jobs = get_oss_cron_jobs()
 
     feed_job = cron_jobs[0]
 
     assert feed_job.minute == 0
+    assert feed_job.hour == {0, 12}

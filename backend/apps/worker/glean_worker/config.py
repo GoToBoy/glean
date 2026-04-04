@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     worker_job_timeout_seconds: int = 1800
     worker_max_jobs: int = 4
-    feed_refresh_interval_minutes: int = 60
+    feed_refresh_interval_minutes: int = 720
 
 
 @lru_cache

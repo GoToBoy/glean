@@ -112,6 +112,7 @@ Important environment variables:
 | `MTRAN_SERVER_URL` | Backend/worker translation endpoint | `http://mtranserver:5001` |
 | `WORKER_JOB_TIMEOUT_SECONDS` | Worker timeout for long-running jobs | `1800` |
 | `WORKER_MAX_JOBS` | Max concurrent arq jobs in the worker | `4` |
+| `FEED_REFRESH_INTERVAL_MINUTES` | Scheduled feed refresh interval and default `next_fetch_at` delay | `720` |
 | `WORKER_MEMORY_LIMIT` | Docker memory hard limit for the worker container | `2g` |
 | `WORKER_MEMORY_RESERVATION` | Docker memory reservation for the worker container | `1g` |
 | `BROWSER_EXTRACTION_MAX_CONCURRENCY` | Max concurrent Playwright extractions | `1` |
@@ -122,6 +123,7 @@ For all options, see [.env.example](./.env.example).
 Performance note for Docker deployments:
 
 - The default stack now keeps `glean-worker` intentionally conservative: `WORKER_MAX_JOBS=4`, `BROWSER_EXTRACTION_MAX_CONCURRENCY=1`, and a `2g` worker memory cap.
+- Scheduled feed refresh now defaults to every 12 hours via `FEED_REFRESH_INTERVAL_MINUTES=720`; you can override it in your Compose environment when you want a different interval.
 - If you increase feed backfill throughput or add new worker tasks later, treat memory and concurrency as part of the feature design rather than an afterthought.
 
 ## Current Capability Highlights

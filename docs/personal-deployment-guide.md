@@ -162,6 +162,18 @@ image: ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
 7. 重新启动 Compose 项目（自动拉取新镜像）
 ```
 
+如果你想调整 worker 的自动抓取频率，可以在 NAS 的 Compose / container yaml 里给 `worker` 增加或修改：
+
+```yaml
+environment:
+  FEED_REFRESH_INTERVAL_MINUTES: 720
+```
+
+默认值是 `720`，也就是 12 小时。这个值同时影响：
+
+- worker 定时抓取 cron
+- 抓取成功后 `next_fetch_at` 的默认推进间隔
+
 ---
 
 ## Rollback: 回滚到官方版本
