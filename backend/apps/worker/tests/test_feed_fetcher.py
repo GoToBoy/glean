@@ -268,6 +268,61 @@ async def test_missing_run_id_reuses_active_queued_run():
     assert progress_run.path_kind == "direct_feed"
 
 
+@pytest.mark.asyncio
+async def test_missing_run_id_and_job_id_falls_back_to_active_run_by_feed():
+    """Legacy jobs without run metadata should still update the newest active run."""
+    progress_run = TestFetchFeedTask._build_progress_run()
+
+    mock_feed = MagicMock()
+    mock_feed.id = "feed-1"
+    mock_feed.url = "https://example.com/feed.xml"
+    mock_feed.site_url = None
+    mock_feed.etag = "etag-1"
+    mock_feed.last_modified = None
+    mock_feed.status = FeedStatus.ERROR
+    mock_feed.error_count = 4
+    mock_feed.fetch_error_message = "old error"
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_feed
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=mock_result)
+
+    mock_rsshub_service = MagicMock()
+    mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+
+    with (
+        patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+        patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+        patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=None)),
+        patch(
+            "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+            new=AsyncMock(return_value=progress_run),
+        ) as mock_find_active_run,
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        mock_ctx.return_value.__aenter__.return_value = mock_session
+        result = await fetch_feed_task({}, feed_id="feed-1")
+
+    assert result == {"status": "not_modified", "new_entries": 0}
+    mock_find_active_run.assert_awaited_once_with(mock_session, "feed-1")
+    assert progress_run.status == "not_modified"
+    assert progress_run.current_stage == "complete"
+    assert progress_run.path_kind == "direct_feed"
+
+
 class TestFetchFeedTaskProgress:
     """Additional feed fetch progress coverage."""
 

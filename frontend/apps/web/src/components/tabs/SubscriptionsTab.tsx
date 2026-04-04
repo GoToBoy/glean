@@ -19,7 +19,6 @@ import { useFolderStore } from '../../stores/folderStore'
 import { useAuthStore } from '../../stores/authStore'
 import type {
   EntryWithState,
-  FeedFetchActiveRunItem,
   FeedFetchLatestRunResponse,
   FeedFetchRun,
   FeedFetchStageEvent,
@@ -78,7 +77,6 @@ import {
   Activity,
 } from 'lucide-react'
 import {
-  buildFeedFetchQueueSections,
   buildFeedFetchQueueSummary,
   buildFeedFetchSummaryParts,
   findCurrentFeedFetchStage,
@@ -88,6 +86,7 @@ import {
   mapFeedFetchRunToViewModel,
 } from '@glean/api-client'
 import { shouldAutoTranslate } from '../../lib/translationLanguagePolicy'
+import { formatFeedQueueSummary } from './feedQueueSummary'
 
 type FeedRefreshState = {
   jobId: string
@@ -105,7 +104,7 @@ type FeedRefreshState = {
 }
 
 const PANEL_CLASS = 'flex min-h-0 flex-1 flex-col overflow-hidden border'
-const TOOLBAR_CLASS = 'flex shrink-0 flex-wrap items-center justify-between gap-3'
+const TOOLBAR_CLASS = 'flex shrink-0 flex-col gap-3'
 const SEARCH_CLASS =
   'h-10 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-input'
 const TREE_ROW_CLASS =
@@ -213,6 +212,7 @@ export function SubscriptionsTab() {
     () => buildFeedFetchQueueSummary(activeRunsQuery.data?.items ?? []),
     [activeRunsQuery.data?.items]
   )
+  const activeQueueSummaryLabel = formatSettingsGlobalQueueSummary(t, activeQueueSummary)
 
   useEffect(() => {
     setSelectedIds((prev) => {
@@ -490,8 +490,8 @@ export function SubscriptionsTab() {
       )}
 
       <div className={TOOLBAR_CLASS}>
-        <div className="flex w-full flex-1 flex-wrap items-center gap-2">
-          <div className="relative w-full flex-1 sm:max-w-64">
+        <div className="flex w-full flex-wrap items-center gap-2">
+          <div className="relative min-w-0 flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
             <input
               type="text"
@@ -501,20 +501,15 @@ export function SubscriptionsTab() {
               className={SEARCH_CLASS}
             />
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
-            <Activity className="h-3.5 w-3.5 text-primary" />
-            <span className="text-muted-foreground">
-              {t('manageFeeds.feedFetchProgress.globalQueueLabel')}
-            </span>
-            <span className="font-medium text-foreground">
-              {activeQueueSummary.totalCount > 0
-                ? t('manageFeeds.feedFetchProgress.globalQueueSummary', {
-                    running: activeQueueSummary.runningCount,
-                    queued: activeQueueSummary.queuedCount,
-                  })
-                : t('manageFeeds.feedFetchProgress.globalQueueIdle')}
-            </span>
-          </div>
+          {activeQueueSummary.totalCount > 0 && (
+            <div className="ml-auto flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+              <Activity className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">
+                {t('manageFeeds.feedFetchProgress.globalQueueLabel')}
+              </span>
+              <span className="font-medium text-foreground">{activeQueueSummaryLabel}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -690,7 +685,6 @@ export function SubscriptionsTab() {
                     refreshingId={refreshingId}
                     feedRefreshState={feedRefreshState}
                     latestRunsByFeedId={latestRunsByFeedId}
-                    activeRuns={activeRunsQuery.data?.items ?? []}
                   />
                 )
               })}
@@ -715,7 +709,6 @@ export function SubscriptionsTab() {
                         refreshingId={refreshingId}
                         refreshState={feedRefreshState[subscription.feed_id]}
                         latestRun={latestRunsByFeedId.get(subscription.feed_id)}
-                        activeRuns={activeRunsQuery.data?.items ?? []}
                       />
                     ))}
                   </div>
@@ -751,7 +744,6 @@ interface FolderBranchProps {
   refreshingId: string | null
   feedRefreshState: Record<string, FeedRefreshState>
   latestRunsByFeedId: Map<string, FeedFetchLatestRunResponse>
-  activeRuns: FeedFetchActiveRunItem[]
 }
 
 function FolderBranch({
@@ -771,7 +763,6 @@ function FolderBranch({
   refreshingId,
   feedRefreshState,
   latestRunsByFeedId,
-  activeRuns,
 }: FolderBranchProps) {
   const { t } = useTranslation('settings')
   const count = folderStats.countMap.get(folder.id) ?? 0
@@ -836,7 +827,6 @@ function FolderBranch({
               refreshingId={refreshingId}
               feedRefreshState={feedRefreshState}
               latestRunsByFeedId={latestRunsByFeedId}
-              activeRuns={activeRuns}
             />
           ))}
 
@@ -854,7 +844,6 @@ function FolderBranch({
               refreshingId={refreshingId}
               refreshState={feedRefreshState[subscription.feed_id]}
               latestRun={latestRunsByFeedId.get(subscription.feed_id)}
-              activeRuns={activeRuns}
             />
           ))}
 
@@ -884,7 +873,6 @@ interface SubscriptionRowProps {
   refreshingId: string | null
   refreshState?: FeedRefreshState
   latestRun?: FeedFetchLatestRunResponse
-  activeRuns: FeedFetchActiveRunItem[]
 }
 
 function SubscriptionRow({
@@ -899,7 +887,6 @@ function SubscriptionRow({
   refreshingId,
   refreshState,
   latestRun,
-  activeRuns,
 }: SubscriptionRowProps) {
   const { t } = useTranslation('settings')
   const isRefreshingRow = refreshState && isPendingRefreshStatus(refreshState.status)
@@ -1011,7 +998,6 @@ function SubscriptionRow({
             subscription={subscription}
             refreshState={refreshState}
             initialLatestRun={latestRun}
-            activeRuns={activeRuns}
           />
           <Button
             variant="ghost"
@@ -1070,12 +1056,10 @@ function SubscriptionFetchProgressButton({
   subscription,
   refreshState,
   initialLatestRun,
-  activeRuns,
 }: {
   subscription: Subscription
   refreshState?: FeedRefreshState
   initialLatestRun?: FeedFetchLatestRunResponse
-  activeRuns: FeedFetchActiveRunItem[]
 }) {
   const { t } = useTranslation('settings')
   const [open, setOpen] = useState(false)
@@ -1085,11 +1069,6 @@ function SubscriptionFetchProgressButton({
   const details = buildSettingsFeedFetchDetails(t, latestRun, subscription)
   const historyItems = buildSettingsFeedFetchHistoryItems(t, historyQuery.data?.items ?? [])
   const stageItems = buildSettingsFeedFetchStageItems(t, latestRun?.stages ?? [])
-  const queueSections = buildSettingsFeedFetchQueueSections(
-    t,
-    activeRuns,
-    latestRun?.id ?? null
-  )
   const currentDiagnosticText = buildSettingsDiagnosticText(t, latestRun)
   const summaryText = buildSettingsFeedFetchSummary(t, latestRun)
   const statusLabel = localizeSettingsFeedFetchStatus(
@@ -1173,9 +1152,6 @@ function SubscriptionFetchProgressButton({
               emptyHistoryLabel={t('manageFeeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
               historyLoadingLabel={t('manageFeeds.feedFetchProgress.historyLoading')}
-              queueTitle={t('manageFeeds.feedFetchProgress.queueSectionTitle')}
-              queueSections={queueSections}
-              emptyQueueLabel={t('manageFeeds.feedFetchProgress.queueEmpty')}
             />
           ) : (
             <FeedFetchProgress
@@ -1191,9 +1167,6 @@ function SubscriptionFetchProgressButton({
               emptyHistoryLabel={t('manageFeeds.feedFetchProgress.historyEmpty')}
               historyLoading={historyQuery.isFetching && !historyQuery.data}
               historyLoadingLabel={t('manageFeeds.feedFetchProgress.historyLoading')}
-              queueTitle={t('manageFeeds.feedFetchProgress.queueSectionTitle')}
-              queueSections={queueSections}
-              emptyQueueLabel={t('manageFeeds.feedFetchProgress.queueEmpty')}
             />
           )}
         </SheetPanel>
@@ -1346,34 +1319,6 @@ function buildSettingsFeedFetchHistoryItems(
   })
 }
 
-function buildSettingsFeedFetchQueueSections(
-  t: ReturnType<typeof useTranslation>['t'],
-  activeRuns: FeedFetchActiveRunItem[],
-  currentRunId: string | null
-) {
-  return buildFeedFetchQueueSections({
-    currentRunId,
-    activeRuns,
-  }).map((section) => ({
-    key: section.key,
-    title:
-      section.key === 'running'
-        ? t('manageFeeds.feedFetchProgress.queueGroups.running', { count: section.count })
-        : t('manageFeeds.feedFetchProgress.queueGroups.queued', { count: section.count }),
-    items: section.items.map((item) => ({
-      id: item.id,
-      title: item.title,
-      statusLabel: localizeSettingsFeedFetchStatus(t, item.statusKey, item.statusLabel),
-      statusTone: item.statusTone,
-      stageLabel: localizeSettingsFeedFetchStage(t, item.stageKey, item.stageLabel),
-      metaLabel: item.etaLabel
-        ? `${t('manageFeeds.feedFetchProgress.queueEta')}: ${item.etaLabel}`
-        : null,
-      summary: item.summary ?? null,
-    })),
-  }))
-}
-
 function buildSettingsDiagnosticText(
   t: ReturnType<typeof useTranslation>['t'],
   latestRun: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined
@@ -1391,6 +1336,22 @@ function buildSettingsDiagnosticText(
   return lastProgress
     ? `${base} · ${t('manageFeeds.feedFetchProgress.lastProgress')}: ${lastProgress}`
     : base
+}
+
+function formatSettingsGlobalQueueSummary(
+  t: ReturnType<typeof useTranslation>['t'],
+  summary: { runningCount: number; queuedCount: number; totalCount: number }
+) {
+  if (summary.totalCount <= 0) {
+    return null
+  }
+  const localized = t('manageFeeds.feedFetchProgress.globalQueueSummary', {
+    running: summary.runningCount,
+    queued: summary.queuedCount,
+  })
+  return typeof localized === 'string'
+    ? localized
+    : formatFeedQueueSummary(summary.runningCount, summary.queuedCount)
 }
 
 function normalizeSettingsStageStatus(

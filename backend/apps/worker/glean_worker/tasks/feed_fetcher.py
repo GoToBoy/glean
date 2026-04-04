@@ -92,22 +92,23 @@ async def _load_persisted_run_for_job(
 ) -> FeedFetchRun | None:
     """Load the persisted progress run for the current worker job when possible."""
     persisted_run = await load_feed_fetch_run(session, run_id)
-    if persisted_run is not None or not job_id:
-        return persisted_run
-
-    result = await session.execute(
-        select(FeedFetchRun)
-        .where(
-            FeedFetchRun.feed_id == feed_id,
-            FeedFetchRun.job_id == job_id,
-            FeedFetchRun.status.in_(("queued", "in_progress")),
-        )
-        .order_by(FeedFetchRun.created_at.desc())
-        .limit(1)
-    )
-    persisted_run = result.scalar_one_or_none()
     if persisted_run is not None:
         return persisted_run
+
+    if job_id:
+        result = await session.execute(
+            select(FeedFetchRun)
+            .where(
+                FeedFetchRun.feed_id == feed_id,
+                FeedFetchRun.job_id == job_id,
+                FeedFetchRun.status.in_(("queued", "in_progress")),
+            )
+            .order_by(FeedFetchRun.created_at.desc())
+            .limit(1)
+        )
+        persisted_run = result.scalar_one_or_none()
+        if persisted_run is not None:
+            return persisted_run
 
     return await find_active_feed_fetch_run(session, feed_id)
 
