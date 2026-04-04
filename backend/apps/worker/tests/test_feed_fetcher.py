@@ -194,6 +194,10 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
             "glean_worker.tasks.feed_fetcher.create_estimated_queued_feed_fetch_run",
             new=AsyncMock(side_effect=[(run_one, stage_one), (run_two, stage_two)]),
         ) as mock_create_run,
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+            new=AsyncMock(side_effect=[None, None]),
+        ),
     ):
         mock_ctx.return_value.__aenter__.return_value = mock_session
 
@@ -204,6 +208,70 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
     assert mock_create_run.await_args_list[1].kwargs["queue_depth_ahead"] == 1
     assert redis.enqueue_job.await_args_list[0].kwargs["run_id"] == "run-1"
     assert redis.enqueue_job.await_args_list[1].kwargs["run_id"] == "run-2"
+
+@pytest.mark.asyncio
+async def test_missing_run_id_reuses_active_queued_run():
+    """Jobs without run_id should still bind to the newest active queued run."""
+    progress_run = TestFetchFeedTask._build_progress_run()
+    progress_run.job_id = "job-1"
+
+    mock_feed = MagicMock()
+    mock_feed.id = "feed-1"
+    mock_feed.url = "https://example.com/feed.xml"
+    mock_feed.site_url = None
+    mock_feed.etag = "etag-1"
+    mock_feed.last_modified = None
+    mock_feed.status = FeedStatus.ERROR
+    mock_feed.error_count = 4
+    mock_feed.fetch_error_message = "old error"
+
+    mock_result = MagicMock()
+    mock_result.scalar_one_or_none.return_value = mock_feed
+
+    mock_progress_result = MagicMock()
+    mock_progress_result.scalar_one_or_none.return_value = progress_run
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(side_effect=[mock_progress_result, mock_result])
+
+    mock_rsshub_service = MagicMock()
+    mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+
+    with (
+        patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+        patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+        patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=None)),
+        patch(
+            "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+            new=AsyncMock(return_value=progress_run),
+        ) as mock_find_active_run,
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        mock_ctx.return_value.__aenter__.return_value = mock_session
+        result = await fetch_feed_task({"job_id": "job-1"}, feed_id="feed-1")
+
+    assert result == {"status": "not_modified", "new_entries": 0}
+    mock_find_active_run.assert_not_awaited()
+    assert progress_run.status == "not_modified"
+    assert progress_run.current_stage == "complete"
+    assert progress_run.path_kind == "direct_feed"
+
+
+class TestFetchFeedTaskProgress:
+    """Additional feed fetch progress coverage."""
+
+    _build_progress_run = staticmethod(TestFetchFeedTask._build_progress_run)
 
     @pytest.mark.asyncio
     async def test_short_content_field_triggers_fulltext_extraction(self):
@@ -695,6 +763,18 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
             ),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
             patch(
+                "glean_worker.tasks.feed_fetcher.refresh_running_eta",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
                 "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
                 new=AsyncMock(return_value=progress_run),
             ),
@@ -834,6 +914,14 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
                 new=AsyncMock(side_effect=RuntimeError("network timeout")),
             ),
             patch(
+                "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
                 "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
                 new=AsyncMock(return_value=progress_run),
             ),
@@ -863,7 +951,7 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
         assert progress_run.stage_events[5].status == "skipped"
         assert progress_run.stage_events[6].status == "skipped"
         assert progress_run.stage_events[7].status == "error"
-        assert dict(excinfo.value.kwargs)["defer"] == timedelta(minutes=15)
+        assert excinfo.value.defer_score == int(timedelta(minutes=15).total_seconds() * 1000)
 
     @pytest.mark.asyncio
     async def test_run_id_timeout_finalizes_run(self):
@@ -881,10 +969,26 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
         mock_result.scalar_one_or_none.return_value = mock_feed
 
         mock_session = AsyncMock()
-        mock_session.execute.side_effect = [mock_result, asyncio.CancelledError()]
+        mock_session.execute.return_value = mock_result
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
 
         with (
             patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch(
+                "glean_worker.tasks.feed_fetcher.fetch_feed",
+                new=AsyncMock(side_effect=asyncio.CancelledError()),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+                new=AsyncMock(return_value=None),
+            ),
             patch(
                 "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
                 new=AsyncMock(return_value=progress_run),

@@ -21,7 +21,7 @@ from glean_api.feed_fetch_progress import (
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import RSSHubService, TypedConfigService
-from glean_database.models import Entry, Feed, FeedStatus
+from glean_database.models import Entry, Feed, FeedFetchRun, FeedStatus
 from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
 
@@ -83,6 +83,35 @@ async def _is_vectorization_enabled(session: AsyncSession) -> bool:
     )
 
 
+async def _load_persisted_run_for_job(
+    session: AsyncSession,
+    *,
+    run_id: str | None,
+    feed_id: str,
+    job_id: str | None,
+) -> FeedFetchRun | None:
+    """Load the persisted progress run for the current worker job when possible."""
+    persisted_run = await load_feed_fetch_run(session, run_id)
+    if persisted_run is not None or not job_id:
+        return persisted_run
+
+    result = await session.execute(
+        select(FeedFetchRun)
+        .where(
+            FeedFetchRun.feed_id == feed_id,
+            FeedFetchRun.job_id == job_id,
+            FeedFetchRun.status.in_(("queued", "in_progress")),
+        )
+        .order_by(FeedFetchRun.created_at.desc())
+        .limit(1)
+    )
+    persisted_run = result.scalar_one_or_none()
+    if persisted_run is not None:
+        return persisted_run
+
+    return await find_active_feed_fetch_run(session, feed_id)
+
+
 async def fetch_feed_task(
     ctx: dict[str, Any],
     feed_id: str,
@@ -103,7 +132,12 @@ async def fetch_feed_task(
     async with get_session_context() as session:
         effective_run_id = run_id or ctx.get("run_id")
         effective_trigger_type = trigger_type or ctx.get("trigger_type")
-        persisted_run = await load_feed_fetch_run(session, effective_run_id)
+        persisted_run = await _load_persisted_run_for_job(
+            session,
+            run_id=effective_run_id,
+            feed_id=feed_id,
+            job_id=ctx.get("job_id"),
+        )
         active_stage = await start_feed_fetch_run(
             session,
             persisted_run,
