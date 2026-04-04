@@ -104,7 +104,7 @@ type FeedRefreshState = {
 }
 
 const PANEL_CLASS = 'flex min-h-0 flex-1 flex-col overflow-hidden border'
-const TOOLBAR_CLASS = 'flex shrink-0 flex-col gap-3'
+const TOOLBAR_CLASS = 'flex shrink-0 flex-wrap items-center gap-3'
 const SEARCH_CLASS =
   'h-10 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-input'
 const TREE_ROW_CLASS =
@@ -490,26 +490,15 @@ export function SubscriptionsTab() {
       )}
 
       <div className={TOOLBAR_CLASS}>
-        <div className="flex w-full flex-wrap items-center gap-2">
-          <div className="relative min-w-0 flex-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-            <input
-              type="text"
-              placeholder={t('manageFeeds.searchPlaceholder')}
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={SEARCH_CLASS}
-            />
-          </div>
-          {activeQueueSummary.totalCount > 0 && (
-            <div className="ml-auto flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
-              <Activity className="h-3.5 w-3.5 text-primary" />
-              <span className="text-muted-foreground">
-                {t('manageFeeds.feedFetchProgress.globalQueueLabel')}
-              </span>
-              <span className="font-medium text-foreground">{activeQueueSummaryLabel}</span>
-            </div>
-          )}
+        <div className="relative min-w-0 flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+          <input
+            type="text"
+            placeholder={t('manageFeeds.searchPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={SEARCH_CLASS}
+          />
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -566,6 +555,16 @@ export function SubscriptionsTab() {
             <span className="hidden sm:inline">{t('manageFeeds.exportOPML')}</span>
           </Button>
         </div>
+
+        {activeQueueSummary.totalCount > 0 && (
+          <div className="ml-auto flex items-center gap-2 rounded-lg border border-border/70 bg-muted/20 px-3 py-2 text-xs">
+            <Activity className="h-3.5 w-3.5 text-primary" />
+            <span className="text-muted-foreground">
+              {t('manageFeeds.feedFetchProgress.globalQueueLabel')}
+            </span>
+            <span className="font-medium text-foreground">{activeQueueSummaryLabel}</span>
+          </div>
+        )}
       </div>
 
       {isBatchMode && (
