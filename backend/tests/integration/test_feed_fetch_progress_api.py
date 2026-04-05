@@ -1,6 +1,8 @@
 """Integration tests for persisted feed fetch progress."""
 
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 from httpx import AsyncClient
@@ -75,6 +77,7 @@ async def test_admin_refresh_creates_feed_fetch_run(
     assert created_run is not None
     assert created_run.job_id == data["job_id"]
     assert created_run.status == "queued"
+
 
 
 @pytest.mark.asyncio
@@ -413,3 +416,60 @@ async def test_admin_can_get_all_active_feed_fetch_runs(
     data = response.json()
     assert len(data["items"]) == 2
     assert {item["status"] for item in data["items"]} == {"queued", "in_progress"}
+
+
+@pytest.mark.asyncio
+async def test_latest_feed_fetch_run_reconciles_stale_missing_job(
+    client: AsyncClient, auth_headers, db_session, test_subscription, test_feed
+):
+    run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-stale",
+        trigger_type="manual_user",
+        status="queued",
+        current_stage="queue_wait",
+        queue_entered_at=datetime.now(UTC) - timedelta(hours=2),
+        predicted_start_at=datetime.now(UTC) - timedelta(hours=2),
+        predicted_finish_at=datetime.now(UTC) - timedelta(hours=1, minutes=58),
+    )
+    db_session.add(run)
+    await db_session.flush()
+    db_session.add(
+        FeedFetchStageEvent(
+            run_id=run.id,
+            stage_order=0,
+            stage_name="queue_wait",
+            status="running",
+            started_at=datetime.now(UTC) - timedelta(hours=2),
+        )
+    )
+    await db_session.commit()
+
+    class FakeJob:
+        def __init__(self, job_id, redis):
+            self.job_id = job_id
+            self.redis = redis
+
+        async def status(self):
+            return SimpleNamespace(value="not_found")
+
+        async def result(self, timeout=0):
+            raise RuntimeError("job result missing")
+
+    with patch("glean_api.feed_fetch_progress.Job", FakeJob):
+        response = await client.get(
+            f"/api/feeds/{test_feed.id}/fetch-runs/latest",
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "error"
+    assert data["current_stage"] == "complete"
+    assert data["finished_at"] is not None
+
+    refreshed_run = await db_session.get(FeedFetchRun, run.id)
+    assert refreshed_run is not None
+    assert refreshed_run.status == "error"
+    assert refreshed_run.current_stage == "complete"
+    assert refreshed_run.finished_at is not None

@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
-import { useObsidianExportStore } from '../../stores/obsidianExportStore'
 import {
   Button,
   Label,
@@ -11,19 +10,9 @@ import {
   SelectItem,
   Switch,
 } from '@glean/ui'
-import { toastManager } from '@glean/ui'
 import { CheckCircle, Loader2, Eye, EyeOff, AlertTriangle } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import type { TranslationTargetLanguage } from '@glean/types'
-import {
-  clearObsidianDirectoryHandle,
-  ensureDirectoryPermission,
-  isObsidianExportSupported,
-  loadObsidianDirectoryHandle,
-  pickObsidianDirectory,
-  saveObsidianDirectoryHandle,
-  testObsidianDirectoryAccess,
-} from '../../lib/obsidianExport'
 
 type Provider = 'google' | 'deepl' | 'openai' | 'mtran'
 const DEFAULT_MTRAN_BASE_URL = 'http://mtranserver:5001'
@@ -54,13 +43,6 @@ const TARGET_LANGUAGES: { value: TranslationTargetLanguage; labelKey: string }[]
 export function TranslationTab() {
   const { t } = useTranslation('settings')
   const { user, updateSettings, isLoading } = useAuthStore()
-  const {
-    enabled: obsidianExportEnabled,
-    directoryName,
-    setEnabled: setObsidianExportEnabled,
-    setDirectoryName,
-    reset: resetObsidianExport,
-  } = useObsidianExportStore()
 
   const currentProvider = (user?.settings?.translation_provider ?? 'google') as Provider
   const currentTargetLanguage = (user?.settings?.translation_target_language ??
@@ -87,36 +69,6 @@ export function TranslationTab() {
   const [showKey, setShowKey] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
-  const [isLinkingObsidian, setIsLinkingObsidian] = useState(false)
-  const [isTestingObsidian, setIsTestingObsidian] = useState(false)
-  const [hasObsidianHandle, setHasObsidianHandle] = useState(false)
-  const supportsDirectFolderAccess = isObsidianExportSupported()
-
-  useEffect(() => {
-    let cancelled = false
-
-    const loadHandle = async () => {
-      if (!supportsDirectFolderAccess) return
-      try {
-        const handle = await loadObsidianDirectoryHandle()
-        if (cancelled) return
-        setHasObsidianHandle(Boolean(handle))
-        if (handle && !directoryName) {
-          setDirectoryName(handle.name)
-        }
-      } catch {
-        if (!cancelled) {
-          setHasObsidianHandle(false)
-        }
-      }
-    }
-
-    void loadHandle()
-
-    return () => {
-      cancelled = true
-    }
-  }, [directoryName, setDirectoryName, supportsDirectFolderAccess])
 
   const needsKey = provider === 'deepl' || provider === 'openai'
   const hasKeyWarning = needsKey && !apiKey.trim()
@@ -149,73 +101,6 @@ export function TranslationTab() {
     } finally {
       setIsSaving(false)
     }
-  }
-
-  const handleChooseObsidianDirectory = async () => {
-    try {
-      setIsLinkingObsidian(true)
-      const handle = await pickObsidianDirectory()
-      const granted = await ensureDirectoryPermission(handle, true)
-      if (!granted) {
-        throw new Error(t('translation.obsidian.permissionDenied'))
-      }
-      await saveObsidianDirectoryHandle(handle)
-      setDirectoryName(handle.name)
-      setHasObsidianHandle(true)
-      setObsidianExportEnabled(true)
-      toastManager.add({
-        title: t('translation.obsidian.connected'),
-        description: t('translation.obsidian.connectedDesc', { name: handle.name }),
-        type: 'success',
-      })
-    } catch (err) {
-      if (err instanceof DOMException && err.name === 'AbortError') {
-        return
-      }
-      const message =
-        err instanceof Error ? err.message : t('translation.obsidian.connectFailed')
-      toastManager.add({
-        title: t('translation.obsidian.connectFailed'),
-        description: message,
-        type: 'error',
-      })
-    } finally {
-      setIsLinkingObsidian(false)
-    }
-  }
-
-  const handleTestObsidianDirectory = async () => {
-    try {
-      setIsTestingObsidian(true)
-      const handle = await loadObsidianDirectoryHandle()
-      if (!handle) {
-        throw new Error(t('translation.obsidian.notConnected'))
-      }
-      const granted = await testObsidianDirectoryAccess(handle)
-      if (!granted) {
-        throw new Error(t('translation.obsidian.permissionDenied'))
-      }
-      toastManager.add({
-        title: t('translation.obsidian.testSuccess'),
-        description: t('translation.obsidian.testSuccessDesc'),
-        type: 'success',
-      })
-    } catch (err) {
-      const message = err instanceof Error ? err.message : t('translation.obsidian.testFailed')
-      toastManager.add({
-        title: t('translation.obsidian.testFailed'),
-        description: message,
-        type: 'error',
-      })
-    } finally {
-      setIsTestingObsidian(false)
-    }
-  }
-
-  const handleDisconnectObsidianDirectory = async () => {
-    await clearObsidianDirectoryHandle()
-    setHasObsidianHandle(false)
-    resetObsidianExport()
   }
 
   return (
@@ -308,93 +193,6 @@ export function TranslationTab() {
             disabled={isSaving || isLoading}
           />
         </div>
-      </div>
-
-      <div className="border-border/50 from-muted/30 to-muted/10 ring-border/20 space-y-4 rounded-xl border bg-gradient-to-br p-5 ring-1">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <Label className="text-foreground block text-sm font-medium">
-              {t('translation.obsidian.title')}
-            </Label>
-            <p className="text-muted-foreground text-xs">{t('translation.obsidian.desc')}</p>
-          </div>
-          <Switch
-            checked={obsidianExportEnabled}
-            onCheckedChange={setObsidianExportEnabled}
-            disabled={isLinkingObsidian}
-          />
-        </div>
-
-        {!supportsDirectFolderAccess ? (
-          <div className="space-y-3">
-            <div className="rounded-lg border p-3">
-              <div className="text-foreground text-sm font-medium">
-                {t('translation.obsidian.downloadMode')}
-              </div>
-              <div className="text-muted-foreground mt-1 text-xs">
-                {t('translation.obsidian.downloadModeDesc')}
-              </div>
-            </div>
-            <div className="text-muted-foreground rounded-lg border border-dashed p-3 text-xs">
-              {t('translation.obsidian.unsupported')}
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="rounded-lg border p-3">
-              <div className="text-foreground text-sm font-medium">
-                {directoryName
-                  ? t('translation.obsidian.currentFolder', { name: directoryName })
-                  : t('translation.obsidian.notConnected')}
-              </div>
-              <div className="text-muted-foreground mt-1 text-xs">
-                {hasObsidianHandle
-                  ? t('translation.obsidian.currentFolderDesc')
-                  : t('translation.obsidian.connectHint')}
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="outline"
-                onClick={() => void handleChooseObsidianDirectory()}
-                disabled={isLinkingObsidian}
-              >
-                {isLinkingObsidian ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t('translation.obsidian.connecting')}
-                  </>
-                ) : hasObsidianHandle ? (
-                  t('translation.obsidian.reconnect')
-                ) : (
-                  t('translation.obsidian.connect')
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => void handleTestObsidianDirectory()}
-                disabled={!hasObsidianHandle || isTestingObsidian}
-              >
-                {isTestingObsidian ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    {t('translation.obsidian.testing')}
-                  </>
-                ) : (
-                  t('translation.obsidian.test')
-                )}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => void handleDisconnectObsidianDirectory()}
-                disabled={!hasObsidianHandle}
-              >
-                {t('translation.obsidian.disconnect')}
-              </Button>
-            </div>
-          </>
-        )}
       </div>
 
       {/* API Key input */}

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from glean_api.feed_fetch_progress import (
     create_estimated_queued_feed_fetch_run,
     find_active_feed_fetch_run,
+    find_reusable_active_feed_fetch_run,
 )
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
@@ -92,7 +93,7 @@ async def _load_persisted_run_for_job(
 ) -> FeedFetchRun | None:
     """Load the persisted progress run for the current worker job when possible."""
     persisted_run = await load_feed_fetch_run(session, run_id)
-    if persisted_run is not None:
+    if isinstance(persisted_run, FeedFetchRun):
         return persisted_run
 
     if job_id:
@@ -107,10 +108,11 @@ async def _load_persisted_run_for_job(
             .limit(1)
         )
         persisted_run = result.scalar_one_or_none()
-        if persisted_run is not None:
+        if isinstance(persisted_run, FeedFetchRun):
             return persisted_run
 
-    return await find_active_feed_fetch_run(session, feed_id)
+    fallback_run = await find_active_feed_fetch_run(session, feed_id)
+    return fallback_run if isinstance(fallback_run, FeedFetchRun) else None
 
 
 async def fetch_feed_task(
@@ -133,22 +135,25 @@ async def fetch_feed_task(
     async with get_session_context() as session:
         effective_run_id = run_id or ctx.get("run_id")
         effective_trigger_type = trigger_type or ctx.get("trigger_type")
-        persisted_run = await _load_persisted_run_for_job(
-            session,
-            run_id=effective_run_id,
-            feed_id=feed_id,
-            job_id=ctx.get("job_id"),
-        )
-        active_stage = await start_feed_fetch_run(
-            session,
-            persisted_run,
-            trigger_type=effective_trigger_type,
-        )
+        persisted_run: FeedFetchRun | None = None
+        active_stage = None
         run_summary = build_feed_fetch_summary()
         fallback_urls: list[str] = []
         used_url = ""
+        retry_minutes = 5
 
         try:
+            persisted_run = await _load_persisted_run_for_job(
+                session,
+                run_id=effective_run_id,
+                feed_id=feed_id,
+                job_id=ctx.get("job_id"),
+            )
+            active_stage = await start_feed_fetch_run(
+                session,
+                persisted_run,
+                trigger_type=effective_trigger_type,
+            )
             fetch_attempt_at = datetime.now(UTC)
 
             # Get feed from database
@@ -701,7 +706,7 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
         queued_count = 0
         for feed in feeds:
             try:
-                if await find_active_feed_fetch_run(session, feed.id):
+                if await find_reusable_active_feed_fetch_run(session, ctx["redis"], feed.id):
                     continue
 
                 run, stage_event = await create_estimated_queued_feed_fetch_run(

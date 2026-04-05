@@ -142,6 +142,10 @@ class TestFetchFeedTask:
             ),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             result = await fetch_feed_task({}, feed_id="feed-1")
@@ -195,7 +199,7 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
             new=AsyncMock(side_effect=[(run_one, stage_one), (run_two, stage_two)]),
         ) as mock_create_run,
         patch(
-            "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+            "glean_worker.tasks.feed_fetcher.find_reusable_active_feed_fetch_run",
             new=AsyncMock(side_effect=[None, None]),
         ),
     ):
@@ -394,6 +398,10 @@ class TestFetchFeedTaskProgress:
                 ),
             ) as mock_extract,
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             result = await fetch_feed_task({}, feed_id="feed-1")
@@ -461,6 +469,10 @@ class TestFetchFeedTaskProgress:
             ),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
             patch("glean_worker.tasks.feed_fetcher.logger.warning") as mock_warning,
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             await fetch_feed_task({}, feed_id="feed-1")
@@ -538,6 +550,10 @@ class TestFetchFeedTaskProgress:
             patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             result = await fetch_feed_task(
@@ -605,6 +621,10 @@ class TestFetchFeedTaskProgress:
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
             patch("glean_worker.tasks.feed_fetcher.logger.info") as mock_info,
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             await fetch_feed_task({}, feed_id="feed-1")
@@ -655,6 +675,10 @@ class TestFetchFeedTaskProgress:
             patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             result = await fetch_feed_task({}, feed_id="feed-1")
@@ -705,6 +729,10 @@ class TestFetchFeedTaskProgress:
             patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
             result = await fetch_feed_task({}, feed_id="feed-1")

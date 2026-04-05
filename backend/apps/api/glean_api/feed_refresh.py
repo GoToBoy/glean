@@ -1,12 +1,17 @@
 """Shared helpers for feed refresh enqueue/status APIs."""
 
+from typing import cast
+
 from arq.connections import ArqRedis
 from arq.jobs import Job
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_database.models import Feed
 
-from .feed_fetch_progress import create_estimated_queued_feed_fetch_run, find_active_feed_fetch_run
+from .feed_fetch_progress import (
+    create_estimated_queued_feed_fetch_run,
+    find_reusable_active_feed_fetch_run,
+)
 
 
 async def enqueue_feed_refresh_job(
@@ -20,7 +25,7 @@ async def enqueue_feed_refresh_job(
     queue_depth_ahead: int = 0,
 ) -> dict[str, str]:
     """Enqueue one feed refresh job and return unified payload."""
-    existing_run = await find_active_feed_fetch_run(session, feed_id)
+    existing_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
     if existing_run is not None and existing_run.job_id:
         payload: dict[str, str] = {
             "run_id": existing_run.id,
@@ -89,18 +94,26 @@ async def build_refresh_status_item(
         result_status = "error"
         result_message = str(e)
 
-    if status_value in {"complete", "not_found"}:
+    if status_value == "not_found":
+        result_status = "error"
+        result_message = "Worker job is no longer available."
+    elif status_value == "complete":
         try:
             job_result = await job.result(timeout=0)
             if isinstance(job_result, dict):
-                if isinstance(job_result.get("status"), str):
-                    result_status = job_result["status"]
-                if job_result.get("message"):
-                    result_message = str(job_result["message"])
-                if isinstance(job_result.get("new_entries"), int):
-                    result_new_entries = int(job_result["new_entries"])
-                if isinstance(job_result.get("total_entries"), int):
-                    result_total_entries = int(job_result["total_entries"])
+                result_payload = cast(dict[str, object], job_result)
+                status_raw = result_payload.get("status")
+                if isinstance(status_raw, str):
+                    result_status = status_raw
+                message_raw = result_payload.get("message")
+                if message_raw:
+                    result_message = str(message_raw)
+                new_entries_raw = result_payload.get("new_entries")
+                if isinstance(new_entries_raw, int):
+                    result_new_entries = new_entries_raw
+                total_entries_raw = result_payload.get("total_entries")
+                if isinstance(total_entries_raw, int):
+                    result_total_entries = total_entries_raw
             elif job_result is not None and not result_message:
                 result_message = str(job_result)
         except Exception as e:

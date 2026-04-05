@@ -339,32 +339,7 @@
     "listAutoEnable": "Enable list translation by default",
     "listAutoEnableDesc": "Automatically turn on viewport-based translation in the reader list",
     "listEnglishOnly": "Translate English text only",
-    "listEnglishOnlyDesc": "Only translate list items that are primarily English",
-    "obsidian": {
-      "title": "Obsidian Export",
-      "desc": "Connect a dedicated Obsidian folder. Archive actions will save Markdown directly into it.",
-      "unsupported": "This browser does not support direct folder access. Glean will fall back to downloading Markdown files, and your browser download settings decide where they are saved.",
-      "downloadMode": "Download mode active",
-      "downloadModeDesc": "Archive actions will download a Markdown file instead of writing directly to a folder.",
-      "currentFolder": "Connected folder: {{name}}",
-      "currentFolderDesc": "Archive actions will write directly into this folder after translation is complete.",
-      "notConnected": "No Obsidian folder connected yet",
-      "connectHint": "Choose the folder inside your vault where archived notes should be written.",
-      "connect": "Choose Folder",
-      "connecting": "Connecting...",
-      "reconnect": "Reconnect Folder",
-      "disconnect": "Disconnect",
-      "test": "Test Access",
-      "testing": "Testing...",
-      "connected": "Obsidian folder connected",
-      "connectedDesc": "Archive exports will write into {{name}}.",
-      "connectFailed": "Failed to connect Obsidian folder",
-      "permissionDenied": "Folder permission was denied.",
-      "notConnectedError": "No folder is connected yet.",
-      "testSuccess": "Folder access confirmed",
-      "testSuccessDesc": "Glean can write archive notes to the selected folder.",
-      "testFailed": "Folder access failed"
-    }
+    "listEnglishOnlyDesc": "Only translate list items that are primarily English"
   },
   "apiTokens": {
     "title": "API Tokens",

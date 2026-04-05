@@ -56,6 +56,7 @@ from ..dependencies import (
     get_typed_config_service,
 )
 from ..feed_fetch_progress import (
+    find_reusable_active_feed_fetch_run,
     load_active_feed_fetch_runs,
     load_latest_feed_fetch_runs,
     serialize_feed_fetch_run,
@@ -827,6 +828,7 @@ async def get_latest_feed_fetch_run_admin(
     feed_id: str,
     current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, object | None]:
     """Return the latest persisted fetch run for one feed."""
     feed = await session.get(Feed, feed_id)
@@ -841,6 +843,9 @@ async def get_latest_feed_fetch_run_admin(
         .limit(1)
     )
     latest_run = result.scalar_one_or_none()
+    if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
+        active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
+        latest_run = active_run if active_run is not None else await session.get(FeedFetchRun, latest_run.id)
     if latest_run is None:
         return {
             "feed_id": feed_id,
@@ -869,6 +874,7 @@ async def get_latest_feed_fetch_runs_admin(
     request: AdminFeedFetchRunBatchRequest,
     current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return latest persisted fetch run snapshots for many feeds."""
     if not request.feed_ids:
@@ -885,6 +891,9 @@ async def get_latest_feed_fetch_runs_admin(
         if feed is None:
             continue
         latest_run = latest_by_feed.get(feed_id)
+        if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
+            active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
+            latest_run = active_run if active_run is not None else await session.get(FeedFetchRun, latest_run.id)
         if latest_run is None:
             items.append(
                 {
@@ -921,6 +930,7 @@ async def get_latest_feed_fetch_runs_admin(
 async def get_active_feed_fetch_runs_admin(
     current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return all queued/running fetch runs for admin diagnostics."""
     del current_admin
@@ -928,8 +938,11 @@ async def get_active_feed_fetch_runs_admin(
 
     items: list[dict[str, object | None]] = []
     for run, feed in active_runs:
+        reusable_run = await find_reusable_active_feed_fetch_run(session, redis, run.feed_id)
+        if reusable_run is None:
+            continue
         item = serialize_feed_fetch_run(
-            run,
+            reusable_run,
             next_fetch_at=feed.next_fetch_at,
             last_fetch_attempt_at=feed.last_fetch_attempt_at,
             last_fetch_success_at=feed.last_fetch_success_at,
@@ -1320,7 +1333,7 @@ async def validate_embedding_config(
     config = await config_service.get(EmbeddingConfig)
 
     validation_service = EmbeddingValidationService()
-    result = await validation_service.validate_full(config)
+    result = await validation_service.validate_full(config, session)
 
     return {
         "success": result.success,

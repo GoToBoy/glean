@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
+from typing import TypedDict
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -10,6 +12,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from glean_database.models import FeedFetchRun, FeedFetchStageEvent
+
+
+class FeedFetchSummary(TypedDict):
+    new_entries: int
+    total_entries: int
+    summary_only_count: int
+    backfill_attempted_count: int
+    backfill_success_http_count: int
+    backfill_success_browser_count: int
+    backfill_failed_count: int
+    fallback_used: bool
+    used_url: str | None
+    retry_minutes: int | None
+
+
+JsonObject = Mapping[str, object]
 
 FEED_FETCH_STAGE_SEQUENCE = [
     "queue_wait",
@@ -45,20 +63,20 @@ DEFAULT_STAGE_DURATIONS = {
 
 
 def _with_progress_metrics(
-    metrics_json: dict[str, int | str] | None,
+    metrics_json: JsonObject | None,
     *,
     now: datetime,
-) -> dict[str, int | str]:
-    payload = dict(metrics_json or {})
+) -> dict[str, object]:
+    payload: dict[str, object] = dict(metrics_json or {})
     payload["last_progress_at"] = now.isoformat()
     return payload
 
 
 def build_feed_fetch_summary(
     **overrides: int | bool | str | None,
-) -> dict[str, int | bool | str | None]:
+) -> FeedFetchSummary:
     """Build a normalized run summary payload."""
-    summary: dict[str, int | bool | str | None] = {
+    summary: FeedFetchSummary = {
         "new_entries": 0,
         "total_entries": 0,
         "summary_only_count": 0,
@@ -79,8 +97,8 @@ def build_feed_fetch_summary(
 def estimate_run_duration(
     *,
     path_kind: str | None,
-    feed_runs: list[FeedFetchRun],
-    profile_runs: list[FeedFetchRun],
+    feed_runs: Sequence[FeedFetchRun],
+    profile_runs: Sequence[FeedFetchRun],
     default_duration: timedelta = timedelta(minutes=2),
 ) -> dict[str, object]:
     """Estimate one run duration using feed, then profile, then global history."""
@@ -224,7 +242,7 @@ async def advance_feed_fetch_stage(
     next_stage_name: str,
     *,
     summary: str | None = None,
-    metrics_json: dict[str, int | str] | None = None,
+    metrics_json: JsonObject | None = None,
     close_status: str = "success",
 ) -> FeedFetchStageEvent | None:
     """Close the active stage and open the next one."""
@@ -258,13 +276,13 @@ async def finalize_feed_fetch_run(
     active_stage: FeedFetchStageEvent | None,
     *,
     run_status: str,
-    summary_json: dict[str, int] | None,
+    summary_json: JsonObject | None,
     error_message: str | None = None,
     active_stage_status: str | None = None,
     active_stage_summary: str | None = None,
-    active_stage_metrics_json: dict[str, int | str] | None = None,
+    active_stage_metrics_json: JsonObject | None = None,
     completion_summary: str | None = None,
-    completion_metrics_json: dict[str, int | str] | None = None,
+    completion_metrics_json: JsonObject | None = None,
     skipped_stage_summary: str | None = None,
 ) -> FeedFetchStageEvent | None:
     """Finalize the active stage, append completion stages, and persist the run outcome."""
@@ -361,7 +379,7 @@ def _append_stage_event(
     started_at: datetime,
     finished_at: datetime | None = None,
     summary: str | None = None,
-    metrics_json: dict[str, int | str] | None = None,
+    metrics_json: JsonObject | None = None,
 ) -> FeedFetchStageEvent:
     stage_event = FeedFetchStageEvent(
         run=run,
@@ -462,7 +480,7 @@ async def _flush_run(session: AsyncSession, run: FeedFetchRun) -> None:
     await session.flush()
 
 
-def _extract_run_durations(runs: list[FeedFetchRun]) -> list[timedelta]:
+def _extract_run_durations(runs: Sequence[FeedFetchRun]) -> list[timedelta]:
     durations: list[timedelta] = []
     for run in runs:
         if run.started_at is None or run.finished_at is None:
@@ -476,7 +494,7 @@ def _average_duration(durations: list[timedelta]) -> timedelta:
     return timedelta(seconds=total_seconds / len(durations))
 
 
-def _summarize_stage_duration_history(runs: list[FeedFetchRun]) -> dict[str, timedelta]:
+def _summarize_stage_duration_history(runs: Sequence[FeedFetchRun]) -> dict[str, timedelta]:
     per_stage: dict[str, list[timedelta]] = {}
     for run in runs:
         for stage in run.stage_events:

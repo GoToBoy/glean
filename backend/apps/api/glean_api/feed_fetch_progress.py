@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from heapq import heapify, heappop, heappush
-from typing import Any
+from typing import Any, TypedDict, cast
 from urllib.parse import urlparse
 
+from arq.connections import ArqRedis
+from arq.jobs import Job
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -21,6 +24,7 @@ QUEUE_STAGE_NAME = "queue_wait"
 QUEUE_STAGE_STATUS = "running"
 COMPLETED_RUN_STATUSES = {"success", "not_modified", "error"}
 ACTIVE_RUN_STATUSES = {"queued", "in_progress"}
+ACTIVE_ARQ_JOB_STATUSES = {"deferred", "queued", "in_progress"}
 DEFAULT_STAGE_SLOW_THRESHOLDS = {
     "queue_wait": timedelta(minutes=3),
     "resolve_attempt_urls": timedelta(seconds=20),
@@ -31,6 +35,12 @@ DEFAULT_STAGE_SLOW_THRESHOLDS = {
     "store_results": timedelta(minutes=1),
     "complete": timedelta(seconds=30),
 }
+
+
+class RunDurationEstimate(TypedDict):
+    source: str
+    path_kind: str | None
+    predicted_run_duration: timedelta
 
 
 def compute_initial_eta_fields(
@@ -133,8 +143,112 @@ async def find_active_feed_fetch_run(
         )
         .order_by(FeedFetchRun.created_at.desc())
         .limit(1)
+        .options(selectinload(FeedFetchRun.stage_events))
     )
     return result.scalar_one_or_none()
+
+
+async def find_reusable_active_feed_fetch_run(
+    session: AsyncSession,
+    redis: ArqRedis,
+    feed_id: str,
+) -> FeedFetchRun | None:
+    """Return an active run only when its backing arq job still exists."""
+    active_run = await find_active_feed_fetch_run(session, feed_id)
+    if active_run is None:
+        return None
+
+    if not active_run.job_id:
+        await mark_active_run_as_stale(
+            session,
+            active_run,
+            reason="missing_job_id",
+            summary="Persisted run was missing a worker job id.",
+        )
+        return None
+
+    try:
+        status_info = await Job(active_run.job_id, redis).status()
+        status_value = status_info.value
+    except Exception:
+        # Avoid creating duplicate worker jobs when Redis status cannot be checked.
+        return active_run
+
+    if status_value in ACTIVE_ARQ_JOB_STATUSES:
+        return active_run
+
+    if status_value in {"complete", "not_found"}:
+        await mark_active_run_as_stale(
+            session,
+            active_run,
+            reason=f"job_{status_value}",
+            summary=f"Persisted run was reconciled after arq reported {status_value}.",
+        )
+        return None
+
+    return active_run
+
+
+async def mark_active_run_as_stale(
+    session: AsyncSession,
+    run: FeedFetchRun,
+    *,
+    reason: str,
+    summary: str,
+) -> None:
+    """Close an orphaned queued/running run so it no longer blocks fresh work."""
+    now = datetime.now(UTC)
+
+    active_stage = next(
+        (stage for stage in reversed(run.stage_events) if stage.finished_at is None),
+        None,
+    )
+    if active_stage is not None:
+        active_stage.status = "error"
+        active_stage.finished_at = now
+        active_stage.summary = summary
+        active_stage.metrics_json = {
+            **(active_stage.metrics_json or {}),
+            "last_progress_at": now.isoformat(),
+            "admin_diagnostic": f"Persisted run reconciled as stale: {reason}",
+            "public_diagnostic": "Worker job is no longer available.",
+        }
+        session.add(active_stage)
+
+    completion_stage = next(
+        (stage for stage in reversed(run.stage_events) if stage.stage_name == "complete"),
+        None,
+    )
+    if completion_stage is None:
+        completion_stage = FeedFetchStageEvent(
+            run=run,
+            stage_order=len(run.stage_events),
+            stage_name="complete",
+            status="error",
+            started_at=now,
+            finished_at=now,
+            summary=summary,
+            metrics_json={"last_progress_at": now.isoformat()},
+        )
+    else:
+        completion_stage.status = "error"
+        completion_stage.started_at = completion_stage.started_at or now
+        completion_stage.finished_at = now
+        completion_stage.summary = summary
+        completion_stage.metrics_json = {
+            **(completion_stage.metrics_json or {}),
+            "last_progress_at": now.isoformat(),
+        }
+        session.add(completion_stage)
+
+    run.status = "error"
+    run.current_stage = "complete"
+    run.finished_at = now
+    run.predicted_finish_at = now
+    run.summary_json = run.summary_json or {}
+    run.error_message = reason
+    session.add(run)
+    await session.commit()
 
 
 async def estimate_run_duration_for_feed(
@@ -143,7 +257,7 @@ async def estimate_run_duration_for_feed(
     feed_id: str,
     path_kind: str | None,
     profile_key: str | None,
-) -> dict[str, object]:
+) -> RunDurationEstimate:
     """Estimate one run duration from feed history, profile history, or global default."""
     feed_runs_result = await session.execute(
         select(FeedFetchRun)
@@ -165,7 +279,7 @@ async def estimate_run_duration_for_feed(
             "predicted_run_duration": _weighted_average_run_duration(feed_runs),
         }
 
-    profile_runs: list[FeedFetchRun] = []
+    profile_runs: Sequence[FeedFetchRun] = ()
     if profile_key:
         profile_runs_result = await session.execute(
             select(FeedFetchRun)
@@ -331,7 +445,7 @@ def serialize_feed_fetch_run(
 
 async def load_latest_feed_fetch_runs(
     session: AsyncSession,
-    feed_ids: list[str],
+    feed_ids: Sequence[str],
 ) -> dict[str, FeedFetchRun]:
     """Load the latest persisted run snapshot for each requested feed."""
     if not feed_ids:
@@ -351,7 +465,7 @@ async def load_latest_feed_fetch_runs(
 async def load_active_feed_fetch_runs(
     session: AsyncSession,
     *,
-    feed_ids: list[str] | None = None,
+    feed_ids: Sequence[str] | None = None,
 ) -> list[tuple[FeedFetchRun, Feed]]:
     """Load queued or running fetch runs with feed metadata."""
     stmt = (
@@ -370,10 +484,10 @@ async def load_active_feed_fetch_runs(
             return []
         stmt = stmt.where(FeedFetchRun.feed_id.in_(feed_ids))
     result = await session.execute(stmt)
-    return list(result.all())
+    return [(cast(FeedFetchRun, run), cast(Feed, feed)) for run, feed in result.all()]
 
 
-def _weighted_average_run_duration(runs: list[FeedFetchRun]) -> timedelta:
+def _weighted_average_run_duration(runs: Sequence[FeedFetchRun]) -> timedelta:
     durations = [
         (run.finished_at - run.started_at).total_seconds()
         for run in runs

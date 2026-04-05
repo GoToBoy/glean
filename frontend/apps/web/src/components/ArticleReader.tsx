@@ -47,17 +47,8 @@ import { useViewportTranslation } from '../hooks/useViewportTranslation'
 import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
 import { useAuthStore } from '../stores/authStore'
-import { useObsidianExportStore } from '../stores/obsidianExportStore'
+import { useArticlePageMetadata } from '../hooks/useArticlePageMetadata'
 import type { TranslationTargetLanguage } from '@glean/types'
-import {
-  buildObsidianMarkdown,
-  downloadMarkdownFile,
-  ensureDirectoryPermission,
-  extractArticleTextBlocks,
-  isObsidianExportSupported,
-  loadObsidianDirectoryHandle,
-  writeMarkdownToObsidianDirectory,
-} from '../lib/obsidianExport'
 
 /**
  * Hook to track animation state for action buttons
@@ -193,8 +184,8 @@ export function ArticleReader({
 }: ArticleReaderProps) {
   const { t } = useTranslation('reader')
   const { user } = useAuthStore()
-  const { enabled: obsidianExportEnabled } = useObsidianExportStore()
   const queryClient = useQueryClient()
+  useArticlePageMetadata(entry)
 
   const handleOpenMenu = () => {
     // Dispatch custom event to open mobile sidebar in Layout
@@ -206,9 +197,9 @@ export function ArticleReader({
   const displayContent = entry.content || entry.summary || undefined
 
   const contentRef = useContentRenderer(displayContent)
-  const [archiveFlowState, setArchiveFlowState] = useState<
-    'idle' | 'completing-translation' | 'archiving' | 'unarchiving'
-  >('idle')
+  const [archiveFlowState, setArchiveFlowState] = useState<'idle' | 'archiving' | 'unarchiving'>(
+    'idle'
+  )
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
@@ -359,74 +350,16 @@ export function ArticleReader({
         await bookmarkService.deleteBookmark(entry.bookmark_id)
       } else {
         setArchiveFlowState('archiving')
-        let originalText = displayContent
-        let translatedText: string | undefined
-        const supportsDirectFolderAccess = isObsidianExportSupported()
-        let markdownFileName: string | undefined
-
-        if (obsidianExportEnabled) {
-          if (supportsDirectFolderAccess) {
-            const directoryHandle = await loadObsidianDirectoryHandle()
-            if (!directoryHandle) {
-              throw new Error(t('actions.obsidianNotConfigured'))
-            }
-
-            const granted = await ensureDirectoryPermission(directoryHandle, true)
-            if (!granted) {
-              throw new Error(t('actions.obsidianPermissionDenied'))
-            }
+        if (showTranslation && targetLanguage) {
+          const translationSnapshot = await ensureCompleteTranslation()
+          if (!translationSnapshot?.isComplete) {
+            throw new Error(t('actions.translationIncomplete'))
           }
-
-          if (showTranslation && targetLanguage) {
-            setArchiveFlowState('completing-translation')
-            const translationSnapshot = await ensureCompleteTranslation()
-            if (!translationSnapshot?.isComplete) {
-              throw new Error(t('actions.translationIncomplete'))
-            }
-            originalText = translationSnapshot.original
-            translatedText = translationSnapshot.translated
-            setArchiveFlowState('archiving')
-          } else if (contentRef.current) {
-            const extracted = extractArticleTextBlocks(contentRef.current, translatePreUnknown).join('\n\n')
-            if (extracted) {
-              originalText = extracted
-            }
-          }
-
-          const markdown = buildObsidianMarkdown({
-            entry,
-            original: originalText || entry.summary || entry.title || '',
-            translated: translatedText,
-            targetLanguage,
-          })
-
-          markdownFileName = supportsDirectFolderAccess
-            ? await (async () => {
-                const directoryHandle = await loadObsidianDirectoryHandle()
-                if (!directoryHandle) {
-                  throw new Error(t('actions.obsidianNotConfigured'))
-                }
-                return writeMarkdownToObsidianDirectory(directoryHandle, entry, markdown)
-              })()
-            : downloadMarkdownFile(entry, markdown)
         }
 
-        // Create bookmark only after successful export (if enabled)
         await bookmarkService.createBookmark({
           entry_id: entry.id,
         })
-
-        if (obsidianExportEnabled && markdownFileName) {
-          toastManager.add({
-            title: supportsDirectFolderAccess
-              ? t('actions.obsidianExportSuccess')
-              : t('actions.obsidianDownloadSuccess'),
-            description: supportsDirectFolderAccess
-              ? t('actions.obsidianExportSuccessDesc', { fileName: markdownFileName })
-              : t('actions.obsidianDownloadSuccessDesc', { fileName: markdownFileName }),
-            type: 'success',
-          })
-        }
       }
       // Invalidate queries to refetch with updated is_bookmarked status
       await queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
@@ -476,20 +409,17 @@ export function ArticleReader({
     'action-btn',
     bookmarkAnimation,
     entry.is_bookmarked ? 'text-primary' : 'text-muted-foreground',
-    archiveFlowState === 'completing-translation' ? 'action-btn-archive-breathing' : '',
   ]
     .filter(Boolean)
     .join(' ')
   const bookmarkLabel =
-    archiveFlowState === 'completing-translation'
-      ? t('actions.completingTranslation')
-      : archiveFlowState === 'unarchiving'
-        ? t('actions.unarchiving')
-        : archiveFlowState === 'archiving'
-          ? t('actions.archiving')
-          : entry.is_bookmarked
-            ? t('actions.archived')
-            : t('actions.archive')
+    archiveFlowState === 'unarchiving'
+      ? t('actions.unarchiving')
+      : archiveFlowState === 'archiving'
+        ? t('actions.archiving')
+        : entry.is_bookmarked
+          ? t('actions.archived')
+          : t('actions.archive')
 
   return (
     <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">

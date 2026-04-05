@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect, useLayoutEffect } from 'react'
 import { entryService } from '@glean/api-client'
-import { TranslationSnapshot, extractArticleTextBlocks } from '../lib/obsidianExport'
+import { TranslationSnapshot, extractArticleTextBlocks } from '../lib/articleTextBlocks'
 import { classifyPreElement } from '../lib/preTranslation'
+import { renderBilingualSegmentsHtml } from '../lib/bilingualMarkup'
 import {
   hasSkipAncestor,
   collectTranslatableBlocks,
@@ -41,17 +42,6 @@ interface UseViewportTranslationReturn {
   retry: () => void
   ensureCompleteTranslation: () => Promise<TranslationSnapshot | null>
   getTranslationSnapshot: () => TranslationSnapshot | null
-}
-
-/**
- * Escape HTML special characters for safe innerHTML insertion.
- */
-function escapeHtml(text: string): string {
-  return text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 /**
@@ -167,14 +157,12 @@ export function useViewportTranslation({
         }
 
         // Build bilingual HTML: each original segment followed by its translation.
-        let html = ''
-        for (const segment of segments) {
-          html += `<span class="glean-original-sentence">${escapeHtml(segment)}</span>`
-          const translated = cacheRef.current.get(segment)
-          if (translated && translated.trim()) {
-            html += `<span class="glean-translated-sentence">${escapeHtml(translated.trim())}</span>`
-          }
-        }
+        const html = renderBilingualSegmentsHtml(
+          segments.map((segment) => ({
+            original: segment,
+            translated: cacheRef.current.get(segment) ?? '',
+          })),
+        )
 
         block.innerHTML = html
         block.classList.add(BILINGUAL_ACTIVE_CLASS)
@@ -262,11 +250,12 @@ export function useViewportTranslation({
         block.setAttribute(ORIGINAL_HTML_ATTR, block.innerHTML)
       }
 
-      let html = ''
-      for (let i = 0; i < segments.length; i += 1) {
-        html += `<span class="glean-original-sentence">${escapeHtml(segments[i])}</span>`
-        html += `<span class="glean-translated-sentence">${escapeHtml(translations[i])}</span>`
-      }
+      const html = renderBilingualSegmentsHtml(
+        segments.map((segment, index) => ({
+          original: segment,
+          translated: translations[index],
+        })),
+      )
 
       block.innerHTML = html
       block.classList.add(BILINGUAL_ACTIVE_CLASS)

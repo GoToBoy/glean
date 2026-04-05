@@ -250,3 +250,32 @@ class EmbeddingValidationService:
         """
         result = await self.validate_provider(config)
         return result.success
+
+    async def validate_full(
+        self,
+        config: EmbeddingConfig,
+        session: "AsyncSession",
+    ) -> ValidationResult:
+        """Validate both the provider and pgvector persistence layer."""
+        provider_result = await self.validate_provider(config)
+        if not provider_result.success:
+            return provider_result
+
+        pgvector_result = await self.validate_pgvector(
+            session,
+            dimension=config.dimension,
+            provider=config.provider,
+            model=config.model,
+        )
+        if not pgvector_result.success:
+            return pgvector_result
+
+        details = {
+            "provider": provider_result.details,
+            "pgvector": pgvector_result.details,
+        }
+        return ValidationResult(
+            success=True,
+            message="Provider and pgvector validation successful",
+            details=details,
+        )

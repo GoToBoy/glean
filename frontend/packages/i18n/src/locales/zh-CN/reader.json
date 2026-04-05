@@ -14,7 +14,6 @@
     "archived": "已归档",
     "archiving": "归档中...",
     "unarchiving": "正在取消归档...",
-    "completingTranslation": "正在补全翻译...",
     "openOriginal": "原文",
     "open": "打开",
     "backShort": "返回",
@@ -33,14 +32,7 @@
     "dislike": "不喜欢",
     "disliked": "已标记不喜欢",
     "archiveFailed": "归档失败",
-    "obsidianUnsupported": "Obsidian 导出需要 Chromium 内核浏览器。",
-    "obsidianNotConfigured": "请先到设置中连接 Obsidian 导出目录。",
-    "obsidianPermissionDenied": "Obsidian 目录权限被拒绝。",
-    "translationIncomplete": "译文未能补齐完成。",
-    "obsidianExportSuccess": "已归档到 Obsidian",
-    "obsidianExportSuccessDesc": "已保存为 {{fileName}}",
-    "obsidianDownloadSuccess": "已下载 Obsidian Markdown",
-    "obsidianDownloadSuccessDesc": "已下载为 {{fileName}}"
+    "translationIncomplete": "译文未能补齐完成。"
   },
   "entries": {
     "loadError": "加载条目失败",

@@ -19,7 +19,7 @@ async def test_enqueue_feed_refresh_job_reuses_existing_active_run() -> None:
     )
 
     with patch(
-        "glean_api.feed_refresh.find_active_feed_fetch_run",
+        "glean_api.feed_refresh.find_reusable_active_feed_fetch_run",
         new=AsyncMock(return_value=existing_run),
     ):
         payload = await enqueue_feed_refresh_job(
@@ -52,7 +52,7 @@ async def test_enqueue_feed_refresh_job_creates_new_run_when_no_active_run() -> 
 
     with (
         patch(
-            "glean_api.feed_refresh.find_active_feed_fetch_run",
+            "glean_api.feed_refresh.find_reusable_active_feed_fetch_run",
             new=AsyncMock(return_value=None),
         ),
         patch(
@@ -74,4 +74,37 @@ async def test_enqueue_feed_refresh_job_creates_new_run_when_no_active_run() -> 
         "job_id": "job-new",
         "feed_title": "Feed 1",
     }
+    redis.enqueue_job.assert_awaited_once()
+
+
+async def test_enqueue_feed_refresh_job_requeues_when_active_run_is_stale() -> None:
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.rollback = AsyncMock()
+    session.add = MagicMock()
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id="job-fresh")
+    run = FeedFetchRun(id="run-fresh", feed_id="feed-1", trigger_type="manual_user", status="queued")
+    stage_event = MagicMock()
+
+    with (
+        patch(
+            "glean_api.feed_refresh.find_reusable_active_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_api.feed_refresh.create_estimated_queued_feed_fetch_run",
+            new=AsyncMock(return_value=(run, stage_event)),
+        ),
+    ):
+        payload = await enqueue_feed_refresh_job(
+            session=session,
+            redis=redis,
+            feed_id="feed-1",
+            feed_title="Feed 1",
+            trigger_type="manual_user",
+        )
+
+    assert payload["run_id"] == "run-fresh"
+    assert payload["job_id"] == "job-fresh"
     redis.enqueue_job.assert_awaited_once()

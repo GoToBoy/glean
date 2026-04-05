@@ -53,6 +53,10 @@ async def test_fetch_all_feeds_skips_feed_with_active_run():
             "glean_worker.tasks.feed_fetcher.create_estimated_queued_feed_fetch_run",
             new=AsyncMock(return_value=(run_two, stage_two)),
         ) as mock_create_run,
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_reusable_active_feed_fetch_run",
+            new=AsyncMock(side_effect=[active_run_result.scalar_one_or_none.return_value, None]),
+        ),
     ):
         mock_ctx.return_value.__aenter__.return_value = mock_session
 
@@ -62,6 +66,43 @@ async def test_fetch_all_feeds_skips_feed_with_active_run():
     mock_create_run.assert_awaited_once()
     redis.enqueue_job.assert_awaited_once()
     assert redis.enqueue_job.await_args.args[1] == "feed-2"
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_feeds_requeues_feed_when_active_run_is_stale():
+    due_feed = MagicMock()
+    due_feed.id = "feed-1"
+
+    due_feeds_result = MagicMock()
+    due_feeds_result.scalars.return_value.all.return_value = [due_feed]
+
+    mock_session = AsyncMock()
+    mock_session.execute = AsyncMock(return_value=due_feeds_result)
+    mock_session.add = MagicMock()
+
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id="job-new")
+
+    run = FeedFetchRun(id="run-new", feed_id="feed-1", trigger_type="scheduled", status="queued")
+    stage_event = MagicMock()
+
+    with (
+        patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_reusable_active_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.create_estimated_queued_feed_fetch_run",
+            new=AsyncMock(return_value=(run, stage_event)),
+        ),
+    ):
+        mock_ctx.return_value.__aenter__.return_value = mock_session
+
+        result = await fetch_all_feeds({"redis": redis})
+
+    assert result == {"feeds_queued": 1}
+    redis.enqueue_job.assert_awaited_once()
 
 
 def test_worker_settings_default_to_twelve_hour_refresh_interval():
