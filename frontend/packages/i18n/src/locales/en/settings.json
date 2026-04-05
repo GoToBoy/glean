@@ -156,6 +156,7 @@
       "historyTitle": "Recent runs",
       "historyEmpty": "No fetch history yet.",
       "historyLoading": "Loading recent runs…",
+      "failureReason": "Failure reason: {{reason}}",
       "diagnosticTitle": "Stage diagnostic",
       "lastProgress": "Last progress",
       "queueTitle": "Ahead in queue",

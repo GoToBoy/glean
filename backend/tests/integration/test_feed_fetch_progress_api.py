@@ -473,3 +473,64 @@ async def test_latest_feed_fetch_run_reconciles_stale_missing_job(
     assert refreshed_run.status == "error"
     assert refreshed_run.current_stage == "complete"
     assert refreshed_run.finished_at is not None
+
+
+@pytest.mark.asyncio
+async def test_latest_feed_fetch_run_reconciles_completed_job_to_success(
+    client: AsyncClient, auth_headers, db_session, test_subscription, test_feed
+):
+    run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-complete-success",
+        trigger_type="manual_user",
+        status="in_progress",
+        current_stage="fetch_xml",
+        queue_entered_at=datetime.now(UTC) - timedelta(minutes=10),
+        started_at=datetime.now(UTC) - timedelta(minutes=9),
+        updated_at=datetime.now(UTC) - timedelta(minutes=5),
+        predicted_start_at=datetime.now(UTC) - timedelta(minutes=9),
+        predicted_finish_at=datetime.now(UTC) - timedelta(minutes=7),
+    )
+    db_session.add(run)
+    await db_session.flush()
+    db_session.add(
+        FeedFetchStageEvent(
+            run_id=run.id,
+            stage_order=0,
+            stage_name="fetch_xml",
+            status="running",
+            started_at=datetime.now(UTC) - timedelta(minutes=9),
+        )
+    )
+    await db_session.commit()
+
+    class FakeJob:
+        def __init__(self, job_id, redis):
+            self.job_id = job_id
+            self.redis = redis
+
+        async def status(self):
+            return SimpleNamespace(value="complete")
+
+        async def result(self, timeout=0):
+            return {"status": "success", "message": None, "new_entries": 2, "total_entries": 5}
+
+    with patch("glean_api.feed_fetch_progress.Job", FakeJob):
+        response = await client.get(
+            f"/api/feeds/{test_feed.id}/fetch-runs/latest",
+            headers=auth_headers,
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["current_stage"] == "complete"
+    assert data["error_message"] is None
+    assert data["summary_json"]["new_entries"] == 2
+    assert data["summary_json"]["total_entries"] == 5
+
+    refreshed_run = await db_session.get(FeedFetchRun, run.id)
+    assert refreshed_run is not None
+    assert refreshed_run.status == "success"
+    assert refreshed_run.current_stage == "complete"
+    assert refreshed_run.error_message is None

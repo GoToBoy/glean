@@ -1221,6 +1221,21 @@ function buildSettingsFeedFetchSummary(
     .join(' · ')
 }
 
+function buildSettingsFeedFetchFailureReason(
+  t: ReturnType<typeof useTranslation>['t'],
+  run: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined
+) {
+  const errorMessage =
+    typeof run?.error_message === 'string' && run.error_message.trim().length > 0
+      ? run.error_message.trim()
+      : null
+  if (!errorMessage) return null
+  return t('manageFeeds.feedFetchProgress.failureReason', {
+    reason: errorMessage,
+    defaultValue: `Failure reason: ${errorMessage}`,
+  })
+}
+
 function buildSettingsFeedFetchDetails(
   t: ReturnType<typeof useTranslation>['t'],
   latestRun: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined,
@@ -1303,11 +1318,12 @@ function buildSettingsFeedFetchHistoryItems(
     const timestampLabel =
       formatFeedFetchDateTime(run.finished_at ?? run.started_at ?? run.queue_entered_at) ?? null
     const summaryText = buildSettingsFeedFetchSummary(t, run)
+    const failureReason = run.status === 'error' ? buildSettingsFeedFetchFailureReason(t, run) : null
 
     return {
       id: run.id,
       title: `${statusLabel} · ${stageLabel}`,
-      description: [timestampLabel, summaryText].filter(Boolean).join(' · ') || null,
+      description: [timestampLabel, summaryText, failureReason].filter(Boolean).join(' · ') || null,
       statusLabel,
       statusTone: getFeedFetchStatusTone(run.status),
       durationLabel:
@@ -1322,6 +1338,10 @@ function buildSettingsDiagnosticText(
   t: ReturnType<typeof useTranslation>['t'],
   latestRun: FeedFetchLatestRunResponse | FeedFetchRun | null | undefined
 ) {
+  const failureReason =
+    latestRun?.status === 'error' ? buildSettingsFeedFetchFailureReason(t, latestRun) : null
+  if (failureReason) return failureReason
+
   const stage = findCurrentFeedFetchStage(latestRun)
   if (!stage) return null
   const base =

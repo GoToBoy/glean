@@ -20,6 +20,7 @@ from .config import settings
 
 DEFAULT_INITIAL_QUEUE_DELAY = timedelta(seconds=30)
 DEFAULT_INITIAL_RUN_DURATION = timedelta(minutes=2)
+COMPLETED_JOB_GRACE_PERIOD = timedelta(minutes=2)
 QUEUE_STAGE_NAME = "queue_wait"
 QUEUE_STAGE_STATUS = "running"
 COMPLETED_RUN_STATUSES = {"success", "not_modified", "error"}
@@ -177,12 +178,28 @@ async def find_reusable_active_feed_fetch_run(
     if status_value in ACTIVE_ARQ_JOB_STATUSES:
         return active_run
 
-    if status_value in {"complete", "not_found"}:
+    if status_value == "not_found":
         await mark_active_run_as_stale(
             session,
             active_run,
-            reason=f"job_{status_value}",
-            summary=f"Persisted run was reconciled after arq reported {status_value}.",
+            reason="job_not_found",
+            summary="Persisted run was reconciled after arq reported not_found.",
+            public_diagnostic="Worker job is no longer available.",
+        )
+        return None
+
+    if status_value == "complete":
+        last_update_at = active_run.updated_at or active_run.started_at or active_run.created_at
+        if datetime.now(UTC) - last_update_at < COMPLETED_JOB_GRACE_PERIOD:
+            return active_run
+
+        result_payload = await _load_completed_job_result(Job(active_run.job_id, redis))
+        await reconcile_completed_active_run(
+            session,
+            active_run,
+            result_status=result_payload.get("status"),
+            result_message=result_payload.get("message"),
+            summary_json=result_payload.get("summary_json"),
         )
         return None
 
@@ -195,6 +212,8 @@ async def mark_active_run_as_stale(
     *,
     reason: str,
     summary: str,
+    public_diagnostic: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     """Close an orphaned queued/running run so it no longer blocks fresh work."""
     now = datetime.now(UTC)
@@ -211,7 +230,7 @@ async def mark_active_run_as_stale(
             **(active_stage.metrics_json or {}),
             "last_progress_at": now.isoformat(),
             "admin_diagnostic": f"Persisted run reconciled as stale: {reason}",
-            "public_diagnostic": "Worker job is no longer available.",
+            "public_diagnostic": public_diagnostic or "Worker job is no longer available.",
         }
         session.add(active_stage)
 
@@ -246,9 +265,115 @@ async def mark_active_run_as_stale(
     run.finished_at = now
     run.predicted_finish_at = now
     run.summary_json = run.summary_json or {}
-    run.error_message = reason
+    run.error_message = error_message or run.error_message or reason
     session.add(run)
     await session.commit()
+
+
+async def reconcile_completed_active_run(
+    session: AsyncSession,
+    run: FeedFetchRun,
+    *,
+    result_status: str | None,
+    result_message: str | None,
+    summary_json: dict[str, Any] | None,
+) -> None:
+    """Finalize an active persisted run using an arq job that already completed."""
+    now = datetime.now(UTC)
+    normalized_status = _normalize_job_result_status(result_status)
+    summary = _build_completed_job_summary(normalized_status, result_message)
+
+    active_stage = next(
+        (stage for stage in reversed(run.stage_events) if stage.finished_at is None),
+        None,
+    )
+    if active_stage is not None:
+        active_stage.status = "error" if normalized_status == "error" else "success"
+        active_stage.finished_at = now
+        active_stage.summary = summary
+        active_stage.metrics_json = {
+            **(active_stage.metrics_json or {}),
+            "last_progress_at": now.isoformat(),
+            "public_diagnostic": result_message or summary,
+        }
+        session.add(active_stage)
+
+    completion_stage = next(
+        (stage for stage in reversed(run.stage_events) if stage.stage_name == "complete"),
+        None,
+    )
+    if completion_stage is None:
+        completion_stage = FeedFetchStageEvent(
+            run=run,
+            stage_order=len(run.stage_events),
+            stage_name="complete",
+            status="error" if normalized_status == "error" else "success",
+            started_at=now,
+            finished_at=now,
+            summary=summary,
+            metrics_json={"last_progress_at": now.isoformat()},
+        )
+    else:
+        completion_stage.status = "error" if normalized_status == "error" else "success"
+        completion_stage.started_at = completion_stage.started_at or now
+        completion_stage.finished_at = now
+        completion_stage.summary = summary
+        completion_stage.metrics_json = {
+            **(completion_stage.metrics_json or {}),
+            "last_progress_at": now.isoformat(),
+        }
+        session.add(completion_stage)
+
+    run.status = normalized_status
+    run.current_stage = "complete"
+    run.finished_at = now
+    run.predicted_finish_at = now
+    if summary_json is not None:
+        run.summary_json = summary_json
+    else:
+        run.summary_json = run.summary_json or {}
+    run.error_message = result_message if normalized_status == "error" else None
+    session.add(run)
+    await session.commit()
+
+
+async def _load_completed_job_result(job: Job) -> dict[str, Any]:
+    try:
+        result = await job.result(timeout=0)
+    except Exception as exc:
+        return {"status": "error", "message": str(exc), "summary_json": None}
+
+    if isinstance(result, dict):
+        result_dict = cast(dict[str, Any], result)
+        return {
+            "status": result_dict.get("status"),
+            "message": result_dict.get("message"),
+            "summary_json": result_dict,
+        }
+
+    return {
+        "status": "success",
+        "message": str(result) if result is not None else None,
+        "summary_json": None,
+    }
+
+
+def _normalize_job_result_status(result_status: str | None) -> str:
+    if result_status == "not_modified":
+        return "not_modified"
+    if result_status == "success":
+        return "success"
+    return "error"
+
+
+def _build_completed_job_summary(result_status: str, result_message: str | None) -> str:
+    if result_status == "success":
+        return "Persisted run was finalized from a completed worker job."
+    if result_status == "not_modified":
+        return "Persisted run was finalized from a completed worker job with no content changes."
+    if result_message:
+        return result_message
+    return "Persisted run was finalized from a completed worker job that reported an error."
 
 
 async def estimate_run_duration_for_feed(

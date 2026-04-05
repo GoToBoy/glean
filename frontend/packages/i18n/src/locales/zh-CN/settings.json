@@ -156,6 +156,7 @@
       "historyTitle": "最近运行",
       "historyEmpty": "还没有抓取历史。",
       "historyLoading": "正在加载最近运行…",
+      "failureReason": "失败原因：{{reason}}",
       "diagnosticTitle": "阶段诊断",
       "lastProgress": "最近进展",
       "queueTitle": "前方队列",
