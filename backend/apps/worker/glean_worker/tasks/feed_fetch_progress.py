@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TypedDict
 from urllib.parse import urlparse
 
+from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -138,6 +139,66 @@ async def load_feed_fetch_run(session: AsyncSession, run_id: str | None) -> Feed
     return result.scalar_one_or_none()
 
 
+def _should_use_explicit_stage_event_io(run: FeedFetchRun) -> bool:
+    state = sa_inspect(run)
+    return state.persistent or state.detached
+
+
+async def _load_stage_events_for_run(
+    session: AsyncSession,
+    run: FeedFetchRun,
+) -> list[FeedFetchStageEvent]:
+    if not _should_use_explicit_stage_event_io(run):
+        return list(run.stage_events)
+
+    result = await session.execute(
+        select(FeedFetchStageEvent)
+        .where(FeedFetchStageEvent.run_id == run.id)
+        .order_by(FeedFetchStageEvent.stage_order.asc())
+    )
+    return list(result.scalars().all())
+
+
+async def _clear_stage_events_for_run(
+    session: AsyncSession,
+    run: FeedFetchRun,
+    stage_events: list[FeedFetchStageEvent],
+) -> list[FeedFetchStageEvent]:
+    if _should_use_explicit_stage_event_io(run):
+        for stage_event in stage_events:
+            await session.delete(stage_event)
+        await session.flush()
+        return []
+
+    run.stage_events.clear()
+    return list(run.stage_events)
+
+
+def _new_stage_event(
+    run: FeedFetchRun,
+    *,
+    stage_order: int,
+    stage_name: str,
+    status: str,
+    started_at: datetime,
+    finished_at: datetime | None = None,
+    summary: str | None = None,
+    metrics_json: JsonObject | None = None,
+) -> FeedFetchStageEvent:
+    payload = {
+        "stage_order": stage_order,
+        "stage_name": stage_name,
+        "status": status,
+        "started_at": started_at,
+        "finished_at": finished_at,
+        "summary": summary,
+        "metrics_json": _with_progress_metrics(metrics_json, now=started_at),
+    }
+    if _should_use_explicit_stage_event_io(run):
+        return FeedFetchStageEvent(run_id=run.id, **payload)
+    return FeedFetchStageEvent(run=run, **payload)
+
+
 def classify_feed_fetch_path_kind(
     *, feed_url: str, used_url: str, fallback_urls: list[str]
 ) -> str:
@@ -185,8 +246,9 @@ async def start_feed_fetch_run(
         return None
 
     now = datetime.now(UTC)
+    stage_events = await _load_stage_events_for_run(session, run)
     if run.current_stage == "complete" or run.finished_at is not None:
-        run.stage_events.clear()
+        stage_events = await _clear_stage_events_for_run(session, run, stage_events)
         run.status = "queued"
         run.current_stage = "queue_wait"
         run.started_at = None
@@ -195,18 +257,20 @@ async def start_feed_fetch_run(
         run.error_message = None
         run.path_kind = None
         run.profile_key = None
-        FeedFetchStageEvent(
-            run=run,
-            stage_order=0,
-            stage_name="queue_wait",
-            status="running",
-            started_at=now,
+        stage_events.append(
+            _new_stage_event(
+                run,
+                stage_order=0,
+                stage_name="queue_wait",
+                status="running",
+                started_at=now,
+            )
         )
 
     queue_stage = next(
         (
             stage
-            for stage in run.stage_events
+            for stage in stage_events
             if stage.stage_name == "queue_wait" and stage.finished_at is None
         ),
         None,
@@ -226,12 +290,13 @@ async def start_feed_fetch_run(
 
     next_stage = _append_stage_event(
         run,
+        stage_events,
         stage_name="resolve_attempt_urls",
         status="running",
         started_at=now,
     )
-    await refresh_running_eta(session, run, next_stage)
-    await _flush_run(session, run)
+    await refresh_running_eta(session, run, next_stage, stage_events=stage_events)
+    await _flush_run(session, run, stage_events)
     return next_stage
 
 
@@ -250,6 +315,7 @@ async def advance_feed_fetch_stage(
         return None
 
     now = datetime.now(UTC)
+    stage_events = await _load_stage_events_for_run(session, run)
     if active_stage is not None and active_stage.finished_at is None:
         active_stage.status = close_status
         active_stage.finished_at = now
@@ -261,12 +327,13 @@ async def advance_feed_fetch_stage(
     run.status = "in_progress"
     next_stage = _append_stage_event(
         run,
+        stage_events,
         stage_name=next_stage_name,
         status="running",
         started_at=now,
     )
-    await refresh_running_eta(session, run, next_stage)
-    await _flush_run(session, run)
+    await refresh_running_eta(session, run, next_stage, stage_events=stage_events)
+    await _flush_run(session, run, stage_events)
     return next_stage
 
 
@@ -290,6 +357,7 @@ async def finalize_feed_fetch_run(
         return None
 
     now = datetime.now(UTC)
+    stage_events = await _load_stage_events_for_run(session, run)
     final_active_stage = active_stage
     if final_active_stage is not None and final_active_stage.finished_at is None:
         final_active_stage.status = active_stage_status or _status_for_run(run_status)
@@ -302,6 +370,7 @@ async def finalize_feed_fetch_run(
         for stage_name in _remaining_stage_names_before_complete(final_active_stage.stage_name):
             skipped_stage = _append_stage_event(
                 run,
+                stage_events,
                 stage_name=stage_name,
                 status="skipped",
                 started_at=now,
@@ -312,6 +381,7 @@ async def finalize_feed_fetch_run(
 
         final_active_stage = _append_stage_event(
             run,
+            stage_events,
             stage_name="complete",
             status="running",
             started_at=now,
@@ -332,7 +402,7 @@ async def finalize_feed_fetch_run(
     run.summary_json = summary_json
     run.error_message = error_message if run_status == "error" else None
 
-    await _flush_run(session, run)
+    await _flush_run(session, run, stage_events)
     await trim_feed_fetch_run_history(session, run.feed_id)
     return final_active_stage
 
@@ -358,6 +428,8 @@ async def refresh_running_eta(
     session: AsyncSession,
     run: FeedFetchRun,
     active_stage: FeedFetchStageEvent | None,
+    *,
+    stage_events: list[FeedFetchStageEvent] | None = None,
 ) -> None:
     """Refresh ETA once a run is active using completed history and current stage progress."""
     if run.started_at is None:
@@ -366,13 +438,21 @@ async def refresh_running_eta(
     now = datetime.now(UTC)
     run.predicted_start_at = run.predicted_start_at or run.started_at
 
+    current_stage_events = stage_events or await _load_stage_events_for_run(session, run)
     stage_duration_estimates = await _load_stage_duration_estimates(session, run)
-    remaining_duration = _estimate_remaining_duration(run, active_stage, now, stage_duration_estimates)
+    remaining_duration = _estimate_remaining_duration(
+        run,
+        active_stage,
+        now,
+        stage_duration_estimates,
+        stage_events=current_stage_events,
+    )
     run.predicted_finish_at = now + remaining_duration
 
 
 def _append_stage_event(
     run: FeedFetchRun,
+    stage_events: list[FeedFetchStageEvent],
     *,
     stage_name: str,
     status: str,
@@ -381,16 +461,17 @@ def _append_stage_event(
     summary: str | None = None,
     metrics_json: JsonObject | None = None,
 ) -> FeedFetchStageEvent:
-    stage_event = FeedFetchStageEvent(
-        run=run,
-        stage_order=len(run.stage_events),
+    stage_event = _new_stage_event(
+        run,
+        stage_order=len(stage_events),
         stage_name=stage_name,
         status=status,
         started_at=started_at,
         finished_at=finished_at,
         summary=summary,
-        metrics_json=_with_progress_metrics(metrics_json, now=started_at),
+        metrics_json=metrics_json,
     )
+    stage_events.append(stage_event)
     return stage_event
 
 
@@ -473,9 +554,13 @@ def _status_for_run(run_status: str) -> str:
     return "error" if run_status == "error" else "success"
 
 
-async def _flush_run(session: AsyncSession, run: FeedFetchRun) -> None:
+async def _flush_run(
+    session: AsyncSession,
+    run: FeedFetchRun,
+    stage_events: Sequence[FeedFetchStageEvent],
+) -> None:
     session.add(run)
-    for stage_event in run.stage_events:
+    for stage_event in stage_events:
         session.add(stage_event)
     await session.flush()
 
@@ -519,11 +604,13 @@ def _estimate_remaining_duration(
     active_stage: FeedFetchStageEvent | None,
     now: datetime,
     stage_duration_estimates: dict[str, timedelta],
+    *,
+    stage_events: Sequence[FeedFetchStageEvent],
 ) -> timedelta:
     remaining = timedelta(0)
     completed_stage_names = {
         stage.stage_name
-        for stage in run.stage_events
+        for stage in stage_events
         if stage.finished_at is not None
     }
 

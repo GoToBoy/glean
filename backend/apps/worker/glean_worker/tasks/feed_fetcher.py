@@ -49,6 +49,78 @@ def _default_next_fetch_at() -> datetime:
     return datetime.now(UTC) + timedelta(minutes=settings.feed_refresh_interval_minutes)
 
 
+def _midnight_guard_minutes(interval_minutes: int) -> int:
+    """Return the midnight supplemental guard window derived from the regular interval."""
+    return max(60, min(180, interval_minutes // 2))
+
+
+def _local_day_start_utc(now_utc: datetime) -> datetime:
+    """Convert the current local midnight back to UTC for day-bounded comparisons."""
+    local_now = now_utc.astimezone()
+    local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+    return local_midnight.astimezone(UTC)
+
+
+def _should_run_midnight_supplement(now_utc: datetime) -> bool:
+    """Return True when the current scheduled tick is the local midnight batch."""
+    local_now = now_utc.astimezone()
+    return local_now.hour == 0 and local_now.minute == 0
+
+
+def _should_queue_midnight_supplemental_feed(
+    feed: Feed,
+    *,
+    now_utc: datetime,
+    day_start_utc: datetime,
+    guard_minutes: int,
+) -> bool:
+    """Return True when midnight supplemental scheduling should include this feed."""
+    if feed.status != FeedStatus.ACTIVE:
+        return False
+    if feed.last_fetch_success_at is not None and feed.last_fetch_success_at >= day_start_utc:
+        return False
+
+    guard_cutoff = now_utc - timedelta(minutes=guard_minutes)
+    return not (
+        feed.last_fetch_attempt_at is not None and feed.last_fetch_attempt_at >= guard_cutoff
+    )
+
+
+async def _load_scheduled_feeds(
+    session: AsyncSession,
+    *,
+    now_utc: datetime,
+    include_midnight_supplement: bool,
+) -> list[Feed]:
+    """Load the feeds eligible for the current scheduled batch."""
+    if not include_midnight_supplement:
+        result = await session.execute(
+            select(Feed).where(
+                Feed.status == FeedStatus.ACTIVE,
+                (Feed.next_fetch_at.is_(None)) | (Feed.next_fetch_at <= now_utc),
+            )
+        )
+        return result.scalars().all()
+
+    result = await session.execute(select(Feed).where(Feed.status == FeedStatus.ACTIVE))
+    active_feeds = result.scalars().all()
+    day_start_utc = _local_day_start_utc(now_utc)
+    guard_minutes = _midnight_guard_minutes(settings.feed_refresh_interval_minutes)
+
+    eligible_feeds: list[Feed] = []
+    for feed in active_feeds:
+        is_due = feed.next_fetch_at is None or feed.next_fetch_at <= now_utc
+        if is_due or _should_queue_midnight_supplemental_feed(
+            feed,
+            now_utc=now_utc,
+            day_start_utc=day_start_utc,
+            guard_minutes=guard_minutes,
+        ):
+            eligible_feeds.append(feed)
+
+    return eligible_feeds
+
+
 def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
     """Return True when IntegrityError is the entries(feed_id,guid) unique violation."""
     return "uq_feed_guid" in str(error.orig)
@@ -681,7 +753,13 @@ async def fetch_feed_task(
             raise Retry(defer=timedelta(minutes=retry_minutes if feed else 5)) from None
 
 
-async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
+async def fetch_all_feeds(
+    ctx: dict[str, Any],
+    *,
+    now_utc: datetime | None = None,
+    include_midnight_supplement: bool = False,
+    trigger_type: str = "scheduled",
+) -> dict[str, int]:
     """
     Fetch all active feeds.
 
@@ -692,14 +770,12 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
         Dictionary with fetch statistics.
     """
     async with get_session_context() as session:
-        # Get all active feeds that are due for fetching
-        now = datetime.now(UTC)
-        stmt = select(Feed).where(
-            Feed.status == FeedStatus.ACTIVE,
-            (Feed.next_fetch_at.is_(None)) | (Feed.next_fetch_at <= now),
+        now = now_utc or datetime.now(UTC)
+        feeds = await _load_scheduled_feeds(
+            session,
+            now_utc=now,
+            include_midnight_supplement=include_midnight_supplement,
         )
-        result = await session.execute(stmt)
-        feeds = result.scalars().all()
 
         # Queue tracked fetch tasks for each due feed so the UI can show ETA before
         # the worker starts processing.
@@ -712,7 +788,7 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
                 run, stage_event = await create_estimated_queued_feed_fetch_run(
                     session,
                     feed_id=feed.id,
-                    trigger_type="scheduled",
+                    trigger_type=trigger_type,
                     queue_depth_ahead=queued_count,
                 )
                 session.add(run)
@@ -723,7 +799,7 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
                     "fetch_feed_task",
                     feed.id,
                     run_id=run.id,
-                    trigger_type="scheduled",
+                    trigger_type=trigger_type,
                 )
                 job_id = getattr(job, "job_id", None) if job is not None else None
                 if not job_id:
@@ -737,13 +813,20 @@ async def fetch_all_feeds(ctx: dict[str, Any]) -> dict[str, int]:
                 await session.rollback()
                 logger.exception("Failed to queue scheduled feed", extra={"feed_id": feed.id})
 
-        logger.info("Queued due feeds for fetching", extra={"count": queued_count})
+        logger.info(
+            "Queued scheduled feeds for fetching",
+            extra={
+                "count": queued_count,
+                "trigger_type": trigger_type,
+                "include_midnight_supplement": include_midnight_supplement,
+            },
+        )
         return {"feeds_queued": queued_count}
 
 
 async def scheduled_fetch(ctx: dict[str, Any]) -> dict[str, int]:
     """
-    Scheduled task to fetch all feeds (runs every 15 minutes).
+    Scheduled task to fetch all feeds.
 
     Args:
         ctx: Worker context.
@@ -751,7 +834,14 @@ async def scheduled_fetch(ctx: dict[str, Any]) -> dict[str, int]:
     Returns:
         Dictionary with fetch statistics.
     """
-    return await fetch_all_feeds(ctx)
+    now_utc = datetime.now(UTC)
+    include_midnight_supplement = _should_run_midnight_supplement(now_utc)
+    return await fetch_all_feeds(
+        ctx,
+        now_utc=now_utc,
+        include_midnight_supplement=include_midnight_supplement,
+        trigger_type="scheduled_midnight" if include_midnight_supplement else "scheduled",
+    )
 
 
 # Export task functions (arq uses the exported name)

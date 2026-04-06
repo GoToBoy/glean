@@ -1,7 +1,7 @@
 """Tests for persisted feed fetch progress helpers."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,8 +41,12 @@ def _build_queued_run() -> FeedFetchRun:
 
 @pytest.mark.asyncio
 async def test_run_lifecycle_records_stage_sequence():
-    session = AsyncMock()
-    run = _build_queued_run()
+    session = MagicMock()
+    execute_result = MagicMock()
+    execute_result.scalars.return_value.all.return_value = [run := _build_queued_run()]
+    session.execute = AsyncMock(return_value=execute_result)
+    session.flush = AsyncMock()
+    session.add = MagicMock()
 
     active_stage = await start_feed_fetch_run(session, run)
     active_stage = await advance_feed_fetch_stage(
@@ -115,7 +119,10 @@ async def test_run_lifecycle_records_stage_sequence():
 
 @pytest.mark.asyncio
 async def test_start_feed_fetch_run_resets_completed_retry_lifecycle():
-    session = AsyncMock()
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
     run = _build_queued_run()
     run.status = "error"
     run.current_stage = "complete"
@@ -135,6 +142,59 @@ async def test_start_feed_fetch_run_resets_completed_retry_lifecycle():
         "queue_wait",
         "resolve_attempt_urls",
     ]
+
+
+@pytest.mark.asyncio
+async def test_start_feed_fetch_run_for_persisted_run_does_not_touch_relationship_loader():
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+    run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        trigger_type="manual_user",
+        status="queued",
+        current_stage="queue_wait",
+        queue_entered_at=datetime.now(UTC),
+    )
+    queue_stage = FeedFetchStageEvent(
+        id="stage-1",
+        run_id="run-1",
+        stage_order=0,
+        stage_name="queue_wait",
+        status="running",
+        started_at=datetime.now(UTC),
+    )
+
+    with (
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._should_use_explicit_stage_event_io",
+            return_value=True,
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[queue_stage]),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+            new=AsyncMock(return_value=None),
+        ),
+        patch.object(
+            FeedFetchRun,
+            "stage_events",
+            new=property(
+                lambda self: (_ for _ in ()).throw(
+                    AssertionError("stage_events relationship should not be accessed")
+                )
+            ),
+        ),
+    ):
+        active_stage = await start_feed_fetch_run(session, run)
+
+    assert active_stage is not None
+    assert active_stage.stage_name == "resolve_attempt_urls"
+    assert run.status == "in_progress"
 
 
 def test_path_classification_and_profile_key():
@@ -250,7 +310,8 @@ def test_eta_prefers_feed_history_then_profile_history_then_global_defaults():
 
 @pytest.mark.asyncio
 async def test_trim_feed_fetch_run_history_keeps_latest_ten():
-    session = AsyncMock(spec=AsyncSession)
+    session = MagicMock(spec=AsyncSession)
+    session.delete = AsyncMock()
     recent_runs = [
         FeedFetchRun(
             id=f"run-{index}",
@@ -260,7 +321,7 @@ async def test_trim_feed_fetch_run_history_keeps_latest_ten():
         )
         for index in range(12)
     ]
-    execute_result = AsyncMock()
+    execute_result = MagicMock()
     execute_result.scalars.return_value.all.return_value = recent_runs
     session.execute.return_value = execute_result
 
