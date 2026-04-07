@@ -16,9 +16,10 @@ from glean_rss.extractor import (
     ExtractionResult,
     FetchResult,
     _convert_backticks_to_code,
-    _looks_like_client_error_page,
     _extract_semantic_html,
     _looks_like_challenge_page,
+    _looks_like_client_error_page,
+    _looks_like_shell_page,
     extract_fulltext,
     fetch_and_extract_fulltext,
     postprocess_html,
@@ -493,6 +494,25 @@ class TestBrowserFallback:
         """
         assert _looks_like_client_error_page(html) is True
 
+    def test_detects_nextjs_streaming_shell_page(self) -> None:
+        """Next.js streaming shell pages should be treated as incomplete HTML."""
+        html = """
+        <html>
+            <body>
+                <div hidden><!--$?--><template id="B:0"></template><!--/$--></div>
+                <main>
+                    <div class="loading">风过空庭，字句正徐来。</div>
+                </main>
+                <footer>
+                    <div>Stay hungry. Stay foolish.</div>
+                </footer>
+                <script>self.__next_f.push([1, "NEXT_REDIRECT"])</script>
+            </body>
+        </html>
+        """
+
+        assert _looks_like_shell_page(html) is True
+
     @pytest.mark.asyncio
     async def test_fetch_and_extract_uses_http_when_available(self) -> None:
         """Successful HTTP extraction should not invoke the browser."""
@@ -549,6 +569,60 @@ class TestBrowserFallback:
             )
 
             result = await fetch_and_extract_fulltext("https://openai.com/index/post")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.method == "browser"
+        assert result.used_browser is True
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_falls_back_when_http_page_is_shell(self) -> None:
+        """Shell HTML should still trigger browser fallback even if HTTP extraction returns text."""
+        http_html = """
+        <html>
+            <body>
+                <div hidden><!--$?--><template id="B:0"></template><!--/$--></div>
+                <main>
+                    <div class="loading">风过空庭，字句正徐来。</div>
+                </main>
+                <footer>
+                    <div>Stay hungry. Stay foolish.</div>
+                </footer>
+                <script>self.__next_f.push([1, "NEXT_REDIRECT"])</script>
+            </body>
+        </html>
+        """
+        http_result = FetchResult(
+            html=http_html,
+            fetched_url="https://innei.in/notes/211",
+            status_code=200,
+        )
+        browser_result = FetchResult(
+            html=f"<html><body><article><p>{'rendered article body ' * 20}</p></article></body></html>",
+            fetched_url="https://innei.in/notes/2026/4/5/three-years-after-graduation-reflections-on-health-ai-industry-and-life",
+            status_code=200,
+            used_browser=True,
+        )
+
+        async def fake_extract_fulltext(html: str, url: str | None = None) -> str | None:
+            if "self.__next_f.push" in html:
+                return "<p>Stay hungry. Stay foolish.</p>"
+            return "<article><p>Full rendered article body.</p></article>"
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=browser_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor.extract_fulltext",
+                fake_extract_fulltext,
+            )
+
+            result = await fetch_and_extract_fulltext("https://innei.in/notes/211")
 
         assert isinstance(result, ExtractionResult)
         assert result.method == "browser"

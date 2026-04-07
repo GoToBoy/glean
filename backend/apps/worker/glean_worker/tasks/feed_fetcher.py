@@ -5,9 +5,13 @@ Background tasks for fetching and parsing RSS feeds.
 """
 
 import asyncio
+import json
+import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import urlparse
 
+import httpx
 from arq import Retry
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -42,6 +46,9 @@ from .feed_fetch_progress import (
 logger = get_logger(__name__)
 MAX_FEED_ERROR_MESSAGE_LENGTH = 1000
 ENTRY_COMMIT_BATCH_SIZE = 20
+RSSHUB_CIRCUIT_REDIS_KEY = "worker:rsshub:circuit"
+RSSHUB_HEALTHCHECK_TIMEOUT_SECONDS = 5.0
+RSSHUB_RETRY_BACKOFF_MINUTES = (2, 5, 10, 20, 30)
 
 
 def _default_next_fetch_at() -> datetime:
@@ -119,6 +126,160 @@ async def _load_scheduled_feeds(
             eligible_feeds.append(feed)
 
     return eligible_feeds
+
+
+def _is_rsshub_url(url: str | None) -> bool:
+    """Return True when the URL points at an RSSHub host."""
+    if not url:
+        return False
+    return "rsshub" in urlparse(url).netloc.lower()
+
+
+def _feed_uses_rsshub(feed: Feed) -> bool:
+    """Return True when the feed's primary source is RSSHub-backed."""
+    return _is_rsshub_url(getattr(feed, "url", None))
+
+
+def _rsshub_retry_delay_minutes(failure_count: int) -> int:
+    """Return capped backoff minutes for temporary RSSHub outages."""
+    if failure_count <= 0:
+        return RSSHUB_RETRY_BACKOFF_MINUTES[0]
+    index = min(failure_count - 1, len(RSSHUB_RETRY_BACKOFF_MINUTES) - 1)
+    return RSSHUB_RETRY_BACKOFF_MINUTES[index]
+
+
+def _is_rsshub_infrastructure_error(error: Exception) -> bool:
+    """Return True when the error indicates temporary RSSHub infrastructure failure."""
+    error_text = str(error)
+    transient_markers = (
+        "No address associated with hostname",
+        "Name or service not known",
+        "Temporary failure in name resolution",
+        "ConnectError",
+        "ConnectTimeout",
+        "ReadTimeout",
+        "503 Service Unavailable",
+        "502 Bad Gateway",
+        "504 Gateway Timeout",
+    )
+    return any(marker in error_text for marker in transient_markers)
+
+
+async def _load_rsshub_circuit_state(redis: Any) -> dict[str, Any]:
+    """Load the shared RSSHub circuit breaker state from Redis."""
+    if redis is None:
+        return {"failure_count": 0, "blocked_until": None}
+
+    raw_state = await redis.get(RSSHUB_CIRCUIT_REDIS_KEY)
+    if not raw_state:
+        return {"failure_count": 0, "blocked_until": None}
+
+    if isinstance(raw_state, bytes):
+        raw_state = raw_state.decode("utf-8")
+
+    try:
+        payload = json.loads(raw_state)
+    except Exception:
+        return {"failure_count": 0, "blocked_until": None}
+
+    blocked_until_raw = payload.get("blocked_until")
+    blocked_until = None
+    if isinstance(blocked_until_raw, str):
+        try:
+            blocked_until = datetime.fromisoformat(blocked_until_raw)
+        except ValueError:
+            blocked_until = None
+    return {
+        "failure_count": int(payload.get("failure_count", 0) or 0),
+        "blocked_until": blocked_until,
+    }
+
+
+async def _save_rsshub_circuit_state(
+    redis: Any,
+    *,
+    failure_count: int,
+    blocked_until: datetime | None,
+) -> None:
+    """Persist the shared RSSHub circuit breaker state to Redis."""
+    if redis is None:
+        return
+
+    payload = json.dumps(
+        {
+            "failure_count": failure_count,
+            "blocked_until": blocked_until.isoformat() if blocked_until else None,
+        }
+    )
+    if blocked_until is None:
+        await redis.delete(RSSHUB_CIRCUIT_REDIS_KEY)
+        return
+
+    ttl_seconds = max(int((blocked_until - datetime.now(UTC)).total_seconds()), 60)
+    await redis.set(RSSHUB_CIRCUIT_REDIS_KEY, payload, ex=ttl_seconds)
+
+
+async def _open_rsshub_circuit(redis: Any, *, now: datetime) -> datetime:
+    """Advance the shared RSSHub circuit breaker and return the next unblock time."""
+    state = await _load_rsshub_circuit_state(redis)
+    failure_count = state["failure_count"] + 1
+    delay_minutes = _rsshub_retry_delay_minutes(failure_count)
+    blocked_until = now + timedelta(minutes=delay_minutes)
+    await _save_rsshub_circuit_state(
+        redis,
+        failure_count=failure_count,
+        blocked_until=blocked_until,
+    )
+    return blocked_until
+
+
+async def _close_rsshub_circuit(redis: Any) -> None:
+    """Clear the RSSHub circuit breaker after a healthy probe."""
+    await _save_rsshub_circuit_state(redis, failure_count=0, blocked_until=None)
+
+
+async def _probe_rsshub_health(urls: list[str]) -> bool:
+    """Return True when the RSSHub origin responds successfully."""
+    origins: list[str] = []
+    for url in urls:
+        parsed = urlparse(url)
+        if not parsed.scheme or not parsed.netloc:
+            continue
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        if origin not in origins:
+            origins.append(origin)
+
+    if not origins:
+        return True
+
+    try:
+        async with httpx.AsyncClient(timeout=RSSHUB_HEALTHCHECK_TIMEOUT_SECONDS) as client:
+            response = await client.get(origins[0])
+            return response.status_code < 500
+    except Exception:
+        return False
+
+
+async def _get_rsshub_blocked_until(
+    redis: Any,
+    *,
+    now: datetime,
+    rsshub_urls: list[str],
+) -> datetime | None:
+    """Return a temporary unblock time when RSSHub should be skipped for now."""
+    if not rsshub_urls:
+        return None
+
+    state = await _load_rsshub_circuit_state(redis)
+    blocked_until = state["blocked_until"]
+    if isinstance(blocked_until, datetime) and blocked_until > now:
+        return blocked_until
+
+    if not await _probe_rsshub_health(rsshub_urls):
+        return await _open_rsshub_circuit(redis, now=now)
+
+    await _close_rsshub_circuit(redis)
+    return None
 
 
 def _is_duplicate_feed_guid_error(error: IntegrityError) -> bool:
@@ -310,6 +471,8 @@ async def fetch_feed_task(
                                 persisted_run.path_kind,
                                 attempt_url,
                             )
+                        if _feed_uses_rsshub(feed):
+                            await _close_rsshub_circuit(ctx.get("redis"))
                         await finalize_feed_fetch_run(
                             session,
                             persisted_run,
@@ -368,6 +531,8 @@ async def fetch_feed_task(
                     "Feed fetched via fallback source",
                     extra={"feed_id": feed_id, "source_url": feed.url, "fetched_url": used_url},
                 )
+            if _feed_uses_rsshub(feed):
+                await _close_rsshub_circuit(ctx.get("redis"))
 
             # Update feed metadata
             feed.title = parsed_feed.title or feed.title
@@ -697,6 +862,45 @@ async def fetch_feed_task(
                     await session.commit()
                     return {"status": "error", "message": "database_index_corrupted"}
 
+                if _feed_uses_rsshub(feed) and _is_rsshub_infrastructure_error(e):
+                    blocked_until = await _open_rsshub_circuit(ctx.get("redis"), now=fetch_attempt_at)
+                    retry_minutes = max(
+                        math.ceil((blocked_until - fetch_attempt_at).total_seconds() / 60),
+                        RSSHUB_RETRY_BACKOFF_MINUTES[0],
+                    )
+                    run_summary["retry_minutes"] = retry_minutes
+                    feed.status = FeedStatus.ACTIVE
+                    feed.fetch_error_message = (
+                        "RSSHub is temporarily unavailable. Glean will retry automatically after the health window."
+                    )
+                    feed.next_fetch_at = blocked_until
+                    if persisted_run is not None:
+                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
+                            feed_url=feed.url,
+                            used_url=used_url or feed.url,
+                            fallback_urls=fallback_urls,
+                        )
+                        persisted_run.path_kind = path_kind
+                        persisted_run.profile_key = get_profile_key_for_path(
+                            path_kind,
+                            used_url or feed.url,
+                        )
+                    await finalize_feed_fetch_run(
+                        session,
+                        persisted_run,
+                        active_stage,
+                        run_status="error",
+                        summary_json=run_summary,
+                        error_message="rsshub_temporarily_unavailable",
+                        active_stage_status="error",
+                        active_stage_summary="RSSHub was temporarily unavailable during fetch.",
+                        completion_summary="Feed fetch was deferred until RSSHub recovers.",
+                        completion_metrics_json=run_summary,
+                        skipped_stage_summary="Skipped while waiting for RSSHub to recover.",
+                    )
+                    await session.commit()
+                    raise Retry(defer=timedelta(minutes=retry_minutes)) from None
+
                 feed.error_count += 1
                 feed.fetch_error_message = _truncate_feed_error_message(str(e))
 
@@ -776,12 +980,24 @@ async def fetch_all_feeds(
             now_utc=now,
             include_midnight_supplement=include_midnight_supplement,
         )
+        rsshub_feeds = [feed for feed in feeds if _feed_uses_rsshub(feed)]
+        rsshub_blocked_until = await _get_rsshub_blocked_until(
+            ctx.get("redis"),
+            now=now,
+            rsshub_urls=[feed.url for feed in rsshub_feeds if getattr(feed, "url", None)],
+        )
 
         # Queue tracked fetch tasks for each due feed so the UI can show ETA before
         # the worker starts processing.
         queued_count = 0
+        deferred_rsshub_count = 0
         for feed in feeds:
             try:
+                if rsshub_blocked_until is not None and _feed_uses_rsshub(feed):
+                    feed.next_fetch_at = rsshub_blocked_until
+                    deferred_rsshub_count += 1
+                    continue
+
                 if await find_reusable_active_feed_fetch_run(session, ctx["redis"], feed.id):
                     continue
 
@@ -813,10 +1029,14 @@ async def fetch_all_feeds(
                 await session.rollback()
                 logger.exception("Failed to queue scheduled feed", extra={"feed_id": feed.id})
 
+        if deferred_rsshub_count and queued_count == 0:
+            await session.commit()
+
         logger.info(
             "Queued scheduled feeds for fetching",
             extra={
                 "count": queued_count,
+                "rsshub_deferred_count": deferred_rsshub_count,
                 "trigger_type": trigger_type,
                 "include_midnight_supplement": include_midnight_supplement,
             },

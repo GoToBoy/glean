@@ -587,6 +587,20 @@ async def load_latest_feed_fetch_runs(
     return latest_by_feed
 
 
+async def reload_feed_fetch_run(
+    session: AsyncSession,
+    run_id: str,
+    *,
+    include_stages: bool = False,
+) -> FeedFetchRun | None:
+    """Reload one persisted run to avoid serializing expired ORM state."""
+    stmt = select(FeedFetchRun).where(FeedFetchRun.id == run_id)
+    if include_stages:
+        stmt = stmt.options(selectinload(FeedFetchRun.stage_events))
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def load_active_feed_fetch_runs(
     session: AsyncSession,
     *,

@@ -744,6 +744,69 @@ class TestFetchFeedTaskProgress:
         assert mock_session.commit.await_count == 2
 
     @pytest.mark.asyncio
+    async def test_rsshub_infrastructure_error_opens_short_retry_without_incrementing_feed_failure(self):
+        """RSSHub outages should defer retries without counting against the feed."""
+        progress_run = self._build_progress_run()
+
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "http://rsshub:1200/x/user/karpathy"
+        mock_feed.site_url = "https://x.com/karpathy"
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 4
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_result, mock_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        blocked_until = datetime.now(UTC) + timedelta(minutes=5)
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch(
+                "glean_worker.tasks.feed_fetcher.fetch_feed",
+                new=AsyncMock(side_effect=ValueError("Failed to fetch feed: ConnectError('[Errno -5] No address associated with hostname')")),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher._open_rsshub_circuit",
+                new=AsyncMock(return_value=blocked_until),
+            ) as mock_open_circuit,
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+                new=AsyncMock(return_value=None),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher.load_feed_fetch_run",
+                new=AsyncMock(return_value=progress_run),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            with pytest.raises(Retry) as excinfo:
+                await fetch_feed_task({"redis": AsyncMock()}, feed_id="feed-1", run_id="run-1")
+
+        mock_open_circuit.assert_awaited_once()
+        assert mock_feed.error_count == 4
+        assert mock_feed.status == FeedStatus.ACTIVE
+        assert mock_feed.next_fetch_at == blocked_until
+        assert "RSSHub is temporarily unavailable" in mock_feed.fetch_error_message
+        assert progress_run.error_message == "rsshub_temporarily_unavailable"
+        assert progress_run.summary_json["retry_minutes"] == 5
+        assert excinfo.value.defer_score == int(timedelta(minutes=5).total_seconds() * 1000)
+
+    @pytest.mark.asyncio
     async def test_cancelled_feed_logs_timeout_summary(self):
         """Cancelled feed fetches should emit a concise timeout summary."""
         mock_session = AsyncMock()

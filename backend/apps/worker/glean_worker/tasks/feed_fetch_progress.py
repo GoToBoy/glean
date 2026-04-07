@@ -358,7 +358,7 @@ async def finalize_feed_fetch_run(
 
     now = datetime.now(UTC)
     stage_events = await _load_stage_events_for_run(session, run)
-    final_active_stage = active_stage
+    final_active_stage = _resolve_active_stage_for_finalize(stage_events, active_stage)
     if final_active_stage is not None and final_active_stage.finished_at is None:
         final_active_stage.status = active_stage_status or _status_for_run(run_status)
         final_active_stage.finished_at = now
@@ -405,6 +405,40 @@ async def finalize_feed_fetch_run(
     await _flush_run(session, run, stage_events)
     await trim_feed_fetch_run_history(session, run.feed_id)
     return final_active_stage
+
+
+def _resolve_active_stage_for_finalize(
+    stage_events: Sequence[FeedFetchStageEvent],
+    active_stage: FeedFetchStageEvent | None,
+) -> FeedFetchStageEvent | None:
+    """Prefer the live session-backed active stage over a stale caller reference."""
+    if active_stage is None:
+        return next((stage for stage in reversed(stage_events) if stage.finished_at is None), None)
+
+    if active_stage in stage_events:
+        return active_stage
+
+    active_stage_id = getattr(active_stage, "id", None)
+    if active_stage_id is not None:
+        matched_by_id = next(
+            (stage for stage in stage_events if getattr(stage, "id", None) == active_stage_id),
+            None,
+        )
+        if matched_by_id is not None:
+            return matched_by_id
+
+    matched_open_stage = next(
+        (
+            stage
+            for stage in reversed(stage_events)
+            if stage.finished_at is None and stage.stage_name == active_stage.stage_name
+        ),
+        None,
+    )
+    if matched_open_stage is not None:
+        return matched_open_stage
+
+    return next((stage for stage in reversed(stage_events) if stage.finished_at is None), active_stage)
 
 
 async def trim_feed_fetch_run_history(

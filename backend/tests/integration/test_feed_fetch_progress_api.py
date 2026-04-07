@@ -347,6 +347,98 @@ async def test_admin_can_get_latest_feed_fetch_runs_batch(
 
 
 @pytest.mark.asyncio
+async def test_user_batch_latest_feed_fetch_runs_reloads_reconciled_run(
+    client: AsyncClient, auth_headers, db_session, test_subscription, test_feed
+):
+    run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-batch-complete-success",
+        trigger_type="scheduled",
+        status="in_progress",
+        current_stage="fetch_xml",
+        queue_entered_at=datetime.now(UTC) - timedelta(minutes=10),
+        started_at=datetime.now(UTC) - timedelta(minutes=9),
+        updated_at=datetime.now(UTC) - timedelta(minutes=5),
+        predicted_start_at=datetime.now(UTC) - timedelta(minutes=9),
+        predicted_finish_at=datetime.now(UTC) - timedelta(minutes=7),
+    )
+    db_session.add(run)
+    await db_session.commit()
+
+    class FakeJob:
+        def __init__(self, job_id, redis):
+            self.job_id = job_id
+            self.redis = redis
+
+        async def status(self):
+            return SimpleNamespace(value="complete")
+
+        async def result(self, timeout=0):
+            return {"status": "success", "message": None, "new_entries": 2, "total_entries": 5}
+
+    with patch("glean_api.feed_fetch_progress.Job", FakeJob):
+        response = await client.post(
+            "/api/feeds/fetch-runs/latest",
+            headers=auth_headers,
+            json={"feed_ids": [test_feed.id]},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["feed_id"] == test_feed.id
+    assert data["items"][0]["status"] == "success"
+    assert data["items"][0]["current_stage"] == "complete"
+    assert data["items"][0]["summary_json"]["new_entries"] == 2
+
+
+@pytest.mark.asyncio
+async def test_admin_batch_latest_feed_fetch_runs_reloads_reconciled_run(
+    client: AsyncClient, admin_headers, db_session, test_feed
+):
+    run = FeedFetchRun(
+        feed_id=test_feed.id,
+        job_id="job-admin-batch-complete-success",
+        trigger_type="scheduled",
+        status="in_progress",
+        current_stage="fetch_xml",
+        queue_entered_at=datetime.now(UTC) - timedelta(minutes=10),
+        started_at=datetime.now(UTC) - timedelta(minutes=9),
+        updated_at=datetime.now(UTC) - timedelta(minutes=5),
+        predicted_start_at=datetime.now(UTC) - timedelta(minutes=9),
+        predicted_finish_at=datetime.now(UTC) - timedelta(minutes=7),
+    )
+    db_session.add(run)
+    await db_session.commit()
+
+    class FakeJob:
+        def __init__(self, job_id, redis):
+            self.job_id = job_id
+            self.redis = redis
+
+        async def status(self):
+            return SimpleNamespace(value="complete")
+
+        async def result(self, timeout=0):
+            return {"status": "success", "message": None, "new_entries": 1, "total_entries": 3}
+
+    with patch("glean_api.feed_fetch_progress.Job", FakeJob):
+        response = await client.post(
+            "/api/admin/feeds/fetch-runs/latest",
+            headers=admin_headers,
+            json={"feed_ids": [test_feed.id]},
+        )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["items"]) == 1
+    assert data["items"][0]["feed_id"] == test_feed.id
+    assert data["items"][0]["status"] == "success"
+    assert data["items"][0]["current_stage"] == "complete"
+    assert data["items"][0]["summary_json"]["new_entries"] == 1
+
+
+@pytest.mark.asyncio
 async def test_user_can_get_active_feed_fetch_runs_for_visible_feeds(
     client: AsyncClient, auth_headers, db_session, test_subscription, test_feed, test_user
 ):

@@ -111,6 +111,57 @@ async def test_fetch_all_feeds_requeues_feed_when_active_run_is_stale():
     redis.enqueue_job.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_fetch_all_feeds_defers_only_rsshub_feeds_while_circuit_is_open():
+    rsshub_feed = MagicMock()
+    rsshub_feed.id = "feed-rsshub"
+    rsshub_feed.url = "http://rsshub:1200/x/user/karpathy"
+    rsshub_feed.next_fetch_at = None
+
+    direct_feed = MagicMock()
+    direct_feed.id = "feed-direct"
+    direct_feed.url = "https://example.com/feed.xml"
+    direct_feed.next_fetch_at = None
+
+    due_feeds_result = MagicMock()
+    due_feeds_result.scalars.return_value.all.return_value = [rsshub_feed, direct_feed]
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = due_feeds_result
+    mock_session.add = MagicMock()
+
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id="job-direct")
+
+    run = FeedFetchRun(id="run-direct", feed_id="feed-direct", trigger_type="scheduled", status="queued")
+    stage_event = MagicMock()
+    blocked_until = datetime.now(UTC) + timedelta(minutes=10)
+
+    with (
+        patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_reusable_active_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.create_estimated_queued_feed_fetch_run",
+            new=AsyncMock(return_value=(run, stage_event)),
+        ) as mock_create_run,
+        patch(
+            "glean_worker.tasks.feed_fetcher._get_rsshub_blocked_until",
+            new=AsyncMock(return_value=blocked_until),
+        ),
+    ):
+        mock_ctx.return_value.__aenter__.return_value = mock_session
+        result = await fetch_all_feeds({"redis": redis})
+
+    assert result == {"feeds_queued": 1}
+    assert rsshub_feed.next_fetch_at == blocked_until
+    mock_create_run.assert_awaited_once()
+    assert mock_create_run.await_args.kwargs["feed_id"] == "feed-direct"
+    redis.enqueue_job.assert_awaited_once()
+
+
 def test_worker_settings_default_to_twelve_hour_refresh_interval():
     settings = Settings()
 

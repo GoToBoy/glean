@@ -49,6 +49,12 @@ CLIENT_ERROR_MARKERS = (
     "application error: a client-side exception has occurred while loading",
     "see the browser console for more information",
 )
+SHELL_MARKERS = (
+    "<!--$?-->",
+    "<template id=\"b:",
+    "self.__next_f.push",
+    "next_redirect",
+)
 BLOCKED_STATUS_CODES = {401, 403, 429, 503}
 
 logger = logging.getLogger(__name__)
@@ -133,7 +139,10 @@ def _looks_like_client_error_page(html: str) -> bool:
 
 def _looks_like_shell_page(html: str) -> bool:
     """Detect thin shell pages that likely need browser rendering."""
+    lowered = html.lower()
     if _looks_like_client_error_page(html):
+        return True
+    if any(marker in lowered for marker in SHELL_MARKERS):
         return True
 
     soup = BeautifulSoup(html, "html.parser")
@@ -461,8 +470,9 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
         and not http_result.challenge_detected
         and not _looks_like_client_error_page(http_result.html)
     ):
+        http_looks_like_shell = _looks_like_shell_page(http_result.html)
         extracted = await extract_fulltext(http_result.html, url=http_result.fetched_url)
-        if extracted:
+        if extracted and not http_looks_like_shell:
             return ExtractionResult(
                 content=extracted,
                 method="http",

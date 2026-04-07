@@ -59,6 +59,7 @@ from ..feed_fetch_progress import (
     find_reusable_active_feed_fetch_run,
     load_active_feed_fetch_runs,
     load_latest_feed_fetch_runs,
+    reload_feed_fetch_run,
     serialize_feed_fetch_run,
 )
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
@@ -845,7 +846,11 @@ async def get_latest_feed_fetch_run_admin(
     latest_run = result.scalar_one_or_none()
     if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
         active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
-        latest_run = active_run if active_run is not None else await session.get(FeedFetchRun, latest_run.id)
+        latest_run = (
+            active_run
+            if active_run is not None
+            else await reload_feed_fetch_run(session, latest_run.id, include_stages=True)
+        )
     if latest_run is None:
         return {
             "feed_id": feed_id,
@@ -893,7 +898,11 @@ async def get_latest_feed_fetch_runs_admin(
         latest_run = latest_by_feed.get(feed_id)
         if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
             active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
-            latest_run = active_run if active_run is not None else await session.get(FeedFetchRun, latest_run.id)
+            latest_run = (
+                active_run
+                if active_run is not None
+                else await reload_feed_fetch_run(session, latest_run.id)
+            )
         if latest_run is None:
             items.append(
                 {
