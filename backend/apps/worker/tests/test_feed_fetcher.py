@@ -160,8 +160,10 @@ class TestFetchFeedTask:
 async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
     due_feed_one = MagicMock()
     due_feed_one.id = "feed-1"
+    due_feed_one.url = "https://example.com/feed-1.xml"
     due_feed_two = MagicMock()
     due_feed_two.id = "feed-2"
+    due_feed_two.url = "https://example.com/feed-2.xml"
 
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [due_feed_one, due_feed_two]
@@ -805,6 +807,88 @@ class TestFetchFeedTaskProgress:
         assert progress_run.error_message == "rsshub_temporarily_unavailable"
         assert progress_run.summary_json["retry_minutes"] == 5
         assert excinfo.value.defer_score == int(timedelta(minutes=5).total_seconds() * 1000)
+
+    @pytest.mark.asyncio
+    async def test_rsshub_infrastructure_error_does_not_read_stale_run_path_kind_after_rollback(self):
+        """Rollback-expired runs must not lazy-load path_kind while finalizing RSSHub errors."""
+
+        class ExplodingPathKindRun:
+            def __init__(self):
+                self.id = "run-1"
+                self.feed_id = "feed-1"
+                self.profile_key = None
+                self.assigned_path_kind = None
+
+            @property
+            def path_kind(self):
+                raise AssertionError("path_kind should not be read after rollback")
+
+            @path_kind.setter
+            def path_kind(self, value):
+                self.assigned_path_kind = value
+
+        progress_run = ExplodingPathKindRun()
+
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "http://rsshub:1200/anthropic/research"
+        mock_feed.site_url = "https://www.anthropic.com/research"
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 2
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_result, mock_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        blocked_until = datetime.now(UTC) + timedelta(minutes=5)
+        finalize_run = AsyncMock(return_value=None)
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.feed_fetcher._load_persisted_run_for_job",
+                new=AsyncMock(return_value=progress_run),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher.start_feed_fetch_run",
+                new=AsyncMock(return_value=MagicMock()),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher.advance_feed_fetch_stage",
+                new=AsyncMock(return_value=MagicMock()),
+            ),
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch(
+                "glean_worker.tasks.feed_fetcher.fetch_feed",
+                new=AsyncMock(side_effect=ValueError("Failed to fetch feed: ReadTimeout('')")),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher._open_rsshub_circuit",
+                new=AsyncMock(return_value=blocked_until),
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher._is_rsshub_infrastructure_error",
+                return_value=True,
+            ),
+            patch(
+                "glean_worker.tasks.feed_fetcher.finalize_feed_fetch_run",
+                new=finalize_run,
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            with pytest.raises(Retry):
+                await fetch_feed_task({"redis": AsyncMock()}, feed_id="feed-1", run_id="run-1")
+
+        assert progress_run.assigned_path_kind == "rsshub_primary"
+        finalize_run.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_cancelled_feed_logs_timeout_summary(self):

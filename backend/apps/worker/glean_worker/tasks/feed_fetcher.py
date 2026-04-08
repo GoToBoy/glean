@@ -307,6 +307,26 @@ def _truncate_feed_error_message(message: str, max_length: int = MAX_FEED_ERROR_
     return f"{message[: max_length - len(suffix)]}{suffix}"
 
 
+def _persist_run_path_metadata(
+    run: FeedFetchRun | None,
+    *,
+    feed_url: str,
+    used_url: str,
+    fallback_urls: list[str],
+) -> None:
+    """Persist fetch path metadata without reading potentially stale ORM attributes."""
+    if run is None:
+        return
+
+    path_kind = classify_feed_fetch_path_kind(
+        feed_url=feed_url,
+        used_url=used_url,
+        fallback_urls=fallback_urls,
+    )
+    run.path_kind = path_kind
+    run.profile_key = get_profile_key_for_path(path_kind, used_url)
+
+
 async def _is_vectorization_enabled(session: AsyncSession) -> bool:
     """Check if vectorization is enabled and healthy."""
     config_service = TypedConfigService(session)
@@ -461,16 +481,12 @@ async def fetch_feed_task(
                         feed.next_fetch_at = _default_next_fetch_at()
                         run_summary["used_url"] = attempt_url
                         run_summary["fallback_used"] = attempt_url != feed.url
-                        if persisted_run is not None:
-                            persisted_run.path_kind = classify_feed_fetch_path_kind(
-                                feed_url=feed.url,
-                                used_url=attempt_url,
-                                fallback_urls=fallback_urls,
-                            )
-                            persisted_run.profile_key = get_profile_key_for_path(
-                                persisted_run.path_kind,
-                                attempt_url,
-                            )
+                        _persist_run_path_metadata(
+                            persisted_run,
+                            feed_url=feed.url,
+                            used_url=attempt_url,
+                            fallback_urls=fallback_urls,
+                        )
                         if _feed_uses_rsshub(feed):
                             await _close_rsshub_circuit(ctx.get("redis"))
                         await finalize_feed_fetch_run(
@@ -511,9 +527,13 @@ async def fetch_feed_task(
             )
             run_summary["used_url"] = used_url
             run_summary["fallback_used"] = used_url != feed.url
-            if persisted_run is not None:
-                persisted_run.path_kind = path_kind
-                persisted_run.profile_key = get_profile_key_for_path(path_kind, used_url)
+            _persist_run_path_metadata(
+                persisted_run,
+                feed_url=feed.url,
+                used_url=used_url,
+                fallback_urls=fallback_urls,
+            )
+            if persisted_run is not None and active_stage is not None:
                 await refresh_running_eta(session, persisted_run, active_stage)
 
             active_stage = await advance_feed_fetch_stage(
@@ -797,17 +817,12 @@ async def fetch_feed_task(
                     feed.fetch_error_message = None
                     feed.last_fetch_success_at = fetch_attempt_at
                     feed.next_fetch_at = _default_next_fetch_at()
-                    if persisted_run is not None:
-                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
-                            feed_url=feed.url,
-                            used_url=used_url or feed.url,
-                            fallback_urls=fallback_urls,
-                        )
-                        persisted_run.path_kind = path_kind
-                        persisted_run.profile_key = get_profile_key_for_path(
-                            path_kind,
-                            used_url or feed.url,
-                        )
+                    _persist_run_path_metadata(
+                        persisted_run,
+                        feed_url=feed.url,
+                        used_url=used_url or feed.url,
+                        fallback_urls=fallback_urls,
+                    )
                     await finalize_feed_fetch_run(
                         session,
                         persisted_run,
@@ -835,17 +850,12 @@ async def fetch_feed_task(
                         "Database index ix_entries_url is corrupted. Run REINDEX INDEX CONCURRENTLY ix_entries_url."
                     )
                     feed.next_fetch_at = _default_next_fetch_at()
-                    if persisted_run is not None:
-                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
-                            feed_url=feed.url,
-                            used_url=used_url or feed.url,
-                            fallback_urls=fallback_urls,
-                        )
-                        persisted_run.path_kind = path_kind
-                        persisted_run.profile_key = get_profile_key_for_path(
-                            path_kind,
-                            used_url or feed.url,
-                        )
+                    _persist_run_path_metadata(
+                        persisted_run,
+                        feed_url=feed.url,
+                        used_url=used_url or feed.url,
+                        fallback_urls=fallback_urls,
+                    )
                     await finalize_feed_fetch_run(
                         session,
                         persisted_run,
@@ -874,17 +884,12 @@ async def fetch_feed_task(
                         "RSSHub is temporarily unavailable. Glean will retry automatically after the health window."
                     )
                     feed.next_fetch_at = blocked_until
-                    if persisted_run is not None:
-                        path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
-                            feed_url=feed.url,
-                            used_url=used_url or feed.url,
-                            fallback_urls=fallback_urls,
-                        )
-                        persisted_run.path_kind = path_kind
-                        persisted_run.profile_key = get_profile_key_for_path(
-                            path_kind,
-                            used_url or feed.url,
-                        )
+                    _persist_run_path_metadata(
+                        persisted_run,
+                        feed_url=feed.url,
+                        used_url=used_url or feed.url,
+                        fallback_urls=fallback_urls,
+                    )
                     await finalize_feed_fetch_run(
                         session,
                         persisted_run,
@@ -925,17 +930,12 @@ async def fetch_feed_task(
                         "error_count": feed.error_count,
                     },
                 )
-                if persisted_run is not None:
-                    path_kind = persisted_run.path_kind or classify_feed_fetch_path_kind(
-                        feed_url=feed.url,
-                        used_url=used_url or feed.url,
-                        fallback_urls=fallback_urls,
-                    )
-                    persisted_run.path_kind = path_kind
-                    persisted_run.profile_key = get_profile_key_for_path(
-                        path_kind,
-                        used_url or feed.url,
-                    )
+                _persist_run_path_metadata(
+                    persisted_run,
+                    feed_url=feed.url,
+                    used_url=used_url or feed.url,
+                    fallback_urls=fallback_urls,
+                )
                 await finalize_feed_fetch_run(
                     session,
                     persisted_run,

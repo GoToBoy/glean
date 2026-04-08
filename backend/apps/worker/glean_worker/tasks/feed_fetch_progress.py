@@ -412,8 +412,10 @@ def _resolve_active_stage_for_finalize(
     active_stage: FeedFetchStageEvent | None,
 ) -> FeedFetchStageEvent | None:
     """Prefer the live session-backed active stage over a stale caller reference."""
+    live_open_stage = next((stage for stage in reversed(stage_events) if stage.finished_at is None), None)
+
     if active_stage is None:
-        return next((stage for stage in reversed(stage_events) if stage.finished_at is None), None)
+        return live_open_stage
 
     if active_stage in stage_events:
         return active_stage
@@ -427,18 +429,10 @@ def _resolve_active_stage_for_finalize(
         if matched_by_id is not None:
             return matched_by_id
 
-    matched_open_stage = next(
-        (
-            stage
-            for stage in reversed(stage_events)
-            if stage.finished_at is None and stage.stage_name == active_stage.stage_name
-        ),
-        None,
-    )
-    if matched_open_stage is not None:
-        return matched_open_stage
+    if live_open_stage is not None:
+        return live_open_stage
 
-    return next((stage for stage in reversed(stage_events) if stage.finished_at is None), active_stage)
+    return active_stage
 
 
 async def trim_feed_fetch_run_history(

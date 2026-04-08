@@ -270,6 +270,67 @@ async def test_finalize_feed_fetch_run_rebinds_stale_active_stage_after_rollback
     assert run.error_message == "network timeout"
 
 
+@pytest.mark.asyncio
+async def test_finalize_feed_fetch_run_uses_live_open_stage_without_touching_stale_stage_name():
+    session = MagicMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        trigger_type="manual_user",
+        status="in_progress",
+        current_stage="resolve_attempt_urls",
+        started_at=datetime.now(UTC),
+    )
+    live_active_stage = FeedFetchStageEvent(
+        id="stage-live",
+        run_id="run-1",
+        stage_order=1,
+        stage_name="resolve_attempt_urls",
+        status="running",
+        started_at=datetime.now(UTC),
+    )
+
+    class StaleActiveStage:
+        id = "stage-stale"
+        finished_at = None
+
+        @property
+        def stage_name(self):
+            raise AssertionError("stale active stage name should not be accessed after rollback")
+
+    with (
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[live_active_stage]),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        completion_stage = await finalize_feed_fetch_run(
+            session,
+            run,
+            StaleActiveStage(),
+            run_status="error",
+            summary_json={"retry_minutes": 15},
+            error_message="network timeout",
+            active_stage_status="error",
+            active_stage_summary="Worker stage failed and the run will be retried.",
+            completion_summary="Feed fetch failed and was scheduled for retry.",
+            skipped_stage_summary="Skipped after the worker stage failed.",
+        )
+
+    assert completion_stage is not None
+    assert live_active_stage.status == "error"
+    assert live_active_stage.finished_at is not None
+    assert run.status == "error"
+    assert run.current_stage == "complete"
+
+
 def test_path_classification_and_profile_key():
     fallback_url = "https://rsshub.example.com/github/release/openai/openai-python"
 
