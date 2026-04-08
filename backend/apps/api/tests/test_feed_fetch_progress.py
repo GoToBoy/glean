@@ -97,10 +97,16 @@ async def test_mark_active_run_as_stale_uses_refreshed_stage_events_for_completi
     session = AsyncMock()
     session.add = MagicMock()
 
-    with patch(
-        "glean_api.feed_fetch_progress.reload_feed_fetch_run",
-        new=AsyncMock(return_value=refreshed_run),
-    ) as reload_run:
+    with (
+        patch(
+            "glean_api.feed_fetch_progress.reload_feed_fetch_run",
+            new=AsyncMock(return_value=refreshed_run),
+        ) as reload_run,
+        patch(
+            "glean_api.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=refreshed_run.stage_events),
+        ),
+    ):
         await mark_active_run_as_stale(
             session,
             stale_run,
@@ -121,3 +127,65 @@ async def test_mark_active_run_as_stale_uses_refreshed_stage_events_for_completi
     assert refreshed_run.stage_events[-2].status == "error"
     assert refreshed_run.stage_events[-1].status == "error"
     session.commit.assert_awaited_once()
+
+
+async def test_mark_active_run_as_stale_does_not_lazy_load_stage_events_relationship() -> None:
+    now = datetime.now(UTC)
+    run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        job_id="job-1",
+        trigger_type="manual_user",
+        status="in_progress",
+        current_stage="resolve_attempt_urls",
+        queue_entered_at=now - timedelta(minutes=2),
+        started_at=now - timedelta(minutes=1),
+    )
+    active_stage = FeedFetchStageEvent(
+        id="stage-1",
+        run_id="run-1",
+        stage_order=1,
+        stage_name="resolve_attempt_urls",
+        status="running",
+        started_at=now - timedelta(minutes=1),
+    )
+
+    session = AsyncMock()
+    session.add = MagicMock()
+
+    with (
+        patch(
+            "glean_api.feed_fetch_progress.reload_feed_fetch_run",
+            new=AsyncMock(return_value=run),
+        ),
+        patch(
+            "glean_api.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[active_stage]),
+        ),
+        patch.object(
+            FeedFetchRun,
+            "stage_events",
+            new=property(
+                lambda self: (_ for _ in ()).throw(
+                    AssertionError("stage_events relationship should not be accessed")
+                )
+            ),
+        ),
+    ):
+        await mark_active_run_as_stale(
+            session,
+            run,
+            reason="job_not_found",
+            summary="Persisted run was reconciled after arq reported not_found.",
+            public_diagnostic="Worker job is no longer available.",
+        )
+
+    assert active_stage.status == "error"
+    assert active_stage.finished_at is not None
+    staged_events = [call.args[0] for call in session.add.call_args_list]
+    assert any(
+        isinstance(event, FeedFetchStageEvent)
+        and event.stage_name == "complete"
+        and event.run_id == "run-1"
+        for event in staged_events
+    )

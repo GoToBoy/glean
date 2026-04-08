@@ -223,10 +223,11 @@ async def mark_active_run_as_stale(
     if run.status not in ACTIVE_RUN_STATUSES:
         return
 
+    stage_events = await _load_stage_events_for_run(session, run)
     now = datetime.now(UTC)
 
     active_stage = next(
-        (stage for stage in reversed(run.stage_events) if stage.finished_at is None),
+        (stage for stage in reversed(stage_events) if stage.finished_at is None),
         None,
     )
     if active_stage is not None:
@@ -242,13 +243,13 @@ async def mark_active_run_as_stale(
         session.add(active_stage)
 
     completion_stage = next(
-        (stage for stage in reversed(run.stage_events) if stage.stage_name == "complete"),
+        (stage for stage in reversed(stage_events) if stage.stage_name == "complete"),
         None,
     )
     if completion_stage is None:
         completion_stage = FeedFetchStageEvent(
-            run=run,
-            stage_order=_next_stage_order(run.stage_events),
+            run_id=run.id,
+            stage_order=_next_stage_order(stage_events),
             stage_name="complete",
             status="error",
             started_at=now,
@@ -256,6 +257,8 @@ async def mark_active_run_as_stale(
             summary=summary,
             metrics_json={"last_progress_at": now.isoformat()},
         )
+        stage_events.append(completion_stage)
+        session.add(completion_stage)
     else:
         completion_stage.status = "error"
         completion_stage.started_at = completion_stage.started_at or now
@@ -293,12 +296,13 @@ async def reconcile_completed_active_run(
     if run.status not in ACTIVE_RUN_STATUSES:
         return
 
+    stage_events = await _load_stage_events_for_run(session, run)
     now = datetime.now(UTC)
     normalized_status = _normalize_job_result_status(result_status)
     summary = _build_completed_job_summary(normalized_status, result_message)
 
     active_stage = next(
-        (stage for stage in reversed(run.stage_events) if stage.finished_at is None),
+        (stage for stage in reversed(stage_events) if stage.finished_at is None),
         None,
     )
     if active_stage is not None:
@@ -313,13 +317,13 @@ async def reconcile_completed_active_run(
         session.add(active_stage)
 
     completion_stage = next(
-        (stage for stage in reversed(run.stage_events) if stage.stage_name == "complete"),
+        (stage for stage in reversed(stage_events) if stage.stage_name == "complete"),
         None,
     )
     if completion_stage is None:
         completion_stage = FeedFetchStageEvent(
-            run=run,
-            stage_order=_next_stage_order(run.stage_events),
+            run_id=run.id,
+            stage_order=_next_stage_order(stage_events),
             stage_name="complete",
             status="error" if normalized_status == "error" else "success",
             started_at=now,
@@ -327,6 +331,8 @@ async def reconcile_completed_active_run(
             summary=summary,
             metrics_json={"last_progress_at": now.isoformat()},
         )
+        stage_events.append(completion_stage)
+        session.add(completion_stage)
     else:
         completion_stage.status = "error" if normalized_status == "error" else "success"
         completion_stage.started_at = completion_stage.started_at or now
@@ -624,6 +630,18 @@ def _next_stage_order(stage_events: Sequence[FeedFetchStageEvent]) -> int:
     if not stage_events:
         return 0
     return max(stage.stage_order for stage in stage_events) + 1
+
+
+async def _load_stage_events_for_run(
+    session: AsyncSession,
+    run: FeedFetchRun,
+) -> list[FeedFetchStageEvent]:
+    result = await session.execute(
+        select(FeedFetchStageEvent)
+        .where(FeedFetchStageEvent.run_id == run.id)
+        .order_by(FeedFetchStageEvent.stage_order.asc())
+    )
+    return list(result.scalars().all())
 
 
 async def load_active_feed_fetch_runs(

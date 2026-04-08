@@ -41,10 +41,8 @@ from ..dependencies import (
     get_redis_pool,
 )
 from ..feed_fetch_progress import (
-    find_reusable_active_feed_fetch_run,
     load_active_feed_fetch_runs,
     load_latest_feed_fetch_runs,
-    reload_feed_fetch_run,
     serialize_feed_fetch_run,
 )
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
@@ -555,7 +553,6 @@ async def get_latest_feed_fetch_run(
     feed_id: str,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, object | None]:
     """Return the latest persisted fetch run for one user-owned feed."""
     ownership_result = await session.execute(
@@ -579,13 +576,6 @@ async def get_latest_feed_fetch_run(
         .limit(1)
     )
     latest_run = result.scalar_one_or_none()
-    if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
-        active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
-        latest_run = (
-            active_run
-            if active_run is not None
-            else await reload_feed_fetch_run(session, latest_run.id, include_stages=True)
-        )
     if latest_run is None:
         return {
             "feed_id": feed_id,
@@ -613,7 +603,6 @@ async def get_latest_feed_fetch_runs(
     request: FeedFetchRunBatchRequest,
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return latest persisted fetch run snapshots for many user-owned feeds."""
     if not request.feed_ids:
@@ -640,13 +629,6 @@ async def get_latest_feed_fetch_runs(
         if feed is None:
             continue
         latest_run = latest_by_feed.get(feed_id)
-        if latest_run is not None and latest_run.status in {"queued", "in_progress"}:
-            active_run = await find_reusable_active_feed_fetch_run(session, redis, feed_id)
-            latest_run = (
-                active_run
-                if active_run is not None
-                else await reload_feed_fetch_run(session, latest_run.id)
-            )
         if latest_run is None:
             items.append(
                 {
@@ -683,7 +665,6 @@ async def get_latest_feed_fetch_runs(
 async def get_active_feed_fetch_runs(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
-    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return queued/running fetch runs visible to the current user."""
     ownership_result = await session.execute(
@@ -694,11 +675,8 @@ async def get_active_feed_fetch_runs(
 
     items: list[dict[str, object | None]] = []
     for run, feed in active_runs:
-        reusable_run = await find_reusable_active_feed_fetch_run(session, redis, run.feed_id)
-        if reusable_run is None:
-            continue
         item = serialize_feed_fetch_run(
-            reusable_run,
+            run,
             next_fetch_at=feed.next_fetch_at,
             last_fetch_attempt_at=feed.last_fetch_attempt_at,
             last_fetch_success_at=feed.last_fetch_success_at,
