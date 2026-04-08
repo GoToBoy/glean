@@ -168,6 +168,8 @@ async def _clear_stage_events_for_run(
     if _should_use_explicit_stage_event_io(run):
         for stage_event in stage_events:
             await session.delete(stage_event)
+        if "stage_events" in run.__dict__:
+            run.stage_events.clear()
         await session.flush()
         return []
 

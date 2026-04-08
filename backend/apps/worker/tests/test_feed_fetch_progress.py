@@ -198,6 +198,59 @@ async def test_start_feed_fetch_run_for_persisted_run_does_not_touch_relationshi
 
 
 @pytest.mark.asyncio
+async def test_start_feed_fetch_run_clears_deleted_stage_relationship_for_persisted_retry():
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+    session.delete = AsyncMock()
+
+    run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        trigger_type="manual_user",
+        status="error",
+        current_stage="complete",
+        queue_entered_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+    old_complete_stage = FeedFetchStageEvent(
+        id="stage-old",
+        run=run,
+        stage_order=0,
+        stage_name="complete",
+        status="error",
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+
+    with (
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._should_use_explicit_stage_event_io",
+            return_value=True,
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[old_complete_stage]),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        active_stage = await start_feed_fetch_run(session, run)
+
+    assert active_stage is not None
+    assert active_stage.stage_name == "resolve_attempt_urls"
+    assert old_complete_stage not in run.stage_events
+    session.delete.assert_awaited_once_with(old_complete_stage)
+    assert [call.args[0].stage_name for call in session.add.call_args_list if hasattr(call.args[0], "stage_name")] == [
+        "queue_wait",
+        "resolve_attempt_urls",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_finalize_feed_fetch_run_rebinds_stale_active_stage_after_rollback():
     session = MagicMock()
     session.flush = AsyncMock()
