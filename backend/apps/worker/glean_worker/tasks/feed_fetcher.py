@@ -293,6 +293,20 @@ def _is_duplicate_feed_guid_exception(error: Exception) -> bool:
     return "uq_feed_guid" in error_text and "duplicate key value" in error_text
 
 
+def _pick_existing_entry_for_backfill(existing_entries: list[Entry]) -> Entry | None:
+    """Return one deterministic existing entry that still needs content backfill."""
+    for entry in existing_entries:
+        if should_backfill_entry(
+            content=entry.content,
+            summary=entry.summary,
+            content_source=entry.content_source,
+            content_backfill_status=entry.content_backfill_status,
+            force=False,
+        ):
+            return entry
+    return None
+
+
 def _is_entries_url_index_corrupted(error: Exception) -> bool:
     """Return True when PostgreSQL reports ix_entries_url index corruption."""
     error_text = str(error)
@@ -653,20 +667,14 @@ async def fetch_feed_task(
                 if not inserted_entry_id:
                     if backfill_existing_entries and guid and parsed_entry.url and "redis" in ctx:
                         existing_entry_result = await session.execute(
-                            select(Entry).where(Entry.feed_id == feed.id, Entry.guid == guid)
+                            select(Entry)
+                            .where(Entry.feed_id == feed.id, Entry.guid == guid)
+                            .order_by(Entry.created_at.desc(), Entry.id.desc())
                         )
-                        existing_entry = existing_entry_result.scalar_one_or_none()
-                        if (
-                            existing_entry
-                            and existing_entry.id not in queued_backfill_entry_ids
-                            and should_backfill_entry(
-                                content=existing_entry.content,
-                                summary=existing_entry.summary,
-                                content_source=existing_entry.content_source,
-                                content_backfill_status=existing_entry.content_backfill_status,
-                                force=False,
-                            )
-                        ):
+                        existing_entry = _pick_existing_entry_for_backfill(
+                            existing_entry_result.scalars().all()
+                        )
+                        if existing_entry and existing_entry.id not in queued_backfill_entry_ids:
                             await ctx["redis"].enqueue_job(
                                 "backfill_entry_content_task", existing_entry.id, force=False
                             )
