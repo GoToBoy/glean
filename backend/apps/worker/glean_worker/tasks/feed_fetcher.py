@@ -390,6 +390,7 @@ async def fetch_feed_task(
         effective_trigger_type = trigger_type or ctx.get("trigger_type")
         persisted_run: FeedFetchRun | None = None
         active_stage = None
+        active_stage_name: str | None = None
         run_summary = build_feed_fetch_summary()
         fallback_urls: list[str] = []
         used_url = ""
@@ -407,6 +408,7 @@ async def fetch_feed_task(
                 persisted_run,
                 trigger_type=effective_trigger_type,
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
             fetch_attempt_at = datetime.now(UTC)
 
             # Get feed from database
@@ -427,6 +429,7 @@ async def fetch_feed_task(
                     completion_summary="Feed fetch failed before processing started.",
                     completion_metrics_json=run_summary,
                     skipped_stage_summary="Skipped because the feed no longer exists.",
+                    fallback_active_stage_name=active_stage_name,
                 )
                 logger.error("Feed not found", extra={"feed_id": feed_id})
                 return {"status": "error", "message": "Feed not found"}
@@ -452,6 +455,7 @@ async def fetch_feed_task(
                 summary="Resolved candidate feed URLs.",
                 metrics_json={"attempt_url_count": len(attempt_urls)},
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
 
             parsed_feed = None
             feed_content: str | bytes | None = None
@@ -499,6 +503,7 @@ async def fetch_feed_task(
                             completion_summary="Feed fetch completed with no content changes.",
                             completion_metrics_json=run_summary,
                             skipped_stage_summary="Skipped because the feed was not modified.",
+                            fallback_active_stage_name=active_stage_name,
                         )
                         return {"status": "not_modified", "new_entries": 0}
 
@@ -544,6 +549,7 @@ async def fetch_feed_task(
                 summary="Fetched feed XML successfully.",
                 metrics_json={"path_kind": path_kind},
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
             parsed_feed = await parse_feed(feed_content, used_url)
 
             if used_url != feed.url:
@@ -582,6 +588,7 @@ async def fetch_feed_task(
                 summary="Parsed feed payload.",
                 metrics_json={"total_entries": run_summary["total_entries"]},
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
 
             # Process entries
             new_entries = 0
@@ -730,6 +737,7 @@ async def fetch_feed_task(
                     "backfill_failed_count": run_summary["backfill_failed_count"],
                 },
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
             active_stage = await advance_feed_fetch_stage(
                 session,
                 persisted_run,
@@ -738,6 +746,7 @@ async def fetch_feed_task(
                 summary="Processed feed entries.",
                 metrics_json=run_summary,
             )
+            active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
 
             # Update last_entry_at and schedule next fetch
             if latest_entry_time:
@@ -756,6 +765,7 @@ async def fetch_feed_task(
                 active_stage_metrics_json=run_summary,
                 completion_summary="Feed fetch completed successfully.",
                 completion_metrics_json=run_summary,
+                fallback_active_stage_name=active_stage_name,
             )
 
             logger.info(
@@ -791,6 +801,7 @@ async def fetch_feed_task(
                     completion_summary="Feed fetch timed out.",
                     completion_metrics_json=run_summary,
                     skipped_stage_summary="Skipped after the worker timed out.",
+                    fallback_active_stage_name=active_stage_name,
                 )
                 await session.commit()
             raise
@@ -841,6 +852,7 @@ async def fetch_feed_task(
                         completion_summary="Feed fetch finished after a duplicate-entry race.",
                         completion_metrics_json=run_summary,
                         skipped_stage_summary="Skipped after duplicate entry race.",
+                        fallback_active_stage_name=active_stage_name,
                     )
                     await session.commit()
                     return {"status": "success", "feed_id": feed_id, "new_entries": 0, "total_entries": 0}
@@ -875,6 +887,7 @@ async def fetch_feed_task(
                         completion_summary="Feed fetch failed due to database index corruption.",
                         completion_metrics_json=run_summary,
                         skipped_stage_summary="Skipped after the infrastructure error.",
+                        fallback_active_stage_name=active_stage_name,
                     )
                     await session.commit()
                     return {"status": "error", "message": "database_index_corrupted"}
@@ -909,6 +922,7 @@ async def fetch_feed_task(
                         completion_summary="Feed fetch was deferred until RSSHub recovers.",
                         completion_metrics_json=run_summary,
                         skipped_stage_summary="Skipped while waiting for RSSHub to recover.",
+                        fallback_active_stage_name=active_stage_name,
                     )
                     await session.commit()
                     raise Retry(defer=timedelta(minutes=retry_minutes)) from None
@@ -955,6 +969,7 @@ async def fetch_feed_task(
                     completion_summary="Feed fetch failed and was scheduled for retry.",
                     completion_metrics_json=run_summary,
                     skipped_stage_summary="Skipped after the worker stage failed.",
+                    fallback_active_stage_name=active_stage_name,
                 )
                 # Persist error status before raising Retry; otherwise context rollback
                 # would discard these updates.

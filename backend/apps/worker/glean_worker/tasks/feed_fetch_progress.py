@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 
 from sqlalchemy import inspect as sa_inspect
 from sqlalchemy import select
+from sqlalchemy.exc import NoInspectionAvailable
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -351,6 +352,7 @@ async def finalize_feed_fetch_run(
     completion_summary: str | None = None,
     completion_metrics_json: JsonObject | None = None,
     skipped_stage_summary: str | None = None,
+    fallback_active_stage_name: str | None = None,
 ) -> FeedFetchStageEvent | None:
     """Finalize the active stage, append completion stages, and persist the run outcome."""
     if run is None:
@@ -359,6 +361,22 @@ async def finalize_feed_fetch_run(
     now = datetime.now(UTC)
     stage_events = await _load_stage_events_for_run(session, run)
     final_active_stage = _resolve_active_stage_for_finalize(stage_events, active_stage)
+    if final_active_stage is None and fallback_active_stage_name is not None:
+        if run.current_stage == "complete" or run.finished_at is not None:
+            stage_events = await _clear_stage_events_for_run(session, run, stage_events)
+            run.status = "in_progress"
+            run.current_stage = fallback_active_stage_name
+            run.finished_at = None
+            run.predicted_finish_at = None
+
+        final_active_stage = _append_stage_event(
+            run,
+            stage_events,
+            stage_name=fallback_active_stage_name,
+            status="running",
+            started_at=now,
+        )
+
     if final_active_stage is not None and final_active_stage.finished_at is None:
         final_active_stage.status = active_stage_status or _status_for_run(run_status)
         final_active_stage.finished_at = now
@@ -432,7 +450,25 @@ def _resolve_active_stage_for_finalize(
     if live_open_stage is not None:
         return live_open_stage
 
-    return active_stage
+    if _is_usable_stage_reference(active_stage):
+        return active_stage
+
+    return None
+
+
+def _is_usable_stage_reference(stage: FeedFetchStageEvent | None) -> bool:
+    if stage is None:
+        return False
+
+    try:
+        state = sa_inspect(stage)
+    except NoInspectionAvailable:
+        return getattr(stage, "id", None) is not None
+
+    if state.deleted:
+        return False
+
+    return not (state.transient and getattr(stage, "id", None) is None)
 
 
 async def trim_feed_fetch_run_history(

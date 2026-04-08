@@ -873,11 +873,11 @@ class TestFetchFeedTaskProgress:
             ),
             patch(
                 "glean_worker.tasks.feed_fetcher.start_feed_fetch_run",
-                new=AsyncMock(return_value=MagicMock()),
+                new=AsyncMock(return_value=MagicMock(stage_name="resolve_attempt_urls")),
             ),
             patch(
                 "glean_worker.tasks.feed_fetcher.advance_feed_fetch_stage",
-                new=AsyncMock(return_value=MagicMock()),
+                new=AsyncMock(return_value=MagicMock(stage_name="fetch_xml")),
             ),
             patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
             patch(
@@ -904,6 +904,7 @@ class TestFetchFeedTaskProgress:
         assert stale_run.assigned_path_kind is None
         assert live_run.path_kind == "rsshub_primary"
         finalize_run.assert_awaited_once()
+        assert finalize_run.await_args.kwargs["fallback_active_stage_name"] == "fetch_xml"
 
     @pytest.mark.asyncio
     async def test_cancelled_feed_logs_timeout_summary(self):

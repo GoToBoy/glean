@@ -331,6 +331,87 @@ async def test_finalize_feed_fetch_run_uses_live_open_stage_without_touching_sta
     assert run.current_stage == "complete"
 
 
+@pytest.mark.asyncio
+async def test_finalize_feed_fetch_run_rebuilds_fallback_stage_after_rollback():
+    session = MagicMock()
+    session.flush = AsyncMock()
+    session.add = MagicMock()
+
+    run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        trigger_type="manual_user",
+        status="error",
+        current_stage="complete",
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+    old_complete_stage = FeedFetchStageEvent(
+        id="stage-complete-old",
+        run_id="run-1",
+        stage_order=0,
+        stage_name="complete",
+        status="error",
+        started_at=datetime.now(UTC),
+        finished_at=datetime.now(UTC),
+    )
+
+    class DeletedActiveStage:
+        finished_at = None
+        id = None
+
+        @property
+        def stage_name(self):
+            raise AssertionError("deleted active stage should not be reused")
+
+    clear_stage_events = AsyncMock(return_value=[])
+
+    with (
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[old_complete_stage]),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress._clear_stage_events_for_run",
+            new=clear_stage_events,
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetch_progress.trim_feed_fetch_run_history",
+            new=AsyncMock(return_value=None),
+        ),
+    ):
+        completion_stage = await finalize_feed_fetch_run(
+            session,
+            run,
+            DeletedActiveStage(),
+            run_status="error",
+            summary_json={"retry_minutes": 2},
+            error_message="rsshub_temporarily_unavailable",
+            active_stage_status="error",
+            active_stage_summary="RSSHub was temporarily unavailable during fetch.",
+            completion_summary="Feed fetch was deferred until RSSHub recovers.",
+            completion_metrics_json={"retry_minutes": 2},
+            skipped_stage_summary="Skipped while waiting for RSSHub to recover.",
+            fallback_active_stage_name="resolve_attempt_urls",
+        )
+
+    clear_stage_events.assert_awaited_once()
+    assert completion_stage is not None
+    assert completion_stage.stage_name == "complete"
+    assert run.status == "error"
+    assert run.current_stage == "complete"
+    assert run.finished_at is not None
+    assert [call.args[0].stage_name for call in session.add.call_args_list if hasattr(call.args[0], "stage_name")] == [
+        "resolve_attempt_urls",
+        "fetch_xml",
+        "parse_feed",
+        "process_entries",
+        "backfill_content",
+        "store_results",
+        "complete",
+    ]
+
+
 def test_path_classification_and_profile_key():
     fallback_url = "https://rsshub.example.com/github/release/openai/openai-python"
 
