@@ -299,7 +299,7 @@ async def start_feed_fetch_run(
         started_at=now,
     )
     await refresh_running_eta(session, run, next_stage, stage_events=stage_events)
-    await _flush_run(session, run, stage_events)
+    await _persist_run_progress(session, run, stage_events)
     return next_stage
 
 
@@ -336,7 +336,7 @@ async def advance_feed_fetch_stage(
         started_at=now,
     )
     await refresh_running_eta(session, run, next_stage, stage_events=stage_events)
-    await _flush_run(session, run, stage_events)
+    await _persist_run_progress(session, run, stage_events)
     return next_stage
 
 
@@ -424,6 +424,7 @@ async def finalize_feed_fetch_run(
 
     await _flush_run(session, run, stage_events)
     await trim_feed_fetch_run_history(session, run.feed_id)
+    await session.commit()
     return final_active_stage
 
 
@@ -629,6 +630,15 @@ async def _flush_run(
     for stage_event in stage_events:
         session.add(stage_event)
     await session.flush()
+
+
+async def _persist_run_progress(
+    session: AsyncSession,
+    run: FeedFetchRun,
+    stage_events: Sequence[FeedFetchStageEvent],
+) -> None:
+    await _flush_run(session, run, stage_events)
+    await session.commit()
 
 
 def _extract_run_durations(runs: Sequence[FeedFetchRun]) -> list[timedelta]:

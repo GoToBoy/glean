@@ -31,7 +31,7 @@ from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
 
 from ..config import settings
-from .content_extraction import extract_entry_content_update, should_backfill_entry
+from .content_extraction import should_backfill_entry
 from .feed_fetch_progress import (
     advance_feed_fetch_stage,
     build_feed_fetch_summary,
@@ -595,6 +595,7 @@ async def fetch_feed_task(
             latest_entry_time = feed.last_entry_at
             seen_guids: set[str] = set()
             queued_backfill_entry_ids: set[str] = set()
+            queued_backfill_count = 0
             pending_inserts_since_commit = 0
             vectorization_enabled = await _is_vectorization_enabled(session)
 
@@ -614,45 +615,11 @@ async def fetch_feed_task(
                 content_backfill_attempts = 0
                 content_backfill_error = None
                 content_backfill_at = None
-                if not parsed_entry.has_full_content and parsed_entry.url:
-                    run_summary["backfill_attempted_count"] += 1
-                    try:
-                        extraction_result = await extract_entry_content_update(parsed_entry.url)
-                        content_backfill_attempts = 1
-                        if extraction_result.content and extraction_result.source:
-                            entry_content = extraction_result.content
-                            content_source = extraction_result.source
-                            content_backfill_status = "done"
-                            content_backfill_at = datetime.now(UTC)
-                            if extraction_result.source == "backfill_http":
-                                run_summary["backfill_success_http_count"] += 1
-                            elif extraction_result.source == "backfill_browser":
-                                run_summary["backfill_success_browser_count"] += 1
-                        else:
-                            content_backfill_status = "failed"
-                            content_backfill_error = extraction_result.error or "empty_extraction"
-                            run_summary["backfill_failed_count"] += 1
-                            logger.warning(
-                                "Entry content extraction failed for "
-                                f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
-                                f"reason={content_backfill_error}"
-                            )
-                    except Exception as extract_err:
-                        content_backfill_attempts = 1
-                        content_backfill_status = "failed"
-                        content_backfill_error = str(extract_err)
-                        run_summary["backfill_failed_count"] += 1
-                        logger.warning(
-                            "Entry content extraction raised for "
-                            f"feed_id={feed_id} feed_url={feed.url} entry_url={parsed_entry.url} "
-                            f"reason={content_backfill_error}"
-                        )
-                else:
+                if parsed_entry.has_full_content and entry_content:
                     # Process content from feed to fix backtick formatting etc.
-                    if entry_content:
-                        entry_content = await postprocess_html(
-                            entry_content, base_url=parsed_entry.url
-                        )
+                    entry_content = await postprocess_html(
+                        entry_content, base_url=parsed_entry.url
+                    )
 
                 # Insert atomically to avoid duplicate-key failures under concurrent fetches.
                 insert_stmt = (
@@ -704,14 +671,34 @@ async def fetch_feed_task(
                                 "backfill_entry_content_task", existing_entry.id, force=False
                             )
                             queued_backfill_entry_ids.add(existing_entry.id)
+                            queued_backfill_count += 1
                     continue
 
                 new_entries += 1
                 pending_inserts_since_commit += 1
                 run_summary["new_entries"] = new_entries
 
-                # M3: Queue embedding task for new entry (only if vectorization enabled)
-                if vectorization_enabled:
+                requires_content_backfill = should_backfill_entry(
+                    content=entry_content,
+                    summary=parsed_entry.summary,
+                    content_source=content_source,
+                    content_backfill_status=content_backfill_status,
+                    force=False,
+                )
+                if (
+                    requires_content_backfill
+                    and parsed_entry.url
+                    and "redis" in ctx
+                    and inserted_entry_id not in queued_backfill_entry_ids
+                ):
+                    await ctx["redis"].enqueue_job(
+                        "backfill_entry_content_task", inserted_entry_id, force=False
+                    )
+                    queued_backfill_entry_ids.add(inserted_entry_id)
+                    queued_backfill_count += 1
+
+                # Only generate embeddings once the entry has full content or no backfill is needed.
+                if vectorization_enabled and not requires_content_backfill:
                     await ctx["redis"].enqueue_job("generate_entry_embedding", inserted_entry_id)
 
                 # Track latest entry time
@@ -729,13 +716,8 @@ async def fetch_feed_task(
                 persisted_run,
                 active_stage,
                 "backfill_content",
-                summary="Finished entry backfill attempts.",
-                metrics_json={
-                    "backfill_attempted_count": run_summary["backfill_attempted_count"],
-                    "backfill_success_http_count": run_summary["backfill_success_http_count"],
-                    "backfill_success_browser_count": run_summary["backfill_success_browser_count"],
-                    "backfill_failed_count": run_summary["backfill_failed_count"],
-                },
+                summary="Processed feed entries.",
+                metrics_json=run_summary,
             )
             active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
             active_stage = await advance_feed_fetch_stage(
@@ -743,8 +725,8 @@ async def fetch_feed_task(
                 persisted_run,
                 active_stage,
                 "store_results",
-                summary="Processed feed entries.",
-                metrics_json=run_summary,
+                summary="Queued background content backfill jobs.",
+                metrics_json={"backfill_queued_count": queued_backfill_count},
             )
             active_stage_name = getattr(active_stage, "stage_name", active_stage_name)
 

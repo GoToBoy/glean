@@ -335,8 +335,8 @@ class TestFetchFeedTaskProgress:
     _build_progress_run = staticmethod(TestFetchFeedTask._build_progress_run)
 
     @pytest.mark.asyncio
-    async def test_short_content_field_triggers_fulltext_extraction(self):
-        """Feeds with teaser-only content fields should still fetch article body."""
+    async def test_short_content_field_queues_background_backfill_for_new_entry(self):
+        """Summary-only entries should be stored immediately and backfilled asynchronously."""
         mock_feed = MagicMock()
         mock_feed.id = "feed-1"
         mock_feed.url = "https://example.com/feed.xml"
@@ -381,6 +381,7 @@ class TestFetchFeedTaskProgress:
 
         mock_rsshub_service = MagicMock()
         mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        mock_redis = AsyncMock()
 
         with (
             patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
@@ -390,15 +391,6 @@ class TestFetchFeedTaskProgress:
                 new=AsyncMock(return_value=("<xml />", {})),
             ),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
-            patch(
-                "glean_worker.tasks.feed_fetcher.extract_entry_content_update",
-                new=AsyncMock(
-                    return_value=MagicMock(
-                        content="<article><p>Full article body</p></article>",
-                        source="backfill_browser",
-                    )
-                ),
-            ) as mock_extract,
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
             patch(
                 "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
@@ -406,15 +398,17 @@ class TestFetchFeedTaskProgress:
             ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
-            result = await fetch_feed_task({}, feed_id="feed-1")
+            result = await fetch_feed_task({"redis": mock_redis}, feed_id="feed-1")
 
         assert result["status"] == "success"
         assert result["new_entries"] == 1
-        mock_extract.assert_awaited_once_with("https://openai.com/index/conde-nast/")
+        mock_redis.enqueue_job.assert_any_await(
+            "backfill_entry_content_task", "entry-1", force=False
+        )
 
     @pytest.mark.asyncio
-    async def test_content_extraction_failure_logs_feed_context(self):
-        """Extraction warnings should include feed and entry context in the message."""
+    async def test_summary_only_entry_without_redis_skips_sync_extraction(self):
+        """The main fetch path should not block on extraction even without a Redis client."""
         mock_feed = MagicMock()
         mock_feed.id = "feed-1"
         mock_feed.url = "https://example.com/feed.xml"
@@ -465,25 +459,16 @@ class TestFetchFeedTaskProgress:
             patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
             patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
-            patch(
-                "glean_worker.tasks.feed_fetcher.extract_entry_content_update",
-                new=AsyncMock(return_value=MagicMock(content=None, source=None, error="empty_extraction")),
-            ),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
-            patch("glean_worker.tasks.feed_fetcher.logger.warning") as mock_warning,
             patch(
                 "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
                 new=AsyncMock(return_value=None),
             ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
-            await fetch_feed_task({}, feed_id="feed-1")
+            result = await fetch_feed_task({}, feed_id="feed-1")
 
-        mock_warning.assert_any_call(
-            "Entry content extraction failed for "
-            "feed_id=feed-1 feed_url=https://example.com/feed.xml "
-            "entry_url=https://example.com/posts/1 reason=empty_extraction"
-        )
+        assert result["status"] == "success"
 
     @pytest.mark.asyncio
     async def test_manual_refresh_enqueues_backfill_for_existing_summary_only_entry(self):
@@ -689,7 +674,7 @@ class TestFetchFeedTaskProgress:
         assert mock_feed.error_count == 0
         assert mock_feed.status == FeedStatus.ACTIVE
         assert mock_feed.fetch_error_message is None
-        assert mock_session.commit.await_count == 2
+        assert mock_session.commit.await_count >= 2
 
     @pytest.mark.asyncio
     async def test_index_corruption_error_keeps_feed_active_without_retry(self):
@@ -743,7 +728,7 @@ class TestFetchFeedTaskProgress:
         assert mock_feed.status == FeedStatus.ACTIVE
         assert mock_feed.error_count == 0
         assert "ix_entries_url is corrupted" in mock_feed.fetch_error_message
-        assert mock_session.commit.await_count == 2
+        assert mock_session.commit.await_count >= 2
 
     @pytest.mark.asyncio
     async def test_rsshub_infrastructure_error_opens_short_retry_without_incrementing_feed_failure(self):
@@ -998,15 +983,6 @@ class TestFetchFeedTaskProgress:
                 new=AsyncMock(side_effect=[RuntimeError("primary failed"), ("<xml />", {})]),
             ),
             patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
-            patch(
-                "glean_worker.tasks.feed_fetcher.extract_entry_content_update",
-                new=AsyncMock(
-                    return_value=MagicMock(
-                        content="<article>full text</article>",
-                        source="backfill_http",
-                    )
-                ),
-            ),
             patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
             patch(
                 "glean_worker.tasks.feed_fetcher.refresh_running_eta",
@@ -1026,11 +1002,13 @@ class TestFetchFeedTaskProgress:
             ),
         ):
             mock_ctx.return_value.__aenter__.return_value = mock_session
+            mock_redis = AsyncMock()
             result = await fetch_feed_task(
-                {}, feed_id="feed-1", run_id="run-1", trigger_type="manual_user"
+                {"redis": mock_redis}, feed_id="feed-1", run_id="run-1", trigger_type="manual_user"
             )
 
         assert result["status"] == "success"
+        mock_redis.enqueue_job.assert_any_await("backfill_entry_content_task", "entry-2", force=False)
         assert progress_run.status == "success"
         assert progress_run.current_stage == "complete"
         assert progress_run.path_kind == "rsshub_fallback"
@@ -1039,8 +1017,8 @@ class TestFetchFeedTaskProgress:
             "new_entries": 2,
             "total_entries": 2,
             "summary_only_count": 1,
-            "backfill_attempted_count": 1,
-            "backfill_success_http_count": 1,
+            "backfill_attempted_count": 0,
+            "backfill_success_http_count": 0,
             "backfill_success_browser_count": 0,
             "backfill_failed_count": 0,
             "fallback_used": True,

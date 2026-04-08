@@ -46,6 +46,7 @@ async def test_run_lifecycle_records_stage_sequence():
     execute_result.scalars.return_value.all.return_value = [run := _build_queued_run()]
     session.execute = AsyncMock(return_value=execute_result)
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
 
     active_stage = await start_feed_fetch_run(session, run)
@@ -122,6 +123,7 @@ async def test_start_feed_fetch_run_resets_completed_retry_lifecycle():
     session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
     run = _build_queued_run()
     run.status = "error"
@@ -142,6 +144,36 @@ async def test_start_feed_fetch_run_resets_completed_retry_lifecycle():
         "queue_wait",
         "resolve_attempt_urls",
     ]
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_advance_feed_fetch_stage_commits_progress_for_visibility():
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.flush = AsyncMock()
+    session.commit = AsyncMock()
+    session.add = MagicMock()
+    run = _build_queued_run()
+
+    with patch(
+        "glean_worker.tasks.feed_fetch_progress.refresh_running_eta",
+        new=AsyncMock(return_value=None),
+    ):
+        active_stage = await start_feed_fetch_run(session, run)
+        session.commit.reset_mock()
+        next_stage = await advance_feed_fetch_stage(
+            session,
+            run,
+            active_stage,
+            "fetch_xml",
+            summary="Resolved candidate feed URLs.",
+            metrics_json={"attempt_url_count": 1},
+        )
+
+    assert next_stage is not None
+    assert next_stage.stage_name == "fetch_xml"
+    session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -149,6 +181,7 @@ async def test_start_feed_fetch_run_for_persisted_run_does_not_touch_relationshi
     session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
     run = FeedFetchRun(
         id="run-1",
@@ -202,6 +235,7 @@ async def test_start_feed_fetch_run_clears_deleted_stage_relationship_for_persis
     session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
     session.delete = AsyncMock()
 
@@ -254,6 +288,7 @@ async def test_start_feed_fetch_run_clears_deleted_stage_relationship_for_persis
 async def test_finalize_feed_fetch_run_rebinds_stale_active_stage_after_rollback():
     session = MagicMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
 
     run = FeedFetchRun(
@@ -327,6 +362,7 @@ async def test_finalize_feed_fetch_run_rebinds_stale_active_stage_after_rollback
 async def test_finalize_feed_fetch_run_uses_live_open_stage_without_touching_stale_stage_name():
     session = MagicMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
 
     run = FeedFetchRun(
@@ -388,6 +424,7 @@ async def test_finalize_feed_fetch_run_uses_live_open_stage_without_touching_sta
 async def test_finalize_feed_fetch_run_rebuilds_fallback_stage_after_rollback():
     session = MagicMock()
     session.flush = AsyncMock()
+    session.commit = AsyncMock()
     session.add = MagicMock()
 
     run = FeedFetchRun(
