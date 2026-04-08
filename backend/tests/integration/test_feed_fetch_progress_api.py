@@ -7,7 +7,10 @@ from unittest.mock import patch
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import selectinload
 
+from glean_api.feed_fetch_progress import find_active_feed_fetch_run, mark_active_run_as_stale
 from glean_database.models.feed import Feed
 from glean_database.models.feed_fetch_run import FeedFetchRun
 from glean_database.models.feed_fetch_stage_event import FeedFetchStageEvent
@@ -626,3 +629,105 @@ async def test_latest_feed_fetch_run_reconciles_completed_job_to_success(
     assert refreshed_run.status == "success"
     assert refreshed_run.current_stage == "complete"
     assert refreshed_run.error_message is None
+
+
+@pytest.mark.asyncio
+async def test_mark_active_run_as_stale_reloads_stage_events_before_appending_complete_stage(
+    test_engine,
+):
+    async_session = async_sessionmaker(
+        bind=test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+    async with async_session() as setup_session:
+        feed = Feed(
+            url="https://example.com/stale-progress.xml",
+            title="Stale Progress Feed",
+            description="Reproduces stale ORM stage collections",
+            status="active",
+        )
+        setup_session.add(feed)
+        await setup_session.flush()
+
+        run = FeedFetchRun(
+            feed_id=feed.id,
+            job_id="job-stale-progress",
+            trigger_type="manual_user",
+            status="in_progress",
+            current_stage="resolve_attempt_urls",
+            queue_entered_at=datetime.now(UTC) - timedelta(minutes=2),
+            started_at=datetime.now(UTC) - timedelta(minutes=1),
+        )
+        setup_session.add(run)
+        await setup_session.flush()
+        setup_session.add_all(
+            [
+                FeedFetchStageEvent(
+                    run_id=run.id,
+                    stage_order=0,
+                    stage_name="queue_wait",
+                    status="success",
+                    started_at=datetime.now(UTC) - timedelta(minutes=2),
+                    finished_at=datetime.now(UTC) - timedelta(minutes=1),
+                    summary="Worker started processing the queued run.",
+                ),
+                FeedFetchStageEvent(
+                    run_id=run.id,
+                    stage_order=1,
+                    stage_name="resolve_attempt_urls",
+                    status="running",
+                    started_at=datetime.now(UTC) - timedelta(minutes=1),
+                ),
+            ]
+        )
+        await setup_session.commit()
+        run_id = run.id
+        feed_id = feed.id
+
+    async with async_session() as stale_session:
+        stale_run = await find_active_feed_fetch_run(stale_session, feed_id)
+        assert stale_run is not None
+        assert [stage.stage_order for stage in stale_run.stage_events] == [0, 1]
+
+        async with async_session() as worker_session:
+            worker_run = await worker_session.get(FeedFetchRun, run_id)
+            assert worker_run is not None
+            worker_run.current_stage = "fetch_xml"
+            worker_session.add(
+                FeedFetchStageEvent(
+                    run_id=run_id,
+                    stage_order=2,
+                    stage_name="fetch_xml",
+                    status="running",
+                    started_at=datetime.now(UTC) - timedelta(seconds=30),
+                )
+            )
+            await worker_session.commit()
+
+        await mark_active_run_as_stale(
+            stale_session,
+            stale_run,
+            reason="job_not_found",
+            summary="Persisted run was reconciled after arq reported not_found.",
+            public_diagnostic="Worker job is no longer available.",
+        )
+
+    async with async_session() as verify_session:
+        refreshed_run = await verify_session.get(
+            FeedFetchRun,
+            run_id,
+            options=(selectinload(FeedFetchRun.stage_events),),
+        )
+        assert refreshed_run is not None
+        assert refreshed_run.status == "error"
+        assert refreshed_run.current_stage == "complete"
+        assert [(stage.stage_order, stage.stage_name) for stage in refreshed_run.stage_events] == [
+            (0, "queue_wait"),
+            (1, "resolve_attempt_urls"),
+            (2, "fetch_xml"),
+            (3, "complete"),
+        ]
+        assert refreshed_run.stage_events[-2].status == "error"
+        assert refreshed_run.stage_events[-1].status == "error"

@@ -216,6 +216,13 @@ async def mark_active_run_as_stale(
     error_message: str | None = None,
 ) -> None:
     """Close an orphaned queued/running run so it no longer blocks fresh work."""
+    refreshed_run = await reload_feed_fetch_run(session, run.id, include_stages=True)
+    if refreshed_run is not None:
+        run = refreshed_run
+
+    if run.status not in ACTIVE_RUN_STATUSES:
+        return
+
     now = datetime.now(UTC)
 
     active_stage = next(
@@ -241,7 +248,7 @@ async def mark_active_run_as_stale(
     if completion_stage is None:
         completion_stage = FeedFetchStageEvent(
             run=run,
-            stage_order=len(run.stage_events),
+            stage_order=_next_stage_order(run.stage_events),
             stage_name="complete",
             status="error",
             started_at=now,
@@ -279,6 +286,13 @@ async def reconcile_completed_active_run(
     summary_json: dict[str, Any] | None,
 ) -> None:
     """Finalize an active persisted run using an arq job that already completed."""
+    refreshed_run = await reload_feed_fetch_run(session, run.id, include_stages=True)
+    if refreshed_run is not None:
+        run = refreshed_run
+
+    if run.status not in ACTIVE_RUN_STATUSES:
+        return
+
     now = datetime.now(UTC)
     normalized_status = _normalize_job_result_status(result_status)
     summary = _build_completed_job_summary(normalized_status, result_message)
@@ -305,7 +319,7 @@ async def reconcile_completed_active_run(
     if completion_stage is None:
         completion_stage = FeedFetchStageEvent(
             run=run,
-            stage_order=len(run.stage_events),
+            stage_order=_next_stage_order(run.stage_events),
             stage_name="complete",
             status="error" if normalized_status == "error" else "success",
             started_at=now,
@@ -594,11 +608,22 @@ async def reload_feed_fetch_run(
     include_stages: bool = False,
 ) -> FeedFetchRun | None:
     """Reload one persisted run to avoid serializing expired ORM state."""
-    stmt = select(FeedFetchRun).where(FeedFetchRun.id == run_id)
+    stmt = (
+        select(FeedFetchRun)
+        .where(FeedFetchRun.id == run_id)
+        .execution_options(populate_existing=True)
+    )
     if include_stages:
         stmt = stmt.options(selectinload(FeedFetchRun.stage_events))
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
+
+
+def _next_stage_order(stage_events: Sequence[FeedFetchStageEvent]) -> int:
+    """Allocate stage order from persisted values instead of collection length."""
+    if not stage_events:
+        return 0
+    return max(stage.stage_order for stage in stage_events) + 1
 
 
 async def load_active_feed_fetch_runs(
