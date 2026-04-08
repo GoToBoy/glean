@@ -810,7 +810,7 @@ class TestFetchFeedTaskProgress:
 
     @pytest.mark.asyncio
     async def test_rsshub_infrastructure_error_does_not_read_stale_run_path_kind_after_rollback(self):
-        """Rollback-expired runs must not lazy-load path_kind while finalizing RSSHub errors."""
+        """Rollback-expired runs must be rebound before RSSHub error finalization."""
 
         class ExplodingPathKindRun:
             def __init__(self):
@@ -827,7 +827,15 @@ class TestFetchFeedTaskProgress:
             def path_kind(self, value):
                 self.assigned_path_kind = value
 
-        progress_run = ExplodingPathKindRun()
+        stale_run = ExplodingPathKindRun()
+        live_run = FeedFetchRun(
+            id="run-1",
+            feed_id="feed-1",
+            trigger_type="manual_user",
+            status="in_progress",
+            current_stage="resolve_attempt_urls",
+            started_at=datetime.now(UTC),
+        )
 
         mock_feed = MagicMock()
         mock_feed.id = "feed-1"
@@ -849,13 +857,19 @@ class TestFetchFeedTaskProgress:
         mock_rsshub_service = MagicMock()
         mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
         blocked_until = datetime.now(UTC) + timedelta(minutes=5)
-        finalize_run = AsyncMock(return_value=None)
+
+        async def _finalize_side_effect(_session, run, _active_stage, **_kwargs):
+            assert run is live_run
+            assert run.started_at is not None
+            return None
+
+        finalize_run = AsyncMock(side_effect=_finalize_side_effect)
 
         with (
             patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
             patch(
                 "glean_worker.tasks.feed_fetcher._load_persisted_run_for_job",
-                new=AsyncMock(return_value=progress_run),
+                new=AsyncMock(side_effect=[stale_run, live_run]),
             ),
             patch(
                 "glean_worker.tasks.feed_fetcher.start_feed_fetch_run",
@@ -887,7 +901,8 @@ class TestFetchFeedTaskProgress:
             with pytest.raises(Retry):
                 await fetch_feed_task({"redis": AsyncMock()}, feed_id="feed-1", run_id="run-1")
 
-        assert progress_run.assigned_path_kind == "rsshub_primary"
+        assert stale_run.assigned_path_kind is None
+        assert live_run.path_kind == "rsshub_primary"
         finalize_run.assert_awaited_once()
 
     @pytest.mark.asyncio

@@ -800,6 +800,13 @@ async def fetch_feed_task(
                 extra={"feed_id": feed_id, "failed_at_utc": datetime.now(UTC).isoformat()},
             )
             await session.rollback()
+            if persisted_run is not None:
+                persisted_run = await _load_persisted_run_for_job(
+                    session,
+                    run_id=effective_run_id,
+                    feed_id=feed_id,
+                    job_id=ctx.get("job_id"),
+                )
             # Update feed error status
             stmt = select(Feed).where(Feed.id == feed_id)
             result = await session.execute(stmt)
