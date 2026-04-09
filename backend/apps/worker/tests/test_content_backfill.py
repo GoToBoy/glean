@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from glean_worker.tasks.content_backfill import backfill_entry_content_task
 
@@ -74,6 +75,8 @@ class TestBackfillEntryContentTask:
         """Extraction failure should mark the entry as failed."""
         mock_entry = MagicMock()
         mock_entry.id = "entry-2"
+        mock_entry.feed_id = "feed-2"
+        mock_entry.guid = "guid-2"
         mock_entry.url = "https://example.com/article"
         mock_entry.content = None
         mock_entry.summary = None
@@ -84,8 +87,11 @@ class TestBackfillEntryContentTask:
         entry_result = MagicMock()
         entry_result.scalar_one_or_none.return_value = mock_entry
 
+        conflicts_result = MagicMock()
+        conflicts_result.scalars.return_value.all.return_value = ["entry-2"]
+
         mock_session = AsyncMock()
-        mock_session.execute = AsyncMock(side_effect=[entry_result, entry_result])
+        mock_session.execute = AsyncMock(side_effect=[entry_result, conflicts_result, entry_result])
 
         with (
             patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
@@ -100,3 +106,104 @@ class TestBackfillEntryContentTask:
         assert result["status"] == "error"
         assert mock_entry.content_backfill_status == "failed"
         assert mock_entry.content_backfill_error == "boom"
+
+    @pytest.mark.asyncio
+    async def test_duplicate_guid_conflict_skips_backfill_before_extraction(self):
+        """Duplicate historical entries should skip backfill before mutating state."""
+        mock_entry = MagicMock()
+        mock_entry.id = "entry-dup"
+        mock_entry.feed_id = "feed-dup"
+        mock_entry.guid = "guid-dup"
+        mock_entry.url = "https://example.com/article"
+        mock_entry.content = "<p>Short summary</p>"
+        mock_entry.summary = "<p>Short summary</p>"
+        mock_entry.content_source = "feed_summary_only"
+        mock_entry.content_backfill_status = "pending"
+        mock_entry.content_backfill_attempts = 0
+
+        entry_result = MagicMock()
+        entry_result.scalar_one_or_none.return_value = mock_entry
+
+        conflicts_result = MagicMock()
+        conflicts_result.scalars.return_value.all.return_value = ["entry-dup", "entry-older"]
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[entry_result, conflicts_result])
+
+        extract_mock = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.content_backfill.extract_entry_content_update",
+                new=extract_mock,
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await backfill_entry_content_task({"redis": AsyncMock()}, "entry-dup")
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "duplicate_entry_conflict"
+        assert result["entry_id"] == "entry-dup"
+        extract_mock.assert_not_awaited()
+        mock_session.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_duplicate_guid_integrity_error_returns_skipped(self):
+        """Duplicate guid write failures should degrade to a skipped backfill result."""
+        mock_entry = MagicMock()
+        mock_entry.id = "entry-3"
+        mock_entry.feed_id = "feed-3"
+        mock_entry.guid = "guid-3"
+        mock_entry.url = "https://example.com/article"
+        mock_entry.content = "<p>Short summary</p>"
+        mock_entry.summary = "<p>Short summary</p>"
+        mock_entry.content_source = "feed_summary_only"
+        mock_entry.content_backfill_status = "pending"
+        mock_entry.content_backfill_attempts = 0
+        mock_entry.embedding_status = "done"
+        mock_entry.embedding_error = None
+        mock_entry.embedding_at = object()
+
+        entry_result = MagicMock()
+        entry_result.scalar_one_or_none.return_value = mock_entry
+
+        conflicts_result = MagicMock()
+        conflicts_result.scalars.return_value.all.return_value = ["entry-3"]
+
+        translations_result = MagicMock()
+        translations_result.scalars.return_value.all.return_value = []
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(
+            side_effect=[entry_result, conflicts_result, translations_result]
+        )
+        mock_session.commit = AsyncMock(
+            side_effect=[
+                None,
+                IntegrityError(
+                    "UPDATE entries ...",
+                    {},
+                    Exception('duplicate key value violates unique constraint "uq_feed_guid"'),
+                ),
+            ]
+        )
+
+        with (
+            patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.content_backfill.extract_entry_content_update",
+                new=AsyncMock(
+                    return_value=MagicMock(
+                        content="<article><p>Long full article body</p></article>",
+                        source="backfill_browser",
+                    )
+                ),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await backfill_entry_content_task({"redis": AsyncMock()}, "entry-3")
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "duplicate_entry_conflict"
+        assert result["entry_id"] == "entry-3"

@@ -3,7 +3,8 @@
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
@@ -20,6 +21,26 @@ from .content_extraction import (
 )
 
 logger = get_logger(__name__)
+
+
+def _is_duplicate_feed_guid_error(error: Exception) -> bool:
+    """Return True when an exception text points to the entries(feed_id,guid) unique key."""
+    return "uq_feed_guid" in str(error)
+
+
+async def _load_duplicate_entry_ids(session, entry: Entry) -> list[str]:
+    """Return all entry ids sharing the same feed_id/guid as the target entry."""
+    feed_id = getattr(entry, "feed_id", None)
+    guid = getattr(entry, "guid", None)
+    if not isinstance(feed_id, str) or not feed_id or not isinstance(guid, str) or not guid:
+        return []
+
+    result = await session.execute(
+        select(Entry.id)
+        .where(Entry.feed_id == feed_id, Entry.guid == guid)
+        .order_by(Entry.created_at.asc(), Entry.id.asc())
+    )
+    return list(result.scalars().all())
 
 
 async def _is_vectorization_enabled(session) -> bool:
@@ -118,6 +139,24 @@ async def backfill_entry_content_task(
             await session.commit()
             return {"status": "skipped", "entry_id": entry_id, "reason": "not_needed"}
 
+        duplicate_entry_ids = await _load_duplicate_entry_ids(session, entry)
+        if len(duplicate_entry_ids) > 1:
+            logger.warning(
+                "Entry content backfill skipped due to duplicate feed guid rows",
+                extra={
+                    "entry_id": entry_id,
+                    "feed_id": entry.feed_id,
+                    "guid": entry.guid,
+                    "duplicate_entry_ids": duplicate_entry_ids,
+                },
+            )
+            return {
+                "status": "skipped",
+                "entry_id": entry_id,
+                "reason": "duplicate_entry_conflict",
+                "duplicate_entry_ids": duplicate_entry_ids,
+            }
+
         entry.content_backfill_status = "processing"
         entry.content_backfill_attempts += 1
         entry.content_backfill_error = None
@@ -153,9 +192,10 @@ async def backfill_entry_content_task(
                 entry.embedding_status = "pending"
                 entry.embedding_error = None
                 entry.embedding_at = None
-                translations_result = await session.execute(
-                    select(EntryTranslation).where(EntryTranslation.entry_id == entry_id)
-                )
+                with session.no_autoflush:
+                    translations_result = await session.execute(
+                        select(EntryTranslation).where(EntryTranslation.entry_id == entry_id)
+                    )
                 translations = list(translations_result.scalars().all())
                 for translation in translations:
                     translation.status = "pending"
@@ -174,6 +214,28 @@ async def backfill_entry_content_task(
                 "updated": updated,
                 "source": extraction.source,
             }
+        except IntegrityError as e:
+            await session.rollback()
+            if _is_duplicate_feed_guid_error(e):
+                logger.warning(
+                    "Entry content backfill skipped after duplicate feed guid conflict",
+                    extra={"entry_id": entry_id},
+                )
+                return {
+                    "status": "skipped",
+                    "entry_id": entry_id,
+                    "reason": "duplicate_entry_conflict",
+                    "error": str(e),
+                }
+            logger.exception("Entry content backfill failed", extra={"entry_id": entry_id})
+            result = await session.execute(select(Entry).where(Entry.id == entry_id))
+            entry = result.scalar_one_or_none()
+            if entry:
+                entry.content_backfill_status = "failed"
+                entry.content_backfill_error = str(e)
+                entry.content_backfill_at = datetime.now(UTC)
+                await session.commit()
+            return {"status": "error", "entry_id": entry_id, "error": str(e)}
         except Exception as e:
             logger.exception("Entry content backfill failed", extra={"entry_id": entry_id})
             await session.rollback()
