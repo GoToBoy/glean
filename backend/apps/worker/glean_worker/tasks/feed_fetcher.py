@@ -1004,6 +1004,7 @@ async def fetch_all_feeds(
         queued_count = 0
         deferred_rsshub_count = 0
         for feed in feeds:
+            run: FeedFetchRun | None = None
             try:
                 if rsshub_blocked_until is not None and _feed_uses_rsshub(feed):
                     feed.next_fetch_at = rsshub_blocked_until
@@ -1022,23 +1023,42 @@ async def fetch_all_feeds(
                 session.add(run)
                 session.add(stage_event)
                 await session.flush()
+                run.job_id = run.id
+                # Commit the queued run before enqueueing so worker execution can bind to it.
+                await session.commit()
 
                 job = await ctx["redis"].enqueue_job(
                     "fetch_feed_task",
                     feed.id,
+                    _job_id=run.id,
                     run_id=run.id,
                     trigger_type=trigger_type,
                 )
                 job_id = getattr(job, "job_id", None) if job is not None else None
-                if not job_id:
+                if job_id != run.id:
                     raise RuntimeError("Failed to enqueue scheduled feed refresh job")
 
-                run.job_id = job_id
                 feed.last_fetch_attempt_at = now
                 await session.commit()
                 queued_count += 1
             except Exception:
-                await session.rollback()
+                if run is not None and getattr(run, "id", None):
+                    await finalize_feed_fetch_run(
+                        session,
+                        run,
+                        None,
+                        run_status="error",
+                        summary_json=build_feed_fetch_summary(),
+                        error_message="Failed to enqueue scheduled feed refresh job",
+                        active_stage_status="error",
+                        active_stage_summary="Worker job could not be enqueued.",
+                        completion_summary="Scheduled feed refresh failed before worker execution started.",
+                        completion_metrics_json=build_feed_fetch_summary(),
+                        skipped_stage_summary="Skipped because the worker job was never enqueued.",
+                        fallback_active_stage_name="queue_wait",
+                    )
+                else:
+                    await session.rollback()
                 logger.exception("Failed to queue scheduled feed", extra={"feed_id": feed.id})
 
         if deferred_rsshub_count and queued_count == 0:

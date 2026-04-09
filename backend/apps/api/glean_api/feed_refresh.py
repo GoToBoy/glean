@@ -11,6 +11,7 @@ from glean_database.models import Feed
 from .feed_fetch_progress import (
     create_estimated_queued_feed_fetch_run,
     find_reusable_active_feed_fetch_run,
+    mark_active_run_as_stale,
 )
 
 
@@ -47,22 +48,32 @@ async def enqueue_feed_refresh_job(
     session.add(stage_event)
     await session.flush()
 
-    job_id = ""
+    job_id = run.id
+    run.job_id = job_id
+    # Persist the queued run before enqueueing so the worker can always reload it.
+    await session.commit()
+
     try:
         job = await redis.enqueue_job(
             "fetch_feed_task",
             feed_id,
             backfill_existing_entries=backfill_existing_entries,
+            _job_id=job_id,
             run_id=run.id,
             trigger_type=trigger_type,
         )
-        job_id = getattr(job, "job_id", None) if job is not None else None
-        if not job_id:
+        returned_job_id = getattr(job, "job_id", None) if job is not None else None
+        if returned_job_id != job_id:
             raise RuntimeError("Failed to enqueue feed refresh job")
-
-        run.job_id = job_id
-    except Exception:
-        await session.rollback()
+    except Exception as exc:
+        await mark_active_run_as_stale(
+            session,
+            run,
+            reason="enqueue_failed",
+            summary="Feed refresh job could not be enqueued.",
+            public_diagnostic="Worker job could not be created.",
+            error_message=str(exc),
+        )
         raise
 
     payload: dict[str, str] = {

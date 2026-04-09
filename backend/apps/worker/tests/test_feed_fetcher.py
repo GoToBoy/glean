@@ -170,12 +170,16 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
 
     mock_session = AsyncMock()
     mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
 
     redis = AsyncMock()
-    redis.enqueue_job.side_effect = [
-        MagicMock(job_id="job-1"),
-        MagicMock(job_id="job-2"),
-    ]
+    observed_commit_counts: list[int] = []
+
+    async def enqueue_job_side_effect(*args, **kwargs):
+        observed_commit_counts.append(mock_session.commit.await_count)
+        return MagicMock(job_id=kwargs["_job_id"])
+
+    redis.enqueue_job.side_effect = enqueue_job_side_effect
 
     run_one = FeedFetchRun(id="run-1", feed_id="feed-1", trigger_type="scheduled", status="queued")
     run_two = FeedFetchRun(id="run-2", feed_id="feed-2", trigger_type="scheduled", status="queued")
@@ -214,6 +218,59 @@ async def test_fetch_all_feeds_creates_scheduled_runs_with_queue_depth():
     assert mock_create_run.await_args_list[1].kwargs["queue_depth_ahead"] == 1
     assert redis.enqueue_job.await_args_list[0].kwargs["run_id"] == "run-1"
     assert redis.enqueue_job.await_args_list[1].kwargs["run_id"] == "run-2"
+    assert redis.enqueue_job.await_args_list[0].kwargs["_job_id"] == "run-1"
+    assert redis.enqueue_job.await_args_list[1].kwargs["_job_id"] == "run-2"
+    assert run_one.job_id == "run-1"
+    assert run_two.job_id == "run-2"
+    assert observed_commit_counts == [1, 3]
+
+
+@pytest.mark.asyncio
+async def test_fetch_all_feeds_finalizes_run_when_enqueue_fails():
+    due_feed = MagicMock()
+    due_feed.id = "feed-1"
+    due_feed.url = "https://example.com/feed-1.xml"
+
+    mock_result = MagicMock()
+    mock_result.scalars.return_value.all.return_value = [due_feed]
+
+    mock_session = AsyncMock()
+    mock_session.execute.return_value = mock_result
+    mock_session.commit = AsyncMock()
+    mock_session.rollback = AsyncMock()
+
+    redis = AsyncMock()
+    redis.enqueue_job.side_effect = RuntimeError("redis down")
+
+    run = FeedFetchRun(id="run-1", feed_id="feed-1", trigger_type="scheduled", status="queued")
+    stage = FeedFetchStageEvent(
+        run=run,
+        stage_order=0,
+        stage_name="queue_wait",
+        status="running",
+        started_at=datetime.now(UTC),
+    )
+
+    with (
+        patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+        patch(
+            "glean_worker.tasks.feed_fetcher.create_estimated_queued_feed_fetch_run",
+            new=AsyncMock(return_value=(run, stage)),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.find_reusable_active_feed_fetch_run",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "glean_worker.tasks.feed_fetcher.finalize_feed_fetch_run",
+            new=AsyncMock(),
+        ) as finalize_run,
+    ):
+        mock_ctx.return_value.__aenter__.return_value = mock_session
+        result = await fetch_all_feeds({"redis": redis})
+
+    assert result == {"feeds_queued": 0}
+    finalize_run.assert_awaited_once()
 
 @pytest.mark.asyncio
 async def test_missing_run_id_reuses_active_queued_run():
