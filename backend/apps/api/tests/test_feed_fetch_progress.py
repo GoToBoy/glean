@@ -3,6 +3,8 @@
 from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from sqlalchemy.exc import IntegrityError
+
 from glean_api.feed_fetch_progress import mark_active_run_as_stale
 from glean_database.models.feed_fetch_run import FeedFetchRun
 from glean_database.models.feed_fetch_stage_event import FeedFetchStageEvent
@@ -115,7 +117,7 @@ async def test_mark_active_run_as_stale_uses_refreshed_stage_events_for_completi
             public_diagnostic="Worker job is no longer available.",
         )
 
-    reload_run.assert_awaited_once_with(session, "run-1", include_stages=True)
+    reload_run.assert_awaited_once_with(session, "run-1", include_stages=True, for_update=True)
     assert refreshed_run.status == "error"
     assert refreshed_run.current_stage == "complete"
     assert [(stage.stage_order, stage.stage_name) for stage in refreshed_run.stage_events] == [
@@ -189,3 +191,64 @@ async def test_mark_active_run_as_stale_does_not_lazy_load_stage_events_relation
         and event.run_id == "run-1"
         for event in staged_events
     )
+
+
+async def test_mark_active_run_as_stale_tolerates_concurrent_completion_stage_insert() -> None:
+    now = datetime.now(UTC)
+    stale_run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        job_id="job-1",
+        trigger_type="manual_user",
+        status="queued",
+        current_stage="queue_wait",
+        queue_entered_at=now - timedelta(minutes=2),
+    )
+    active_stage = FeedFetchStageEvent(
+        id="stage-1",
+        run_id="run-1",
+        stage_order=0,
+        stage_name="queue_wait",
+        status="running",
+        started_at=now - timedelta(minutes=2),
+    )
+    reconciled_run = FeedFetchRun(
+        id="run-1",
+        feed_id="feed-1",
+        job_id="job-1",
+        trigger_type="manual_user",
+        status="error",
+        current_stage="complete",
+        queue_entered_at=now - timedelta(minutes=2),
+        finished_at=now,
+    )
+
+    session = AsyncMock()
+    session.add = MagicMock()
+    session.commit = AsyncMock(
+        side_effect=IntegrityError(
+            "insert into feed_fetch_stage_events",
+            {},
+            Exception("duplicate key value violates unique constraint"),
+        )
+    )
+
+    with (
+        patch(
+            "glean_api.feed_fetch_progress.reload_feed_fetch_run",
+            new=AsyncMock(side_effect=[stale_run, reconciled_run]),
+        ),
+        patch(
+            "glean_api.feed_fetch_progress._load_stage_events_for_run",
+            new=AsyncMock(return_value=[active_stage]),
+        ),
+    ):
+        await mark_active_run_as_stale(
+            session,
+            stale_run,
+            reason="job_not_found",
+            summary="Persisted run was reconciled after arq reported not_found.",
+            public_diagnostic="Worker job is no longer available.",
+        )
+
+    session.rollback.assert_awaited_once()

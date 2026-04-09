@@ -12,6 +12,7 @@ from glean_worker.main import get_oss_cron_jobs
 from glean_worker.tasks.feed_fetcher import (
     _midnight_guard_minutes,
     _should_queue_midnight_supplemental_feed,
+    _should_run_midnight_supplement,
     fetch_all_feeds,
     scheduled_fetch,
 )
@@ -47,11 +48,10 @@ async def test_fetch_all_feeds_skips_feed_with_active_run():
     )
     mock_session.add = MagicMock()
 
-    redis = AsyncMock()
-    redis.enqueue_job.return_value = MagicMock(job_id="job-2")
-
     run_two = FeedFetchRun(id="run-2", feed_id="feed-2", trigger_type="scheduled", status="queued")
     stage_two = MagicMock()
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id=run_two.id)
 
     with (
         patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
@@ -86,11 +86,10 @@ async def test_fetch_all_feeds_requeues_feed_when_active_run_is_stale():
     mock_session.execute = AsyncMock(return_value=due_feeds_result)
     mock_session.add = MagicMock()
 
-    redis = AsyncMock()
-    redis.enqueue_job.return_value = MagicMock(job_id="job-new")
-
     run = FeedFetchRun(id="run-new", feed_id="feed-1", trigger_type="scheduled", status="queued")
     stage_event = MagicMock()
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id=run.id)
 
     with (
         patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
@@ -130,12 +129,11 @@ async def test_fetch_all_feeds_defers_only_rsshub_feeds_while_circuit_is_open():
     mock_session.execute.return_value = due_feeds_result
     mock_session.add = MagicMock()
 
-    redis = AsyncMock()
-    redis.enqueue_job.return_value = MagicMock(job_id="job-direct")
-
     run = FeedFetchRun(id="run-direct", feed_id="feed-direct", trigger_type="scheduled", status="queued")
     stage_event = MagicMock()
     blocked_until = datetime.now(UTC) + timedelta(minutes=10)
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id=run.id)
 
     with (
         patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
@@ -223,6 +221,13 @@ def test_midnight_supplement_includes_feed_missing_success_since_day_start():
     assert should_queue is True
 
 
+def test_midnight_supplement_uses_configured_worker_timezone(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr("glean_worker.tasks.feed_fetcher.settings.worker_timezone", "Asia/Shanghai")
+
+    assert _should_run_midnight_supplement(datetime(2026, 4, 9, 16, 0, tzinfo=UTC)) is True
+    assert _should_run_midnight_supplement(datetime(2026, 4, 9, 15, 0, tzinfo=UTC)) is False
+
+
 @pytest.mark.asyncio
 async def test_fetch_all_feeds_midnight_supplement_queues_feed_without_success_today():
     midnight_feed = MagicMock()
@@ -239,9 +244,6 @@ async def test_fetch_all_feeds_midnight_supplement_queues_feed_without_success_t
     mock_session.execute.return_value = active_result
     mock_session.add = MagicMock()
 
-    redis = AsyncMock()
-    redis.enqueue_job.return_value = MagicMock(job_id="job-midnight")
-
     run = FeedFetchRun(
         id="run-midnight",
         feed_id="feed-midnight",
@@ -249,6 +251,8 @@ async def test_fetch_all_feeds_midnight_supplement_queues_feed_without_success_t
         status="queued",
     )
     stage_event = MagicMock()
+    redis = AsyncMock()
+    redis.enqueue_job.return_value = MagicMock(job_id=run.id)
 
     with (
         patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,

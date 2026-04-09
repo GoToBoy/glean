@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     worker_job_timeout_seconds: int = 1800
     worker_max_jobs: int = 4
     feed_refresh_interval_minutes: int = 720
+    worker_timezone: str = "UTC"
 
 
 @lru_cache

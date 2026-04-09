@@ -7,6 +7,7 @@ cron jobs, and Redis connection settings.
 
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
+from zoneinfo import ZoneInfo
 
 from arq import cron
 from arq.connections import RedisSettings
@@ -72,6 +73,7 @@ async def startup(ctx: dict[str, Any]) -> None:
     logger.info(f"Worker job timeout: {settings.worker_job_timeout_seconds}s")
     logger.info(f"Worker max jobs: {settings.worker_max_jobs}")
     logger.info(f"Feed refresh interval: {settings.feed_refresh_interval_minutes}m")
+    logger.info(f"Worker timezone: {settings.worker_timezone}")
 
     # Store Redis client for distributed locks (arq provides it via ctx['redis'])
     logger.info("Redis client available for distributed locks")
@@ -173,3 +175,4 @@ class WorkerSettings:
     job_timeout = settings.worker_job_timeout_seconds
     keep_result = 3600
     log_results = False
+    timezone = ZoneInfo(settings.worker_timezone)

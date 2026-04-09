@@ -167,12 +167,15 @@ image: ghcr.io/gotoboy/glean-backend:0.1.0-alpha.1
 ```yaml
 environment:
   FEED_REFRESH_INTERVAL_MINUTES: 720
+  WORKER_TIMEZONE: Asia/Shanghai
 ```
 
 默认值是 `720`，也就是 12 小时。这个值同时影响：
 
 - worker 定时抓取 cron
 - 抓取成功后 `next_fetch_at` 的默认推进间隔
+
+`WORKER_TIMEZONE` 会决定 worker cron 和“午夜补跑”按哪个时区计算。部署在国内 NAS 上时，建议显式设置为 `Asia/Shanghai`，不要依赖容器默认时区。
 
 ---
 

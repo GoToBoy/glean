@@ -58,6 +58,7 @@ from ..dependencies import (
 from ..feed_fetch_progress import (
     load_active_feed_fetch_runs,
     load_latest_feed_fetch_runs,
+    reconcile_active_feed_fetch_runs,
     serialize_feed_fetch_run,
 )
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
@@ -921,9 +922,11 @@ async def get_latest_feed_fetch_runs_admin(
 async def get_active_feed_fetch_runs_admin(
     current_admin: Annotated[AdminUserResponse, Depends(get_current_admin)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return all queued/running fetch runs for admin diagnostics."""
     del current_admin
+    await reconcile_active_feed_fetch_runs(session, redis)
     active_runs = await load_active_feed_fetch_runs(session)
 
     items: list[dict[str, object | None]] = []

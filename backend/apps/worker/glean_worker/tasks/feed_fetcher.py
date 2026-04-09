@@ -10,6 +10,7 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 import httpx
 from arq import Retry
@@ -63,14 +64,14 @@ def _midnight_guard_minutes(interval_minutes: int) -> int:
 
 def _local_day_start_utc(now_utc: datetime) -> datetime:
     """Convert the current local midnight back to UTC for day-bounded comparisons."""
-    local_now = now_utc.astimezone()
+    local_now = now_utc.astimezone(ZoneInfo(settings.worker_timezone))
     local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     return local_midnight.astimezone(UTC)
 
 
 def _should_run_midnight_supplement(now_utc: datetime) -> bool:
     """Return True when the current scheduled tick is the local midnight batch."""
-    local_now = now_utc.astimezone()
+    local_now = now_utc.astimezone(ZoneInfo(settings.worker_timezone))
     return local_now.hour == 0 and local_now.minute == 0
 
 
@@ -130,7 +131,7 @@ async def _load_scheduled_feeds(
 
 def _is_rsshub_url(url: str | None) -> bool:
     """Return True when the URL points at an RSSHub host."""
-    if not url:
+    if not isinstance(url, str) or not url:
         return False
     return "rsshub" in urlparse(url).netloc.lower()
 

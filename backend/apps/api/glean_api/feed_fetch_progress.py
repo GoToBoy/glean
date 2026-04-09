@@ -11,6 +11,7 @@ from urllib.parse import urlparse
 from arq.connections import ArqRedis
 from arq.jobs import Job
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -158,52 +159,7 @@ async def find_reusable_active_feed_fetch_run(
     active_run = await find_active_feed_fetch_run(session, feed_id)
     if active_run is None:
         return None
-
-    if not active_run.job_id:
-        await mark_active_run_as_stale(
-            session,
-            active_run,
-            reason="missing_job_id",
-            summary="Persisted run was missing a worker job id.",
-        )
-        return None
-
-    try:
-        status_info = await Job(active_run.job_id, redis).status()
-        status_value = status_info.value
-    except Exception:
-        # Avoid creating duplicate worker jobs when Redis status cannot be checked.
-        return active_run
-
-    if status_value in ACTIVE_ARQ_JOB_STATUSES:
-        return active_run
-
-    if status_value == "not_found":
-        await mark_active_run_as_stale(
-            session,
-            active_run,
-            reason="job_not_found",
-            summary="Persisted run was reconciled after arq reported not_found.",
-            public_diagnostic="Worker job is no longer available.",
-        )
-        return None
-
-    if status_value == "complete":
-        last_update_at = active_run.updated_at or active_run.started_at or active_run.created_at
-        if datetime.now(UTC) - last_update_at < COMPLETED_JOB_GRACE_PERIOD:
-            return active_run
-
-        result_payload = await _load_completed_job_result(Job(active_run.job_id, redis))
-        await reconcile_completed_active_run(
-            session,
-            active_run,
-            result_status=result_payload.get("status"),
-            result_message=result_payload.get("message"),
-            summary_json=result_payload.get("summary_json"),
-        )
-        return None
-
-    return active_run
+    return await _reconcile_active_run_with_job_status(session, redis, active_run)
 
 
 async def mark_active_run_as_stale(
@@ -216,14 +172,19 @@ async def mark_active_run_as_stale(
     error_message: str | None = None,
 ) -> None:
     """Close an orphaned queued/running run so it no longer blocks fresh work."""
-    refreshed_run = await reload_feed_fetch_run(session, run.id, include_stages=True)
+    refreshed_run = await reload_feed_fetch_run(
+        session,
+        run.id,
+        include_stages=True,
+        for_update=True,
+    )
     if refreshed_run is not None:
         run = refreshed_run
 
     if run.status not in ACTIVE_RUN_STATUSES:
         return
 
-    stage_events = await _load_stage_events_for_run(session, run)
+    stage_events = await _load_stage_events_for_run(session, run, for_update=True)
     now = datetime.now(UTC)
 
     active_stage = next(
@@ -277,7 +238,7 @@ async def mark_active_run_as_stale(
     run.summary_json = run.summary_json or {}
     run.error_message = error_message or run.error_message or reason
     session.add(run)
-    await session.commit()
+    await _commit_reconciled_active_run(session, run.id)
 
 
 async def reconcile_completed_active_run(
@@ -289,14 +250,19 @@ async def reconcile_completed_active_run(
     summary_json: dict[str, Any] | None,
 ) -> None:
     """Finalize an active persisted run using an arq job that already completed."""
-    refreshed_run = await reload_feed_fetch_run(session, run.id, include_stages=True)
+    refreshed_run = await reload_feed_fetch_run(
+        session,
+        run.id,
+        include_stages=True,
+        for_update=True,
+    )
     if refreshed_run is not None:
         run = refreshed_run
 
     if run.status not in ACTIVE_RUN_STATUSES:
         return
 
-    stage_events = await _load_stage_events_for_run(session, run)
+    stage_events = await _load_stage_events_for_run(session, run, for_update=True)
     now = datetime.now(UTC)
     normalized_status = _normalize_job_result_status(result_status)
     summary = _build_completed_job_summary(normalized_status, result_message)
@@ -354,7 +320,7 @@ async def reconcile_completed_active_run(
         run.summary_json = run.summary_json or {}
     run.error_message = result_message if normalized_status == "error" else None
     session.add(run)
-    await session.commit()
+    await _commit_reconciled_active_run(session, run.id)
 
 
 async def _load_completed_job_result(job: Job) -> dict[str, Any]:
@@ -612,6 +578,7 @@ async def reload_feed_fetch_run(
     run_id: str,
     *,
     include_stages: bool = False,
+    for_update: bool = False,
 ) -> FeedFetchRun | None:
     """Reload one persisted run to avoid serializing expired ORM state."""
     stmt = (
@@ -619,6 +586,8 @@ async def reload_feed_fetch_run(
         .where(FeedFetchRun.id == run_id)
         .execution_options(populate_existing=True)
     )
+    if for_update:
+        stmt = stmt.with_for_update()
     if include_stages:
         stmt = stmt.options(selectinload(FeedFetchRun.stage_events))
     result = await session.execute(stmt)
@@ -635,13 +604,81 @@ def _next_stage_order(stage_events: Sequence[FeedFetchStageEvent]) -> int:
 async def _load_stage_events_for_run(
     session: AsyncSession,
     run: FeedFetchRun,
+    *,
+    for_update: bool = False,
 ) -> list[FeedFetchStageEvent]:
-    result = await session.execute(
+    stmt = (
         select(FeedFetchStageEvent)
         .where(FeedFetchStageEvent.run_id == run.id)
         .order_by(FeedFetchStageEvent.stage_order.asc())
     )
+    if for_update:
+        stmt = stmt.with_for_update()
+    result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def _commit_reconciled_active_run(session: AsyncSession, run_id: str) -> None:
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        refreshed_run = await reload_feed_fetch_run(session, run_id, include_stages=False)
+        if refreshed_run is None or refreshed_run.status not in ACTIVE_RUN_STATUSES:
+            return
+        raise
+
+
+async def _reconcile_active_run_with_job_status(
+    session: AsyncSession,
+    redis: ArqRedis,
+    active_run: FeedFetchRun,
+) -> FeedFetchRun | None:
+    if not active_run.job_id:
+        await mark_active_run_as_stale(
+            session,
+            active_run,
+            reason="missing_job_id",
+            summary="Persisted run was missing a worker job id.",
+        )
+        return None
+
+    try:
+        status_info = await Job(active_run.job_id, redis).status()
+        status_value = status_info.value
+    except Exception:
+        # Avoid clearing active runs when Redis status cannot be checked.
+        return active_run
+
+    if status_value in ACTIVE_ARQ_JOB_STATUSES:
+        return active_run
+
+    if status_value == "not_found":
+        await mark_active_run_as_stale(
+            session,
+            active_run,
+            reason="job_not_found",
+            summary="Persisted run was reconciled after arq reported not_found.",
+            public_diagnostic="Worker job is no longer available.",
+        )
+        return None
+
+    if status_value == "complete":
+        last_update_at = active_run.updated_at or active_run.started_at or active_run.created_at
+        if datetime.now(UTC) - last_update_at < COMPLETED_JOB_GRACE_PERIOD:
+            return active_run
+
+        result_payload = await _load_completed_job_result(Job(active_run.job_id, redis))
+        await reconcile_completed_active_run(
+            session,
+            active_run,
+            result_status=result_payload.get("status"),
+            result_message=result_payload.get("message"),
+            summary_json=result_payload.get("summary_json"),
+        )
+        return None
+
+    return active_run
 
 
 async def load_active_feed_fetch_runs(
@@ -667,6 +704,18 @@ async def load_active_feed_fetch_runs(
         stmt = stmt.where(FeedFetchRun.feed_id.in_(feed_ids))
     result = await session.execute(stmt)
     return [(cast(FeedFetchRun, run), cast(Feed, feed)) for run, feed in result.all()]
+
+
+async def reconcile_active_feed_fetch_runs(
+    session: AsyncSession,
+    redis: ArqRedis,
+    *,
+    feed_ids: Sequence[str] | None = None,
+) -> None:
+    """Reconcile stale queued/running runs against Redis before serializing queue state."""
+    active_runs = await load_active_feed_fetch_runs(session, feed_ids=feed_ids)
+    for run, _feed in active_runs:
+        await _reconcile_active_run_with_job_status(session, redis, run)
 
 
 def _weighted_average_run_duration(runs: Sequence[FeedFetchRun]) -> timedelta:

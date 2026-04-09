@@ -43,6 +43,7 @@ from ..dependencies import (
 from ..feed_fetch_progress import (
     load_active_feed_fetch_runs,
     load_latest_feed_fetch_runs,
+    reconcile_active_feed_fetch_runs,
     serialize_feed_fetch_run,
 )
 from ..feed_refresh import build_refresh_status_items, enqueue_feed_refresh_job
@@ -665,12 +666,14 @@ async def get_latest_feed_fetch_runs(
 async def get_active_feed_fetch_runs(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    redis: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> dict[str, list[dict[str, object | None]]]:
     """Return queued/running fetch runs visible to the current user."""
     ownership_result = await session.execute(
         select(Subscription.feed_id).where(Subscription.user_id == current_user.id)
     )
     feed_ids = ownership_result.scalars().all()
+    await reconcile_active_feed_fetch_runs(session, redis, feed_ids=list(feed_ids))
     active_runs = await load_active_feed_fetch_runs(session, feed_ids=list(feed_ids))
 
     items: list[dict[str, object | None]] = []
