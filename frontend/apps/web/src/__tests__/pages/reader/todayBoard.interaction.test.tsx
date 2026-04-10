@@ -62,7 +62,7 @@ function TodayBoardHarness({ entries }: { entries: EntryWithState[] }) {
 }
 
 describe('TodayBoard interaction', () => {
-  it('opens detail on card click and closes detail when blank board space is clicked', () => {
+  it('opens detail on card click, keeps the board layout growing, and closes detail when blank board space is clicked', () => {
     const entries = [
       makeEntry({ id: 'entry-1', title: 'First entry' }),
       makeEntry({ id: 'entry-2', title: 'Second entry' }),
@@ -70,6 +70,7 @@ describe('TodayBoard interaction', () => {
 
     TodayBoardHarness({ entries })
 
+    expect(screen.getByTestId('today-board-layout').className).toContain('flex-1')
     expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
 
     fireEvent.click(screen.getByRole('button', { name: /first entry/i }))

@@ -40,7 +40,10 @@ export function TodayBoard({
     : 'grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3'
 
   return (
-    <div className="flex h-full min-w-0 bg-[linear-gradient(180deg,rgba(250,248,242,0.9),rgba(255,255,255,0.96))]">
+    <div
+      className="flex h-full min-w-0 flex-1 bg-[linear-gradient(180deg,rgba(250,248,242,0.9),rgba(255,255,255,0.96))]"
+      data-testid="today-board-layout"
+    >
       <div
         className={cn(
           'min-w-0 overflow-y-auto transition-[width,max-width] duration-200',

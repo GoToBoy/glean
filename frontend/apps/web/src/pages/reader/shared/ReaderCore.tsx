@@ -818,7 +818,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
 
     return (
-      <div className="flex h-full min-w-0">
+      <div className="flex h-full w-full min-w-0">
         {isLoading ? (
           <div className="w-full space-y-3 p-3">
             {Array.from({ length: 5 }).map((_, index) => (

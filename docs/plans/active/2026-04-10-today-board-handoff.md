@@ -17,10 +17,13 @@
   - full-width multi-column overview when detail is closed
   - single-column list compression at the standard feed-list width when detail is open
   - detail pane expansion across the remaining right-side content area
+  - root flex growth so the board/detail layout fills the reader route instead of sizing to content
   - weakened styling for read entries
   - card title/summary translation support using the reader list translation flow
   - collapsible right-side detail panel
   - blank-area click to close detail
+- Updated the `today-board` reader branch wrapper to fill the available route width before handing space to the board/detail layout.
+- Made the layout content chain explicit with `min-w-0` on the main flex item and `w-full` on the page transition wrapper.
 - Added i18n strings for the new sidebar entry and the collection-time header/empty state copy.
 - Added focused tests for helper behavior and blank-space close interaction.
 - Added a regression test proving mobile `today-board` no longer falls back to the normal entry list.
@@ -52,6 +55,8 @@
 
 - `pnpm --filter @glean/web test -- src/__tests__/pages/reader/todayBoard.test.ts src/__tests__/pages/reader/todayBoard.interaction.test.tsx src/__tests__/pages/reader/virtualization.test.ts`
   - passed
+- `pnpm --dir frontend/apps/web test src/__tests__/pages/reader/ReaderCore.todayBoard.test.tsx`
+  - passed
 - `pnpm --filter @glean/web typecheck`
   - passed
 - `git diff --check`
@@ -67,5 +72,6 @@
 ## Reviewer Focus
 
 - Confirm the blank-area click closes detail in the actual board surface, not just the focused test harness.
+- Confirm the open detail pane consumes the right-side space in the reader route.
 - Confirm leaving `today-board` via feed/folder navigation correctly exits the board view.
 - Confirm the board remains performant when the all-feeds query contains many non-today entries.

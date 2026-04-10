@@ -868,8 +868,8 @@ export function Layout() {
       </aside>
 
       {/* Main content */}
-      <main className="bg-background min-h-0 flex-1 overflow-auto">
-        <div key={location.pathname} className="page-transition h-full">
+      <main className="bg-background min-h-0 min-w-0 flex-1 overflow-auto">
+        <div key={location.pathname} className="page-transition h-full w-full">
           <Outlet />
         </div>
       </main>

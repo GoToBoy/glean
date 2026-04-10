@@ -14,6 +14,7 @@ Add a `今日收录` reader mode that aggregates entries collected during the cu
   - today's collection-time filtering
   - right-side detail panel that closes on blank-space clicks
   - multi-column board when detail is closed, single-column board when detail is open
+  - flex layout that fills the page-transition and reader route width when the detail panel is open
 - Keep mobile behavior simple and reuse existing reading flow.
 - Add focused tests for date selection, sorting, and detail-panel interaction.
 - Exclude Smart scoring changes, per-feed today views, and a mobile split-pane implementation.
@@ -25,6 +26,7 @@ Add a `今日收录` reader mode that aggregates entries collected during the cu
 - The board shows feed title, feed summary, article summary, time, and feed icon when available.
 - Unread entries render before read entries, and read entries use weakened read-state styling.
 - Clicking a card opens the detail panel without removing the board.
+- The open detail panel expands across the remaining route width without leaving unused space to the right.
 - Clicking blank space in the board closes the detail panel without resetting the board.
 - Existing Smart view and timeline reader behavior remain intact.
 - Focused tests covering the new behavior pass.
@@ -40,4 +42,5 @@ Add a `今日收录` reader mode that aggregates entries collected during the cu
 - Check that today's membership uses collection-time precedence instead of publication precedence.
 - Check that read/unread grouping is stable and visually reflected.
 - Check that detail open/close behavior works from card clicks and board blank-space clicks.
+- Check that the `today-board` flex item grows to fill the reader route so the detail pane can consume the remaining width.
 - Check that Smart and timeline flows were not regressed by new reader view branching.

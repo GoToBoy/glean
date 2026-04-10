@@ -3,11 +3,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
 
-const { todayBoardSpy, useInfiniteEntriesSpy } = vi.hoisted(() => ({
+const { todayBoardSpy, useInfiniteEntriesSpy, readerControllerState } = vi.hoisted(() => ({
   todayBoardSpy: vi.fn((props: { entries: Array<{ id: string }> }) => (
     <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
   )),
   useInfiniteEntriesSpy: vi.fn(),
+  readerControllerState: {
+    entryIdFromUrl: null as string | null,
+    selectedEntryId: null as string | null,
+  },
 }))
 
 function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
@@ -103,7 +107,9 @@ vi.mock('@/hooks/useVectorizationStatus', () => ({
 }))
 
 vi.mock('@/components/ArticleReader', () => ({
-  ArticleReader: ({ entry }: { entry: EntryWithState }) => <div>{entry.title}</div>,
+  ArticleReader: ({ entry }: { entry: EntryWithState }) => (
+    <div data-testid="article-reader">{entry.id}</div>
+  ),
   ArticleReaderSkeleton: () => <div>loading</div>,
 }))
 
@@ -130,13 +136,13 @@ vi.mock('@/pages/reader/shared/useReaderController', () => ({
   useReaderController: () => ({
     selectedFeedId: undefined,
     selectedFolderId: undefined,
-    entryIdFromUrl: null,
+    entryIdFromUrl: readerControllerState.entryIdFromUrl,
     viewParam: 'today-board',
     isSmartView: false,
     isTodayBoardView: true,
     filterType: 'all',
     setFilterType: vi.fn(),
-    selectedEntryId: null,
+    selectedEntryId: readerControllerState.selectedEntryId,
     selectEntry: vi.fn(),
     clearSelectedEntry: vi.fn(),
   }),
@@ -160,6 +166,8 @@ describe('ReaderCore today-board route', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+    readerControllerState.entryIdFromUrl = null
+    readerControllerState.selectedEntryId = null
   })
 
   it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
@@ -183,6 +191,32 @@ describe('ReaderCore today-board route', () => {
         view: 'today-board',
         per_page: 500,
       })
+    )
+  })
+
+  it('keeps desktop selected entries inside the today-board layout so the detail pane can grow', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    const { container } = render(<ReaderCore isMobile={false} />)
+
+    expect(container.firstElementChild).toHaveClass('w-full')
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedEntryId: 'today-entry',
+        renderDetail: expect.any(Function),
+      }),
+      expect.anything()
     )
   })
 })
