@@ -4,7 +4,7 @@
 
 - Added a new `今日收录` reader entry in the feed sidebar below `智能列表`.
 - Added a dedicated `view=today-board` reader mode with a desktop-first board layout instead of the standard narrow list pane.
-- Updated `today-board` fetches to use explicit collection-time bounds against `/entries` rather than relying on the default timeline page.
+- Updated `today-board` fetches to use the dedicated `/entries/today` endpoint with explicit collection-time bounds rather than relying on the default timeline page.
 - Implemented explicit today-board data shaping in a helper that:
   - prefers `ingested_at`
   - falls back to `created_at`
@@ -15,8 +15,10 @@
 - Added a `TodayBoard` component with:
   - dense card-list presentation
   - full-width multi-column overview when detail is closed
-  - single-column list compression when detail is open
+  - single-column list compression at the standard feed-list width when detail is open
+  - detail pane expansion across the remaining right-side content area
   - weakened styling for read entries
+  - card title/summary translation support using the reader list translation flow
   - collapsible right-side detail panel
   - blank-area click to close detail
 - Added i18n strings for the new sidebar entry and the collection-time header/empty state copy.

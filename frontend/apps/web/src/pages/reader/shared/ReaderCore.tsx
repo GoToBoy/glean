@@ -154,7 +154,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   const getFilterParams = () => {
     if (isTodayBoardView) {
-      return todayCollectionRange ?? {}
+      return { ...(todayCollectionRange ?? {}), per_page: 500 }
     }
 
     switch (filterType) {
@@ -599,6 +599,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     visibleEntries.length,
   ])
 
+  useEffect(() => {
+    if (!isTodayBoardView || !isListTranslationActive || todayBoardEntries.length === 0) return
+
+    void translateListEntries(todayBoardEntries.map((entry) => entry.id))
+  }, [isTodayBoardView, isListTranslationActive, todayBoardEntries, translateListEntries])
+
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
     const prev = prevViewRef.current
@@ -833,6 +839,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             selectedEntryId={isMobile ? null : selectedEntryId}
             onSelectEntry={handleSelectEntry}
             onCloseDetail={() => clearSelectedEntry(true)}
+            listWidthPx={entriesWidth}
+            isTranslationActive={isListTranslationActive}
+            isTranslationLoading={isListTranslationLoading}
+            translationLoadingPhase={listTranslationLoadingPhase}
+            translatedTexts={translatedEntryTexts}
+            onToggleTranslation={() => setIsListTranslationActive((value) => !value)}
             renderDetail={
               isMobile
                 ? undefined

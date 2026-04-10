@@ -1,12 +1,13 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
 
-const { todayBoardSpy } = vi.hoisted(() => ({
+const { todayBoardSpy, useInfiniteEntriesSpy } = vi.hoisted(() => ({
   todayBoardSpy: vi.fn((props: { entries: Array<{ id: string }> }) => (
     <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
   )),
+  useInfiniteEntriesSpy: vi.fn(),
 }))
 
 function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
@@ -49,33 +50,36 @@ vi.mock('@tanstack/react-query', () => ({
 }))
 
 vi.mock('@/hooks/useEntries', () => ({
-  useInfiniteEntries: () => ({
-    data: {
-      pages: [
-        {
-          items: [
-            makeEntry({
-              id: 'today-entry',
-              published_at: '2026-04-09T12:30:00+08:00',
-              ingested_at: '2026-04-10T01:00:00+08:00',
-              created_at: '2026-04-10T01:00:00+08:00',
-            }),
-            makeEntry({
-              id: 'older-entry',
-              published_at: '2026-04-08T12:30:00+08:00',
-              ingested_at: '2026-04-08T12:30:00+08:00',
-              created_at: '2026-04-08T12:30:00+08:00',
-            }),
-          ],
-        },
-      ],
-    },
-    isLoading: false,
-    error: null,
-    fetchNextPage: vi.fn(),
-    hasNextPage: false,
-    isFetchingNextPage: false,
-  }),
+  useInfiniteEntries: (filters: unknown) => {
+    useInfiniteEntriesSpy(filters)
+    return {
+      data: {
+        pages: [
+          {
+            items: [
+              makeEntry({
+                id: 'today-entry',
+                published_at: '2026-04-09T12:30:00+08:00',
+                ingested_at: '2026-04-10T01:00:00+08:00',
+                created_at: '2026-04-10T01:00:00+08:00',
+              }),
+              makeEntry({
+                id: 'older-entry',
+                published_at: '2026-04-08T12:30:00+08:00',
+                ingested_at: '2026-04-08T12:30:00+08:00',
+                created_at: '2026-04-08T12:30:00+08:00',
+              }),
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      error: null,
+      fetchNextPage: vi.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+    }
+  },
   useEntry: () => ({ data: null, isLoading: false }),
   useUpdateEntryState: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
   entryKeys: {
@@ -153,7 +157,15 @@ vi.mock('@/pages/reader/shared/components/TodayBoard', () => ({
 }))
 
 describe('ReaderCore today-board route', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.clearAllMocks()
+  })
+
   it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+
     Object.defineProperty(window, 'ResizeObserver', {
       writable: true,
       value: class {
@@ -166,5 +178,11 @@ describe('ReaderCore today-board route', () => {
 
     expect(screen.getByTestId('today-board-probe')).toHaveTextContent('today-entry')
     expect(screen.getByTestId('today-board-probe')).not.toHaveTextContent('older-entry')
+    expect(useInfiniteEntriesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        view: 'today-board',
+        per_page: 500,
+      })
+    )
   })
 })

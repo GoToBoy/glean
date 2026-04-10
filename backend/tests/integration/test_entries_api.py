@@ -127,7 +127,7 @@ class TestListEntries:
         assert len(data["items"]) >= 2
 
     @pytest.mark.asyncio
-    async def test_list_entries_today_board_filters_by_collection_time(
+    async def test_list_today_entries_filters_by_collection_time(
         self,
         client: AsyncClient,
         auth_headers,
@@ -135,7 +135,7 @@ class TestListEntries:
         test_feed,
         test_subscription,
     ):
-        """Today-board view should filter and sort by collection time, not publication time."""
+        """Today endpoint should return the full collection-time aggregate."""
         from glean_database.models.entry import Entry
 
         entries = [
@@ -171,12 +171,12 @@ class TestListEntries:
         await db_session.commit()
 
         response = await client.get(
-            "/api/entries",
+            "/api/entries/today",
             headers=auth_headers,
             params={
-                "view": "today-board",
                 "collected_after": "2026-04-10T00:00:00Z",
                 "collected_before": "2026-04-11T00:00:00Z",
+                "limit": 500,
             },
         )
 
@@ -187,6 +187,8 @@ class TestListEntries:
             "Collected Today Latest",
             "Collected Today, Published Yesterday",
         ]
+        assert data["page"] == 1
+        assert data["per_page"] == 500
         assert all(item["ingested_at"].startswith("2026-04-10T") for item in data["items"])
 
     @pytest.mark.asyncio

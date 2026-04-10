@@ -5,6 +5,7 @@ import { createQueryWrapper } from '../helpers/queryWrapper'
 vi.mock('@glean/api-client', () => ({
   entryService: {
     getEntries: vi.fn(),
+    getTodayEntries: vi.fn(),
     getEntry: vi.fn(),
     updateEntryState: vi.fn(),
     markAllRead: vi.fn(),
@@ -44,6 +45,35 @@ describe('getInfiniteEntriesQueryOptions', () => {
   it('does not cap pages with maxPages so long scrolling keeps prior items', () => {
     const options = getInfiniteEntriesQueryOptions({ view: 'timeline' })
     expect('maxPages' in options).toBe(false)
+  })
+
+  it('uses the dedicated today endpoint for today-board aggregate views', async () => {
+    vi.mocked(entryService.getTodayEntries).mockResolvedValue({
+      items: [],
+      total: 0,
+      page: 1,
+      total_pages: 1,
+      per_page: 500,
+    })
+    const options = getInfiniteEntriesQueryOptions({
+      view: 'today-board',
+      collected_after: '2026-04-10T00:00:00.000Z',
+      collected_before: '2026-04-11T00:00:00.000Z',
+      per_page: 500,
+    })
+    const signal = new AbortController().signal
+
+    await options.queryFn({ pageParam: 2, signal })
+
+    expect(entryService.getTodayEntries).toHaveBeenCalledWith(
+      {
+        collected_after: '2026-04-10T00:00:00.000Z',
+        collected_before: '2026-04-11T00:00:00.000Z',
+        limit: 500,
+      },
+      { signal }
+    )
+    expect(entryService.getEntries).not.toHaveBeenCalled()
   })
 })
 

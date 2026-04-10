@@ -56,7 +56,8 @@ The card-list should favor information density over large magazine-style tiles. 
 Responsive desktop behavior:
 
 - when detail is closed, the board uses the full content area and can show multiple card columns
-- when detail opens, the far-right detail bar expands and the board compresses to a single-column card list
+- when detail opens, the board compresses to a single-column card list using the same width as the standard feed list
+- when detail opens, the detail pane fills the remaining right-side content area rather than leaving unused space beside it
 
 ### Card Content
 
@@ -68,6 +69,12 @@ Each card shows:
 - feed summary from `Feed.description`
 - publish time
 - feed icon when available
+
+Cards also participate in the reader's list translation flow:
+
+- the board header exposes the same translation toggle as the standard entry list
+- translated card titles and summaries replace the original card text while translation is active
+- feed title and feed summary remain source metadata and are not translated by the card-list translation pass
 
 Visual treatment:
 
@@ -116,9 +123,10 @@ The board should not rely on "whatever happened to be in the first timeline page
 
 Required data behavior:
 
-- reuse `/entries`, but with explicit collection-time query bounds computed from the client's local day
+- use a dedicated `/entries/today` endpoint with collection-time query bounds computed from the client's local day
+- return the bounded daily aggregate in one response instead of relying on timeline pagination
 - add `ingested_at` to the entry payload so collection-time behavior is inspectable end-to-end
-- sort `today-board` requests by collection timestamp rather than publication timestamp
+- sort the daily aggregate by collection timestamp rather than publication timestamp
 - continue reusing subscription sync data to resolve feed summaries by `feed_id`
 
 ### Mobile Behavior
@@ -135,7 +143,7 @@ This keeps desktop and tablet as the primary focus for the board experience with
 ## Risks
 
 - today's boundary depends on timezone handling; client and server behavior must not disagree silently
-- timeline ordering by `published_at` is not sufficient for a collection-time board, so the API must honor collection bounds and sorting explicitly
+- timeline ordering by `published_at` is not sufficient for a collection-time board, so the dedicated API must honor collection bounds and sorting explicitly
 - reusing existing detail components inside a new split layout may expose assumptions tied to the current reader list
 
 ## Verification Targets

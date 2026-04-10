@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { TodayBoard } from '@/pages/reader/shared/components/TodayBoard'
 import { buildTodayBoardEntries } from '@/pages/reader/shared/todayBoard'
@@ -52,6 +52,7 @@ function TodayBoardHarness({ entries }: { entries: EntryWithState[] }) {
         selectedEntryId={selectedId}
         onSelectEntry={(entry) => setSelectedId(entry.id)}
         onCloseDetail={() => setSelectedId(null)}
+        listWidthPx={360}
         renderDetail={(entry) => <div data-testid="today-board-detail">{entry.title}</div>}
       />
     )
@@ -74,9 +75,46 @@ describe('TodayBoard interaction', () => {
     fireEvent.click(screen.getByRole('button', { name: /first entry/i }))
     expect(screen.getByTestId('today-board-detail')).toHaveTextContent('First entry')
     expect(screen.getByTestId('today-board-grid').className).toContain('grid-cols-1')
+    expect(screen.getByTestId('today-board-blank-space')).toHaveStyle({ width: '360px' })
+    expect(screen.getByTestId('today-board-detail-pane').className).toContain('flex-1')
 
     fireEvent.click(screen.getByTestId('today-board-blank-space'))
     expect(screen.queryByTestId('today-board-detail')).not.toBeInTheDocument()
     expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
+  })
+
+  it('renders translated card text and exposes a translation toggle', () => {
+    const boardEntries = buildTodayBoardEntries(
+      [makeEntry({ id: 'entry-1', title: 'Original title', summary: 'Original summary' })],
+      {
+        now: new Date('2026-04-10T12:00:00+08:00'),
+        getFeedDescription: () => 'Feed summary',
+      }
+    )
+    const onToggleTranslation = vi.fn()
+
+    render(
+      <TodayBoard
+        entries={boardEntries}
+        selectedEntryId={null}
+        onSelectEntry={() => undefined}
+        onCloseDetail={() => undefined}
+        isTranslationActive
+        translatedTexts={{
+          'entry-1': {
+            title: '翻译标题',
+            summary: '翻译摘要',
+          },
+        }}
+        onToggleTranslation={onToggleTranslation}
+      />
+    )
+
+    expect(screen.getByRole('button', { name: 'Hide Translation' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /翻译标题/i })).toBeInTheDocument()
+    expect(screen.getByText('翻译摘要')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Hide Translation' }))
+    expect(onToggleTranslation).toHaveBeenCalledTimes(1)
   })
 })

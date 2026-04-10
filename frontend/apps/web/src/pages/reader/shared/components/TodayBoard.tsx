@@ -1,5 +1,5 @@
 import { format } from 'date-fns'
-import { Clock, Inbox } from 'lucide-react'
+import { Clock, Inbox, Languages } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import { cn } from '@glean/ui'
 import type { ReactNode } from 'react'
@@ -11,6 +11,12 @@ interface TodayBoardProps {
   selectedEntryId: string | null
   onSelectEntry: (entry: TodayBoardEntry) => void
   onCloseDetail: () => void
+  listWidthPx?: number
+  isTranslationActive?: boolean
+  isTranslationLoading?: boolean
+  translationLoadingPhase?: 'idle' | 'start' | 'settled'
+  translatedTexts?: Record<string, { title?: string; summary?: string }>
+  onToggleTranslation?: () => void
   renderDetail?: (entry: TodayBoardEntry) => ReactNode
 }
 
@@ -19,6 +25,12 @@ export function TodayBoard({
   selectedEntryId,
   onSelectEntry,
   onCloseDetail,
+  listWidthPx = 360,
+  isTranslationActive = false,
+  isTranslationLoading = false,
+  translationLoadingPhase = 'idle',
+  translatedTexts = {},
+  onToggleTranslation,
   renderDetail,
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
@@ -32,16 +44,58 @@ export function TodayBoard({
       <div
         className={cn(
           'min-w-0 overflow-y-auto transition-[width,max-width] duration-200',
-          selectedEntry ? 'flex-1' : 'w-full flex-1'
+          selectedEntry ? 'shrink-0' : 'w-full flex-1'
         )}
+        style={
+          selectedEntry
+            ? { width: `${listWidthPx}px`, minWidth: 280, maxWidth: 500 }
+            : undefined
+        }
         data-testid="today-board-blank-space"
         onClick={() => onCloseDetail()}
       >
-        <div className="border-border/60 sticky top-0 z-10 border-b bg-[linear-gradient(180deg,rgba(255,251,245,0.96),rgba(255,255,255,0.92))] px-4 py-3 backdrop-blur">
-          <div className="text-primary mb-1 text-xs font-semibold tracking-[0.18em] uppercase">
-            {t('todayBoard.title')}
+        <div className="border-border/60 sticky top-0 z-10 flex items-start justify-between gap-3 border-b bg-[linear-gradient(180deg,rgba(255,251,245,0.96),rgba(255,255,255,0.92))] px-4 py-3 backdrop-blur">
+          <div className="min-w-0">
+            <div className="text-primary mb-1 text-xs font-semibold tracking-[0.18em] uppercase">
+              {t('todayBoard.title')}
+            </div>
+            <div className="text-muted-foreground text-sm">{t('todayBoard.description')}</div>
           </div>
-          <div className="text-muted-foreground text-sm">{t('todayBoard.description')}</div>
+          {onToggleTranslation ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onToggleTranslation()
+              }}
+              title={
+                isTranslationLoading
+                  ? t('translation.translating')
+                  : isTranslationActive
+                    ? t('translation.hideTranslation')
+                    : t('translation.translate')
+              }
+              aria-label={
+                isTranslationLoading
+                  ? t('translation.translating')
+                  : isTranslationActive
+                    ? t('translation.hideTranslation')
+                    : t('translation.translate')
+              }
+              className={cn(
+                'list-translation-toggle hover:bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                isTranslationActive ? 'text-primary' : 'text-muted-foreground',
+                isTranslationLoading && 'list-translation-toggle-loading',
+                translationLoadingPhase === 'start' && 'list-translation-toggle-loading-start',
+                translationLoadingPhase === 'settled' && 'list-translation-toggle-loading-settled'
+              )}
+            >
+              <span className="list-translation-toggle__icon-wrap">
+                <span className="list-translation-toggle__ring" aria-hidden="true" />
+                <Languages className="list-translation-toggle__icon h-4 w-4" />
+              </span>
+            </button>
+          ) : null}
         </div>
 
         {entries.length === 0 ? (
@@ -56,15 +110,18 @@ export function TodayBoard({
             data-testid="today-board-grid"
             className={cn(
               gridClassName,
-              selectedEntry ? 'max-w-2xl' : 'max-w-none'
+              selectedEntry ? 'max-w-none' : 'max-w-none'
             )}
           >
             {entries.map((entry) => {
               const isSelected = entry.id === selectedEntryId
+              const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
+              const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
               return (
                 <button
                   key={entry.id}
                   type="button"
+                  data-entry-id={entry.id}
                   onClick={(event) => {
                     event.stopPropagation()
                     onSelectEntry(entry)
@@ -111,17 +168,17 @@ export function TodayBoard({
                           entry.is_read ? 'text-stone-500' : 'font-semibold text-slate-900'
                         )}
                       >
-                        {entry.title}
+                        {translated?.title ?? entry.title}
                       </h3>
 
-                      {entry.summary && (
+                      {summary && (
                         <p
                           className={cn(
                             'mb-2 line-clamp-2 text-sm leading-6',
                             entry.is_read ? 'text-stone-400' : 'text-slate-600'
                           )}
                         >
-                          {stripHtmlTags(entry.summary)}
+                          {summary}
                         </p>
                       )}
 
@@ -145,7 +202,10 @@ export function TodayBoard({
       </div>
 
       {selectedEntry && renderDetail ? (
-        <aside className="border-border bg-background flex w-[min(44vw,520px)] min-w-[320px] flex-col border-l">
+        <aside
+          className="border-border bg-background flex min-w-0 flex-1 flex-col border-l"
+          data-testid="today-board-detail-pane"
+        >
           {renderDetail(selectedEntry)}
         </aside>
       ) : null}

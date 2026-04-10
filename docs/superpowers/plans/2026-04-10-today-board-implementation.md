@@ -4,7 +4,7 @@
 
 **Goal:** Build a dedicated `今日看板` reader view that aggregates today's entries across all subscriptions into a dense card-list board with a collapsible desktop detail panel.
 
-**Architecture:** Keep `/entries` as the base surface, but add explicit collection-time query bounds and `today-board` ordering so the board does not depend on timeline-first pagination. Reuse subscription-sync cache for feed summaries, and keep board-specific shaping explicit in a focused helper so collection-time filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
+**Architecture:** Keep entries as the domain surface, but use a dedicated `/entries/today` endpoint with explicit collection-time query bounds so the board does not depend on timeline-first pagination. Reuse subscription-sync cache for feed summaries, and keep board-specific shaping explicit in a focused helper so collection-time filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
 
 **Tech Stack:** TypeScript, React 18, React Router, TanStack Query, Zustand, Tailwind CSS, Vitest
 
@@ -44,7 +44,7 @@
 
 - [ ] **Step 1: Write the failing API test for collection-bounded today-board queries**
 - [ ] **Step 2: Run the targeted test to verify it fails**
-- [ ] **Step 3: Add collection bounds, `today-board` ordering, and `ingested_at` to the payload**
+- [ ] **Step 3: Add `/entries/today`, collection bounds, daily ordering, and `ingested_at` to the payload**
 - [ ] **Step 4: Re-run the targeted test to verify it passes**
 
 ### Task 3: Add Today-Board Route And Sidebar Entry

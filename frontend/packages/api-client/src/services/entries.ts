@@ -38,6 +38,24 @@ export class EntryService {
   }
 
   /**
+   * Get entries collected during the current client-selected day.
+   *
+   * This endpoint intentionally returns a bounded aggregate instead of timeline pages.
+   */
+  async getTodayEntries(params: {
+    collected_after: string
+    collected_before: string
+    feed_id?: string
+    folder_id?: string
+    limit?: number
+  }, options?: { signal?: AbortSignal }): Promise<EntryListResponse> {
+    return this.client.get<EntryListResponse>('/entries/today', {
+      params,
+      signal: options?.signal,
+    })
+  }
+
+  /**
    * Get a specific entry.
    */
   async getEntry(entryId: string, options?: { signal?: AbortSignal }): Promise<EntryWithState> {

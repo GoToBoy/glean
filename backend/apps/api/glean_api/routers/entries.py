@@ -94,6 +94,35 @@ async def list_entries(
     )
 
 
+@router.get("/today")
+async def list_today_entries(
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    entry_service: Annotated[EntryService, Depends(get_entry_service)],
+    feed_id: str | None = None,
+    folder_id: str | None = None,
+    collected_after: datetime = Query(...),
+    collected_before: datetime = Query(...),
+    limit: int = Query(500, ge=1, le=500),
+) -> EntryListResponse:
+    """
+    Get entries collected during the client-selected local day.
+
+    This endpoint returns a bounded aggregate for 今日收录 / Today's Intake
+    instead of timeline pages.
+    """
+    return await entry_service.get_entries(
+        user_id=current_user.id,
+        feed_id=feed_id,
+        folder_id=folder_id,
+        collected_after=collected_after,
+        collected_before=collected_before,
+        page=1,
+        per_page=limit,
+        view="today-board",
+        score_service=None,
+    )
+
+
 @router.get("/feedback-summary")
 async def get_feedback_summary(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
