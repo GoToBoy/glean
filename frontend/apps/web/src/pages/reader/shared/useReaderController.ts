@@ -17,8 +17,12 @@ export function useReaderController() {
   const viewParam = searchParams.get('view') || undefined
   const tabParam = searchParams.get('tab') as FilterType | null
   const isSmartView = viewParam === 'smart'
+  const isTodayBoardView = viewParam === 'today-board'
 
   const [filterType, setFilterType] = useState<FilterType>(() => {
+    if (isTodayBoardView) {
+      return 'all'
+    }
     if (tabParam && VALID_FILTERS.includes(tabParam)) {
       return tabParam
     }
@@ -68,17 +72,21 @@ export function useReaderController() {
   }, [entryIdFromUrl])
 
   useEffect(() => {
-    if (tabParam === filterType) return
-
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        next.set('tab', filterType)
+        if (isTodayBoardView) {
+          next.delete('tab')
+        } else if (tabParam !== filterType) {
+          next.set('tab', filterType)
+        } else {
+          return prev
+        }
         return next
       },
       { replace: true }
     )
-  }, [filterType, tabParam, setSearchParams])
+  }, [filterType, isTodayBoardView, tabParam, setSearchParams])
 
   return {
     selectedFeedId,
@@ -86,6 +94,7 @@ export function useReaderController() {
     entryIdFromUrl,
     viewParam,
     isSmartView,
+    isTodayBoardView,
     filterType,
     setFilterType,
     selectedEntryId,

@@ -60,6 +60,11 @@
     "enableVectorizationHint": "启用向量化后，可获得基于内容相似度的 AI 推荐。",
     "goToSettings": "前往设置"
   },
+  "todayBoard": {
+    "title": "今日看板",
+    "description": "汇总所有订阅的今日内容",
+    "empty": "今天还没有新的内容"
+  },
   "empty": {
     "selectArticle": "选择文章",
     "selectArticleDescription": "从列表中选择一篇文章开始阅读",

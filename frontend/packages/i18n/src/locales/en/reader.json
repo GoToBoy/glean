@@ -60,6 +60,11 @@
     "enableVectorizationHint": "Enable vectorization for AI-powered recommendations based on content similarity.",
     "goToSettings": "Go to Settings"
   },
+  "todayBoard": {
+    "title": "Today Board",
+    "description": "A daily rollup across all subscriptions",
+    "empty": "No new items for today"
+  },
   "empty": {
     "selectArticle": "Select an article",
     "selectArticleDescription": "Choose an article from the list to start reading",

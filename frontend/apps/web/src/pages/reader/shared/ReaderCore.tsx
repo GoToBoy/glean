@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useInfiniteEntries, useEntry, useUpdateEntryState, entryKeys } from '../../../hooks/useEntries'
+import { useAllSubscriptions } from '../../../hooks/useSubscriptions'
 import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
@@ -20,8 +21,10 @@ import {
   ReaderSmartTabs,
   ReaderFilterTabs,
 } from './components/ReaderCoreParts'
+import { TodayBoard } from './components/TodayBoard'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
+import { buildTodayBoardEntries } from './todayBoard'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
@@ -60,6 +63,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     entryIdFromUrl,
     viewParam,
     isSmartView,
+    isTodayBoardView,
     filterType,
     setFilterType,
     selectedEntryId,
@@ -68,6 +72,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   } = useReaderController()
   const { user } = useAuthStore()
   const { showPreferenceScore } = useUIStore()
+  const { data: subscriptions = [] } = useAllSubscriptions()
 
   // Check vectorization status for Smart view
   const { data: vectorizationStatus } = useVectorizationStatus()
@@ -88,8 +93,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const prevViewRef = useRef<{
     feedId: string | undefined
     folderId: string | undefined
-    isSmartView: boolean
-  }>({ feedId: selectedFeedId, folderId: selectedFolderId, isSmartView })
+    view: 'timeline' | 'smart' | 'today-board'
+  }>({
+    feedId: selectedFeedId,
+    folderId: selectedFolderId,
+    view: isTodayBoardView ? 'today-board' : isSmartView ? 'smart' : 'timeline',
+  })
   const [entriesWidth, setEntriesWidth] = useState(() => {
     const saved = localStorage.getItem('glean:entriesWidth')
     return saved !== null ? Number(saved) : 360
@@ -143,6 +152,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const usesSmartSorting = isSmartView || filterType === 'smart'
 
   const getFilterParams = () => {
+    if (isTodayBoardView) {
+      return {}
+    }
+
     switch (filterType) {
       case 'unread':
         return { is_read: false }
@@ -176,6 +189,20 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
+  const feedDescriptionById = useMemo(() => {
+    const map = new Map<string, string | null>()
+    for (const subscription of subscriptions) {
+      map.set(subscription.feed_id, subscription.feed.description ?? null)
+    }
+    return map
+  }, [subscriptions])
+  const todayBoardEntries = useMemo(
+    () =>
+      buildTodayBoardEntries(rawEntries, {
+        getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
+      }),
+    [rawEntries, feedDescriptionById]
+  )
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -576,11 +603,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     const prev = prevViewRef.current
 
     // When entering smart view, default to 'unread' filter
-    if (isSmartView && !prev.isSmartView) {
+    if (isSmartView && prev.view !== 'smart') {
       setFilterType('unread')
     }
     // When leaving smart view, reset to 'all' filter
-    else if (!isSmartView && prev.isSmartView) {
+    else if (!isSmartView && prev.view === 'smart') {
       setFilterType('all')
     }
   }, [isSmartView, setFilterType])
@@ -595,10 +622,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   useEffect(() => {
     const prev = prevViewRef.current
+    const currentViewMode = isTodayBoardView ? 'today-board' : isSmartView ? 'smart' : 'timeline'
     const viewChanged =
       prev.feedId !== selectedFeedId ||
       prev.folderId !== selectedFolderId ||
-      prev.isSmartView !== isSmartView
+      prev.view !== currentViewMode
 
     if (viewChanged) {
       // Clear selected entry when switching views
@@ -610,9 +638,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
       // Determine slide direction based on view change
       // Smart view slides from left, others slide from right
-      if (isSmartView && !prev.isSmartView) {
+      if (currentViewMode === 'smart' && prev.view !== 'smart') {
         setSlideDirection('left')
-      } else if (!isSmartView && prev.isSmartView) {
+      } else if (prev.view === 'smart' && currentViewMode !== 'smart') {
         setSlideDirection('right')
       } else {
         // Feed to feed change - use right direction
@@ -620,12 +648,16 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       }
 
       // Update ref
-      prevViewRef.current = { feedId: selectedFeedId, folderId: selectedFolderId, isSmartView }
+      prevViewRef.current = {
+        feedId: selectedFeedId,
+        folderId: selectedFolderId,
+        view: currentViewMode,
+      }
 
       // Reset slide direction after animation
       setTimeout(() => setSlideDirection(null), 300)
     }
-  }, [selectedFeedId, selectedFolderId, isSmartView, entryIdFromUrl, clearSelectedEntry])
+  }, [selectedFeedId, selectedFolderId, isSmartView, isTodayBoardView, entryIdFromUrl, clearSelectedEntry])
 
   // Keyboard navigation: arrow keys and j/k to switch between entries
   const handleKeyboardNavigation = useCallback(
@@ -755,6 +787,45 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       window.removeEventListener('readerMobileListActions:setFilter', onSetFilter)
     }
   }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isTodayBoardView && !isMobile) {
+    return (
+      <div className="flex h-full min-w-0">
+        {isLoading ? (
+          <div className="w-full space-y-3 p-3">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <EntryListItemSkeleton key={index} />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="w-full p-4">
+            <Alert variant="error">
+              <AlertCircle />
+              <AlertTitle>{t('entries.loadError')}</AlertTitle>
+              <AlertDescription>{(error as Error).message}</AlertDescription>
+            </Alert>
+          </div>
+        ) : (
+          <TodayBoard
+            entries={todayBoardEntries}
+            selectedEntryId={selectedEntryId}
+            onSelectEntry={handleSelectEntry}
+            onCloseDetail={() => clearSelectedEntry(true)}
+            renderDetail={(entry) => (
+              <ArticleReader
+                entry={selectedEntryId === entry.id && resolvedSelectedEntry ? resolvedSelectedEntry : entry}
+                onClose={() => clearSelectedEntry(true)}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                showCloseButton
+                showFullscreenButton
+              />
+            )}
+          />
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`flex h-full ${isMobile ? 'relative' : ''}`}>

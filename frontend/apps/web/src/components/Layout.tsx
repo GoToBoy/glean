@@ -12,6 +12,7 @@ import {
   Sparkles,
   Clock,
   Circle,
+  CalendarDays,
 } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import {
@@ -185,13 +186,16 @@ export function Layout() {
   const currentEntryId = searchParams.get('entry') || undefined
   const isReaderPage = location.pathname === '/reader'
   const isSmartView = isReaderPage && currentView === 'smart'
+  const isTodayBoardView = isReaderPage && currentView === 'today-board'
   const isMobileListMode = isReaderPage && !currentEntryId
   const currentFilter: 'all' | 'unread' | 'smart' | 'read-later' =
     currentTab === 'all' || currentTab === 'smart' || currentTab === 'read-later'
       ? currentTab
       : 'unread'
   const currentFilterLabel =
-    currentFilter === 'unread'
+    isTodayBoardView
+      ? t('feeds:sidebar.todayBoard')
+      : currentFilter === 'unread'
       ? '未读'
       : currentFilter === 'all'
         ? '全部'
@@ -199,7 +203,9 @@ export function Layout() {
           ? '智能'
           : '稍后'
   const filterIcon =
-    currentFilter === 'unread' ? (
+    isTodayBoardView ? (
+      <CalendarDays className="h-3 w-3" />
+    ) : currentFilter === 'unread' ? (
       <Circle className="h-2.5 w-2.5 fill-current" />
     ) : currentFilter === 'all' ? (
       <Inbox className="h-3 w-3" />
@@ -276,7 +282,7 @@ export function Layout() {
 
   const handleFeedSelect = (feedId?: string, folderId?: string) => {
     const nextParams = new URLSearchParams()
-    if (currentView) nextParams.set('view', currentView)
+    if (currentView && currentView !== 'today-board') nextParams.set('view', currentView)
     if (currentTab) nextParams.set('tab', currentTab)
 
     if (folderId) {
@@ -294,9 +300,14 @@ export function Layout() {
     navigate('/reader?view=smart')
   }
 
+  const handleTodayBoardViewSelect = () => {
+    navigate('/reader?view=today-board')
+  }
+
   const prefetchReaderData = async (feedId?: string, folderId?: string) => {
     const isReadLater = currentTab === 'read-later'
-    const isUnreadLike = currentTab === 'unread' || currentTab === 'smart' || !currentTab
+    const isUnreadLike =
+      currentView !== 'today-board' && (currentTab === 'unread' || currentTab === 'smart' || !currentTab)
     const filters = {
       feed_id: feedId,
       folder_id: folderId,
@@ -454,6 +465,11 @@ export function Layout() {
 
     const feedId = searchParams.get('feed')
     const folderId = searchParams.get('folder')
+    const readerView = searchParams.get('view')
+
+    if (readerView === 'today-board') {
+      return t('feeds:sidebar.todayBoard')
+    }
 
     // Priority: folder > feed > default
     if (folderId) {
@@ -479,7 +495,7 @@ export function Layout() {
     }
 
     return 'Glean'
-  }, [location.pathname, searchParams, feedFolders, subscriptions])
+  }, [location.pathname, searchParams, feedFolders, subscriptions, t])
 
   // Close mobile sidebar on navigation
   const searchParamsString = searchParams.toString()
@@ -610,7 +626,9 @@ export function Layout() {
             onFeedHover={prefetchReaderData}
             onFolderHover={(folderId) => prefetchReaderData(undefined, folderId)}
             onSmartViewSelect={handleSmartViewSelect}
+            onTodayBoardViewSelect={handleTodayBoardViewSelect}
             isSmartView={isSmartView}
+            isTodayBoardView={isTodayBoardView}
             isReaderPage={isReaderPage}
             currentFeedId={currentFeedId}
             currentFolderId={currentFolderId}
@@ -743,81 +761,88 @@ export function Layout() {
                 <Languages className="list-translation-toggle__icon h-4 w-4" />
               </span>
             </button>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                className="text-primary hover:bg-accent flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors"
-                aria-label="Select filter"
-              >
+            {isTodayBoardView ? (
+              <div className="text-primary flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium">
                 <span className="opacity-90">{filterIcon}</span>
                 <span>{currentFilterLabel}</span>
-                <ChevronDown className="h-3 w-3 opacity-70" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="[&_[data-slot='menu-item']]:!gap-1.5 [&_[data-slot='menu-item']]:!py-1 [&_[data-slot='menu-item']]:!text-sm"
-              >
-                <DropdownMenuItem
-                  className={currentFilter === 'unread' ? 'bg-accent' : ''}
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('readerMobileListActions:setFilter', {
-                        detail: { filter: 'unread' },
-                      })
-                    )
-                  }
+              </div>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  className="text-primary hover:bg-accent flex items-center gap-1 rounded-md px-1.5 py-1 text-xs font-medium transition-colors"
+                  aria-label="Select filter"
                 >
-                  <span className="mr-2 inline-flex items-center">
-                    <Circle className="h-2.5 w-2.5 fill-current" />
-                  </span>
-                  未读
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={currentFilter === 'all' ? 'bg-accent' : ''}
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('readerMobileListActions:setFilter', {
-                        detail: { filter: 'all' },
-                      })
-                    )
-                  }
+                  <span className="opacity-90">{filterIcon}</span>
+                  <span>{currentFilterLabel}</span>
+                  <ChevronDown className="h-3 w-3 opacity-70" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="[&_[data-slot='menu-item']]:!gap-1.5 [&_[data-slot='menu-item']]:!py-1 [&_[data-slot='menu-item']]:!text-sm"
                 >
-                  <span className="mr-2 inline-flex items-center">
-                    <Inbox className="h-3.5 w-3.5" />
-                  </span>
-                  全部
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={currentFilter === 'smart' ? 'bg-accent' : ''}
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('readerMobileListActions:setFilter', {
-                        detail: { filter: 'smart' },
-                      })
-                    )
-                  }
-                >
-                  <span className="mr-2 inline-flex items-center">
-                    <Sparkles className="h-3.5 w-3.5" />
-                  </span>
-                  智能
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  className={currentFilter === 'read-later' ? 'bg-accent' : ''}
-                  onClick={() =>
-                    window.dispatchEvent(
-                      new CustomEvent('readerMobileListActions:setFilter', {
-                        detail: { filter: 'read-later' },
-                      })
-                    )
-                  }
-                >
-                  <span className="mr-2 inline-flex items-center">
-                    <Clock className="h-3.5 w-3.5" />
-                  </span>
-                  稍后
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  <DropdownMenuItem
+                    className={currentFilter === 'unread' ? 'bg-accent' : ''}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent('readerMobileListActions:setFilter', {
+                          detail: { filter: 'unread' },
+                        })
+                      )
+                    }
+                  >
+                    <span className="mr-2 inline-flex items-center">
+                      <Circle className="h-2.5 w-2.5 fill-current" />
+                    </span>
+                    未读
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={currentFilter === 'all' ? 'bg-accent' : ''}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent('readerMobileListActions:setFilter', {
+                          detail: { filter: 'all' },
+                        })
+                      )
+                    }
+                  >
+                    <span className="mr-2 inline-flex items-center">
+                      <Inbox className="h-3.5 w-3.5" />
+                    </span>
+                    全部
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={currentFilter === 'smart' ? 'bg-accent' : ''}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent('readerMobileListActions:setFilter', {
+                          detail: { filter: 'smart' },
+                        })
+                      )
+                    }
+                  >
+                    <span className="mr-2 inline-flex items-center">
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </span>
+                    智能
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className={currentFilter === 'read-later' ? 'bg-accent' : ''}
+                    onClick={() =>
+                      window.dispatchEvent(
+                        new CustomEvent('readerMobileListActions:setFilter', {
+                          detail: { filter: 'read-later' },
+                        })
+                      )
+                    }
+                  >
+                    <span className="mr-2 inline-flex items-center">
+                      <Clock className="h-3.5 w-3.5" />
+                    </span>
+                    稍后
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         ) : (
           <div className="w-10" />
