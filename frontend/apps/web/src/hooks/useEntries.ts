@@ -31,9 +31,16 @@ export interface EntryFilters {
 
 export type InfiniteEntryFilters = Omit<EntryFilters, 'page'>
 
+function getPagedEntryFilters(
+  { per_page: _perPage, ...filters }: InfiniteEntryFilters = {},
+  page: number,
+  perPage: number
+): EntryFilters {
+  return { ...filters, page, per_page: perPage }
+}
+
 export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
   const perPage = filters?.per_page ?? 20
-  const { per_page: _perPage, ...filtersWithoutPerPage } = filters ?? {}
   const isTodayBoard = filters?.view === 'today-board'
 
   return {
@@ -52,10 +59,7 @@ export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
         )
       }
 
-      return entryService.getEntries(
-        { ...filtersWithoutPerPage, page: pageParam, per_page: perPage },
-        { signal }
-      )
+      return entryService.getEntries(getPagedEntryFilters(filters, pageParam, perPage), { signal })
     },
     getNextPageParam: (lastPage: { page: number; total_pages: number }) => {
       if (isTodayBoard) return undefined
