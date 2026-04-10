@@ -2,12 +2,12 @@
 
 ## Goal
 
-Add a `今日看板` reader mode that aggregates today's entries across all subscriptions into a dense card-list board with a collapsible right-side detail panel.
+Add a `今日收录` reader mode that aggregates entries collected during the current local day across all subscriptions into a dense card-list board with a collapsible right-side detail panel.
 
 ## Scope
 
 - Modify reader route/controller/state to support a dedicated `today-board` view.
-- Modify sidebar navigation to add `今日看板` below `智能列表`.
+- Modify sidebar navigation to add `今日收录` below `智能列表`.
 - Reuse the existing subscription sync cache to resolve feed descriptions for board cards.
 - Add a dedicated desktop today-board layout with:
   - unread-first then read ordering
@@ -20,7 +20,7 @@ Add a `今日看板` reader mode that aggregates today's entries across all subs
 
 ## Done Means
 
-- The sidebar renders a `今日看板` entry below `智能列表`.
+- The sidebar renders a `今日收录` entry below `智能列表`.
 - Selecting `今日看板` shows only today's aggregated entries using `ingested_at` first, then `created_at`, then `published_at`.
 - The board shows feed title, feed summary, article summary, time, and feed icon when available.
 - Unread entries render before read entries, and read entries use weakened read-state styling.

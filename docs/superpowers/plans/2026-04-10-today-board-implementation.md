@@ -4,7 +4,7 @@
 
 **Goal:** Build a dedicated `今日看板` reader view that aggregates today's entries across all subscriptions into a dense card-list board with a collapsible desktop detail panel.
 
-**Architecture:** Reuse the existing entry list plus subscription-sync cache instead of adding a board-specific API surface, then branch the reader UI with a dedicated `today-board` mode instead of forcing the timeline list to impersonate a board. Keep the board's data shaping explicit in a focused helper so collection-time filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
+**Architecture:** Keep `/entries` as the base surface, but add explicit collection-time query bounds and `today-board` ordering so the board does not depend on timeline-first pagination. Reuse subscription-sync cache for feed summaries, and keep board-specific shaping explicit in a focused helper so collection-time filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
 
 **Tech Stack:** TypeScript, React 18, React Router, TanStack Query, Zustand, Tailwind CSS, Vitest
 
@@ -31,6 +31,21 @@
 - [ ] **Step 2: Run the targeted test to verify it fails**
 - [ ] **Step 3: Implement a focused helper that derives effective timestamps, filters to the current local day, sorts unread before read, and hydrates feed descriptions from subscriptions**
 - [ ] **Step 4: Run the targeted test to verify it passes**
+
+### Task 2B: Add Collection-Time API Support
+
+**Files:**
+- Modify: `backend/apps/api/glean_api/routers/entries.py`
+- Modify: `backend/packages/core/glean_core/services/entry_service.py`
+- Modify: `backend/packages/core/glean_core/schemas/entry.py`
+- Modify: `frontend/apps/web/src/hooks/useEntries.ts`
+- Modify: `frontend/packages/api-client/src/services/entries.ts`
+- Test: `backend/tests/integration/test_entries_api.py`
+
+- [ ] **Step 1: Write the failing API test for collection-bounded today-board queries**
+- [ ] **Step 2: Run the targeted test to verify it fails**
+- [ ] **Step 3: Add collection bounds, `today-board` ordering, and `ingested_at` to the payload**
+- [ ] **Step 4: Re-run the targeted test to verify it passes**
 
 ### Task 3: Add Today-Board Route And Sidebar Entry
 

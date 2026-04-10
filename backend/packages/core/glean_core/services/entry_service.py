@@ -90,6 +90,8 @@ class EntryService:
         is_read: bool | None = None,
         is_liked: bool | None = None,
         read_later: bool | None = None,
+        collected_after: datetime | None = None,
+        collected_before: datetime | None = None,
         page: int = 1,
         per_page: int = 20,
         view: str = "timeline",
@@ -105,9 +107,11 @@ class EntryService:
             is_read: Optional read status filter (None = all, True = read only, False = unread only).
             is_liked: Optional liked status filter.
             read_later: Optional read later filter.
+            collected_after: Optional inclusive lower bound for collection-time filtering.
+            collected_before: Optional exclusive upper bound for collection-time filtering.
             page: Page number (1-indexed).
             per_page: Items per page.
-            view: View mode ("timeline" or "smart").
+            view: View mode ("timeline", "smart", or "today-board").
             score_service: Score service for real-time scoring (required for smart view).
 
         Returns:
@@ -128,6 +132,8 @@ class EntryService:
 
         if not feed_ids:
             return EntryListResponse(items=[], total=0, page=page, per_page=per_page, total_pages=0)
+
+        collection_timestamp = func.coalesce(Entry.ingested_at, Entry.created_at, Entry.published_at)
 
         # Subquery to get bookmark_id for entry (limit 1 in case of duplicates)
         bookmark_id_subq = (
@@ -168,6 +174,10 @@ class EntryService:
             stmt = stmt.where(UserEntry.is_liked == is_liked)
         if read_later is not None:
             stmt = stmt.where(UserEntry.read_later == read_later)
+        if collected_after is not None:
+            stmt = stmt.where(collection_timestamp >= collected_after)
+        if collected_before is not None:
+            stmt = stmt.where(collection_timestamp < collected_before)
 
         # Count total
         count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -215,6 +225,7 @@ class EntryService:
                     content=entry.content,
                     summary=entry.summary,
                     published_at=entry.published_at,
+                    ingested_at=entry.ingested_at,
                     created_at=entry.created_at,
                     is_read=bool(user_entry.is_read) if user_entry else False,
                     is_liked=user_entry.is_liked if user_entry else None,
@@ -238,11 +249,8 @@ class EntryService:
             items = [item for item, _ in items_with_scores[start_idx:end_idx]]
         else:
             # Timeline view - standard pagination with time ordering
-            stmt = (
-                stmt.order_by(desc(Entry.published_at))
-                .limit(per_page)
-                .offset((page - 1) * per_page)
-            )
+            order_column = collection_timestamp if view == "today-board" else Entry.published_at
+            stmt = stmt.order_by(desc(order_column), desc(Entry.id)).limit(per_page).offset((page - 1) * per_page)
 
             result = await self.session.execute(stmt)
             rows = result.all()
@@ -260,6 +268,7 @@ class EntryService:
                         content=entry.content,
                         summary=entry.summary,
                         published_at=entry.published_at,
+                        ingested_at=entry.ingested_at,
                         created_at=entry.created_at,
                         is_read=bool(user_entry.is_read) if user_entry else False,
                         is_liked=user_entry.is_liked if user_entry else None,

@@ -1,0 +1,170 @@
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import type { EntryWithState } from '@glean/types'
+import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
+
+const { todayBoardSpy } = vi.hoisted(() => ({
+  todayBoardSpy: vi.fn((props: { entries: Array<{ id: string }> }) => (
+    <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
+  )),
+}))
+
+function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
+  return {
+    id: overrides.id ?? 'entry-1',
+    feed_id: overrides.feed_id ?? 'feed-1',
+    guid: overrides.guid ?? 'guid-1',
+    url: overrides.url ?? 'https://example.com/1',
+    title: overrides.title ?? 'Entry title',
+    author: overrides.author ?? null,
+    content: overrides.content ?? null,
+    summary: overrides.summary ?? 'Entry summary',
+    published_at: overrides.published_at ?? null,
+    created_at: overrides.created_at ?? '2026-04-10T02:00:00.000Z',
+    is_read: overrides.is_read ?? false,
+    is_liked: overrides.is_liked ?? null,
+    read_later: overrides.read_later ?? false,
+    read_later_until: overrides.read_later_until ?? null,
+    triage_state: overrides.triage_state,
+    defer_until: overrides.defer_until ?? null,
+    expires_at: overrides.expires_at ?? null,
+    estimated_read_time_sec: overrides.estimated_read_time_sec ?? null,
+    content_temporality: overrides.content_temporality,
+    read_at: overrides.read_at ?? null,
+    ingested_at: overrides.ingested_at ?? overrides.created_at ?? '2026-04-10T02:00:00.000Z',
+    is_bookmarked: overrides.is_bookmarked ?? false,
+    bookmark_id: overrides.bookmark_id ?? null,
+    feed_title: overrides.feed_title ?? 'Feed title',
+    feed_icon_url: overrides.feed_icon_url ?? null,
+    preference_score: overrides.preference_score ?? null,
+    debug_info: overrides.debug_info ?? null,
+  }
+}
+
+vi.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => ({
+    setQueryData: vi.fn(),
+    prefetchQuery: vi.fn().mockResolvedValue(undefined),
+  }),
+}))
+
+vi.mock('@/hooks/useEntries', () => ({
+  useInfiniteEntries: () => ({
+    data: {
+      pages: [
+        {
+          items: [
+            makeEntry({
+              id: 'today-entry',
+              published_at: '2026-04-09T12:30:00+08:00',
+              ingested_at: '2026-04-10T01:00:00+08:00',
+              created_at: '2026-04-10T01:00:00+08:00',
+            }),
+            makeEntry({
+              id: 'older-entry',
+              published_at: '2026-04-08T12:30:00+08:00',
+              ingested_at: '2026-04-08T12:30:00+08:00',
+              created_at: '2026-04-08T12:30:00+08:00',
+            }),
+          ],
+        },
+      ],
+    },
+    isLoading: false,
+    error: null,
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+  }),
+  useEntry: () => ({ data: null, isLoading: false }),
+  useUpdateEntryState: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
+  entryKeys: {
+    detail: (id: string) => ['entries', 'detail', id],
+  },
+}))
+
+vi.mock('@/hooks/useSubscriptions', () => ({
+  useAllSubscriptions: () => ({
+    data: [
+      {
+        feed_id: 'feed-1',
+        feed: { description: 'Feed summary text' },
+      },
+    ],
+  }),
+}))
+
+vi.mock('@/hooks/useVectorizationStatus', () => ({
+  useVectorizationStatus: () => ({ data: { enabled: false, status: 'idle' } }),
+}))
+
+vi.mock('@/components/ArticleReader', () => ({
+  ArticleReader: ({ entry }: { entry: EntryWithState }) => <div>{entry.title}</div>,
+  ArticleReaderSkeleton: () => <div>loading</div>,
+}))
+
+vi.mock('@/stores/authStore', () => ({
+  useAuthStore: () => ({ user: { settings: { list_translation_auto_enabled: false } } }),
+}))
+
+vi.mock('@/stores/uiStore', () => ({
+  useUIStore: () => ({ showPreferenceScore: false }),
+}))
+
+vi.mock('@glean/i18n', () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}))
+
+vi.mock('@glean/api-client', () => ({
+  entryService: {
+    getEntry: vi.fn(),
+    translateTexts: vi.fn(),
+  },
+}))
+
+vi.mock('@/pages/reader/shared/useReaderController', () => ({
+  useReaderController: () => ({
+    selectedFeedId: undefined,
+    selectedFolderId: undefined,
+    entryIdFromUrl: null,
+    viewParam: 'today-board',
+    isSmartView: false,
+    isTodayBoardView: true,
+    filterType: 'all',
+    setFilterType: vi.fn(),
+    selectedEntryId: null,
+    selectEntry: vi.fn(),
+    clearSelectedEntry: vi.fn(),
+  }),
+}))
+
+vi.mock('@/pages/reader/shared/components/ReaderCoreParts', () => ({
+  BookOpenIcon: () => null,
+  ResizeHandle: () => null,
+  EntryListItem: () => null,
+  MarkAllReadButton: () => null,
+  EntryListItemSkeleton: () => <div>loading</div>,
+  ReaderSmartTabs: () => null,
+  ReaderFilterTabs: () => null,
+}))
+
+vi.mock('@/pages/reader/shared/components/TodayBoard', () => ({
+  TodayBoard: todayBoardSpy,
+}))
+
+describe('ReaderCore today-board route', () => {
+  it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={true} />)
+
+    expect(screen.getByTestId('today-board-probe')).toHaveTextContent('today-entry')
+    expect(screen.getByTestId('today-board-probe')).not.toHaveTextContent('older-entry')
+  })
+})

@@ -4,11 +4,11 @@ Last updated: 2026-04-10
 
 ## Goal
 
-Add a `今日看板` reader view that surfaces the current day's entries across all subscriptions in a denser card-list layout, while keeping article detail accessible without losing the global overview.
+Add a `今日收录` reader view that surfaces entries collected during the current local day across all subscriptions in a denser card-list layout, while keeping article detail accessible without losing the global overview.
 
 ## Confirmed Scope
 
-- add a new sidebar reader entry named `今日看板`
+- add a new sidebar reader entry named `今日收录`
 - place it directly below `智能列表`
 - show a single aggregated "today across all subscriptions" board, not per-subscription drilldowns
 - render the main area as a dense card-list view instead of the standard timeline list
@@ -34,15 +34,17 @@ Add a `今日看板` reader view that surfaces the current day's entries across 
 
 The sidebar gains a new reader navigation item:
 
-- label: `今日看板`
+- label: `今日收录`
 - placement: immediately below `智能列表`
 - route model: a dedicated reader view mode, separate from `smart`
+
+The internal route key remains `today-board` for compatibility, but user-facing copy should describe collection-time semantics rather than a generic "board."
 
 This keeps the feature conceptually distinct from Smart recommendations and from the normal all-feeds timeline.
 
 ### Main Layout
 
-The `今日看板` screen uses a dedicated aggregated layout:
+The `今日收录` screen uses a dedicated aggregated layout:
 
 - full main content area: scrollable card-list board
 - far-right area: collapsible detail panel
@@ -86,7 +88,7 @@ The first implementation should reuse as much of the existing article-detail sur
 
 ### Today Selection Rule
 
-`今日看板` membership is determined per entry using:
+`今日收录` membership is determined per entry using:
 
 1. `ingested_at` if present
 2. otherwise `created_at`
@@ -110,19 +112,21 @@ This preserves "what still needs attention" while keeping the day grouped as one
 
 ### Data Requirements
 
-The current aggregated entry payload is not yet sufficient for the board.
+The board should not rely on "whatever happened to be in the first timeline page."
 
-The preferred implementation is the smallest change that remains correct and inspectable. A frontend-first version may:
+Required data behavior:
 
-- reuse subscription sync data to resolve feed summaries by `feed_id`
-- use `published_at`, then `ingested_at`, then `created_at` as the effective timestamp chain
-- perform today filtering in the client as long as unread/read ordering stays stable and non-today items are excluded
+- reuse `/entries`, but with explicit collection-time query bounds computed from the client's local day
+- add `ingested_at` to the entry payload so collection-time behavior is inspectable end-to-end
+- sort `today-board` requests by collection timestamp rather than publication timestamp
+- continue reusing subscription sync data to resolve feed summaries by `feed_id`
 
 ### Mobile Behavior
 
 First-pass mobile behavior is intentionally simpler:
 
 - show a single-column today card-list
+- use the same `today-board` data query as desktop rather than falling back to the normal timeline list
 - tapping a card can continue into the existing mobile reading flow
 - no split-pane close-on-blank-space interaction required on mobile
 
@@ -131,14 +135,14 @@ This keeps desktop and tablet as the primary focus for the board experience with
 ## Risks
 
 - today's boundary depends on timezone handling; client and server behavior must not disagree silently
-- client-side filtering may need more fetched rows to ensure enough "today" results are visible
+- timeline ordering by `published_at` is not sufficient for a collection-time board, so the API must honor collection bounds and sorting explicitly
 - reusing existing detail components inside a new split layout may expose assumptions tied to the current reader list
 
 ## Verification Targets
 
 Minimum verification for implementation:
 
-- sidebar shows `今日看板` below `智能列表`
+- sidebar shows `今日收录` below `智能列表`
 - board only contains entries that match today's rule
 - unread entries render before read entries
 - read entries use weakened read styling

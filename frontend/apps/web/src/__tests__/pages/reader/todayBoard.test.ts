@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import type { EntryWithState } from '@glean/types'
-import { getEffectiveEntryTimestamp, buildTodayBoardEntries } from '@/pages/reader/shared/todayBoard'
+import {
+  getEffectiveEntryTimestamp,
+  buildTodayBoardEntries,
+  getTodayCollectionRange,
+} from '@/pages/reader/shared/todayBoard'
 
 function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
   return {
@@ -35,6 +39,15 @@ function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
 }
 
 describe('todayBoard helpers', () => {
+  it('builds an inclusive-exclusive local day range for collection queries', () => {
+    const range = getTodayCollectionRange(new Date('2026-04-10T12:34:56+08:00'))
+
+    expect(range).toEqual({
+      collected_after: '2026-04-09T16:00:00.000Z',
+      collected_before: '2026-04-10T16:00:00.000Z',
+    })
+  })
+
   it('prefers published_at over ingested_at when choosing the effective timestamp', () => {
     const entry = makeEntry({
       published_at: '2026-04-09T23:00:00.000Z',

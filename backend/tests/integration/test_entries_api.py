@@ -127,6 +127,69 @@ class TestListEntries:
         assert len(data["items"]) >= 2
 
     @pytest.mark.asyncio
+    async def test_list_entries_today_board_filters_by_collection_time(
+        self,
+        client: AsyncClient,
+        auth_headers,
+        db_session: AsyncSession,
+        test_feed,
+        test_subscription,
+    ):
+        """Today-board view should filter and sort by collection time, not publication time."""
+        from glean_database.models.entry import Entry
+
+        entries = [
+            Entry(
+                feed_id=test_feed.id,
+                title="Collected Today, Published Yesterday",
+                url="https://example.com/entry/today-1",
+                content="Collected today",
+                published_at=datetime(2026, 4, 9, 10, 0, tzinfo=UTC),
+                ingested_at=datetime(2026, 4, 10, 7, 0, tzinfo=UTC),
+            ),
+            Entry(
+                feed_id=test_feed.id,
+                title="Collected Today Latest",
+                url="https://example.com/entry/today-2",
+                content="Latest collected today",
+                published_at=datetime(2026, 4, 1, 10, 0, tzinfo=UTC),
+                ingested_at=datetime(2026, 4, 10, 9, 0, tzinfo=UTC),
+            ),
+            Entry(
+                feed_id=test_feed.id,
+                title="Collected Yesterday",
+                url="https://example.com/entry/yesterday",
+                content="Not part of today board",
+                published_at=datetime(2026, 4, 10, 8, 0, tzinfo=UTC),
+                ingested_at=datetime(2026, 4, 9, 23, 0, tzinfo=UTC),
+            ),
+        ]
+
+        for entry in entries:
+            db_session.add(entry)
+
+        await db_session.commit()
+
+        response = await client.get(
+            "/api/entries",
+            headers=auth_headers,
+            params={
+                "view": "today-board",
+                "collected_after": "2026-04-10T00:00:00Z",
+                "collected_before": "2026-04-11T00:00:00Z",
+            },
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+
+        assert [item["title"] for item in data["items"]] == [
+            "Collected Today Latest",
+            "Collected Today, Published Yesterday",
+        ]
+        assert all(item["ingested_at"].startswith("2026-04-10T") for item in data["items"])
+
+    @pytest.mark.asyncio
     async def test_list_entries_unauthorized(self, client: AsyncClient):
         """Test listing entries without authentication."""
         response = await client.get("/api/entries")

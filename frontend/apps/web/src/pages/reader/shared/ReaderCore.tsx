@@ -24,7 +24,7 @@ import {
 import { TodayBoard } from './components/TodayBoard'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
-import { buildTodayBoardEntries } from './todayBoard'
+import { buildTodayBoardEntries, getTodayCollectionRange } from './todayBoard'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
@@ -150,10 +150,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Computed value: whether we're using smart sorting (by preference score vs timeline)
   const usesSmartSorting = isSmartView || filterType === 'smart'
+  const todayCollectionRange = isTodayBoardView ? getTodayCollectionRange() : undefined
 
   const getFilterParams = () => {
     if (isTodayBoardView) {
-      return {}
+      return todayCollectionRange ?? {}
     }
 
     switch (filterType) {
@@ -185,7 +186,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     // - 'smart': sorted by preference_score (descending)
     // - 'timeline': sorted by published_at (descending)
     // Both 'smart' and 'unread' filters use is_read: false, but differ in sort order
-    view: usesSmartSorting ? 'smart' : 'timeline',
+    view: isTodayBoardView ? 'today-board' : usesSmartSorting ? 'smart' : 'timeline',
   })
 
   const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
@@ -788,7 +789,28 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
   }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (isTodayBoardView && !isMobile) {
+  if (isTodayBoardView) {
+    if (isMobile && selectedEntryId) {
+      if (isLoadingEntry && !resolvedSelectedEntry) {
+        return <ArticleReaderSkeleton />
+      }
+
+      if (resolvedSelectedEntry) {
+        return (
+          <ArticleReader
+            entry={resolvedSelectedEntry}
+            onClose={() => {
+              window.dispatchEvent(new CustomEvent('hideArticleReader'))
+              clearSelectedEntry(true)
+            }}
+            isFullscreen={false}
+            onToggleFullscreen={() => undefined}
+            showCloseButton
+          />
+        )
+      }
+    }
+
     return (
       <div className="flex h-full min-w-0">
         {isLoading ? (
@@ -808,19 +830,23 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         ) : (
           <TodayBoard
             entries={todayBoardEntries}
-            selectedEntryId={selectedEntryId}
+            selectedEntryId={isMobile ? null : selectedEntryId}
             onSelectEntry={handleSelectEntry}
             onCloseDetail={() => clearSelectedEntry(true)}
-            renderDetail={(entry) => (
-              <ArticleReader
-                entry={selectedEntryId === entry.id && resolvedSelectedEntry ? resolvedSelectedEntry : entry}
-                onClose={() => clearSelectedEntry(true)}
-                isFullscreen={isFullscreen}
-                onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-                showCloseButton
-                showFullscreenButton
-              />
-            )}
+            renderDetail={
+              isMobile
+                ? undefined
+                : (entry) => (
+                    <ArticleReader
+                      entry={selectedEntryId === entry.id && resolvedSelectedEntry ? resolvedSelectedEntry : entry}
+                      onClose={() => clearSelectedEntry(true)}
+                      isFullscreen={isFullscreen}
+                      onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                      showCloseButton
+                      showFullscreenButton
+                    />
+                  )
+            }
           />
         )}
       </div>

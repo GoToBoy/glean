@@ -7,6 +7,7 @@ Provides endpoints for reading and managing feed entries.
 import asyncio
 from contextlib import suppress
 from typing import Annotated
+from datetime import datetime
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -50,9 +51,11 @@ async def list_entries(
     is_read: bool | None = None,
     is_liked: bool | None = None,
     read_later: bool | None = None,
+    collected_after: datetime | None = Query(None),
+    collected_before: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    view: str = Query("timeline", regex="^(timeline|smart)$"),
+    view: str = Query("timeline", regex="^(timeline|smart|today-board)$"),
 ) -> EntryListResponse:
     """
     Get entries with filtering and pagination.
@@ -66,9 +69,11 @@ async def list_entries(
         is_read: Optional filter by read status.
         is_liked: Optional filter by liked status.
         read_later: Optional filter by read later status.
+        collected_after: Optional inclusive lower bound for collection time filtering.
+        collected_before: Optional exclusive upper bound for collection time filtering.
         page: Page number (1-indexed).
         per_page: Items per page (max 100).
-        view: View mode ("timeline" or "smart"). Smart view sorts by preference score.
+        view: View mode ("timeline", "smart", or "today-board").
 
     Returns:
         Paginated list of entries.
@@ -80,6 +85,8 @@ async def list_entries(
         is_read=is_read,
         is_liked=is_liked,
         read_later=read_later,
+        collected_after=collected_after,
+        collected_before=collected_before,
         page=page,
         per_page=per_page,
         view=view,

@@ -61,9 +61,9 @@
     "goToSettings": "前往设置"
   },
   "todayBoard": {
-    "title": "今日看板",
-    "description": "汇总所有订阅的今日内容",
-    "empty": "今天还没有新的内容"
+    "title": "今日收录",
+    "description": "按收录时间汇总今天进入 Glean 的内容",
+    "empty": "今天还没有新收录"
   },
   "empty": {
     "selectArticle": "选择文章",

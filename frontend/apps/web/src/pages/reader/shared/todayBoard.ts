@@ -6,6 +6,19 @@ export interface TodayBoardEntry extends EntryWithState {
   collection_timestamp: Date
 }
 
+export function getTodayCollectionRange(now: Date = new Date()) {
+  const start = new Date(now)
+  start.setHours(0, 0, 0, 0)
+
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  return {
+    collected_after: start.toISOString(),
+    collected_before: end.toISOString(),
+  }
+}
+
 function parseTimestamp(value: string | null | undefined): Date | null {
   if (!value) return null
   const date = new Date(value)

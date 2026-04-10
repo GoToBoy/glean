@@ -61,9 +61,9 @@
     "goToSettings": "Go to Settings"
   },
   "todayBoard": {
-    "title": "Today Board",
-    "description": "A daily rollup across all subscriptions",
-    "empty": "No new items for today"
+    "title": "Today's Intake",
+    "description": "Items collected today across all subscriptions",
+    "empty": "Nothing collected today yet"
   },
   "empty": {
     "selectArticle": "Select an article",

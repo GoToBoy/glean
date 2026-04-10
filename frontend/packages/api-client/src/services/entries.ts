@@ -28,9 +28,11 @@ export class EntryService {
     is_read?: boolean
     is_liked?: boolean
     read_later?: boolean
+    collected_after?: string
+    collected_before?: string
     page?: number
     per_page?: number
-    view?: 'timeline' | 'smart'
+    view?: 'timeline' | 'smart' | 'today-board'
   }, options?: { signal?: AbortSignal }): Promise<EntryListResponse> {
     return this.client.get<EntryListResponse>('/entries', { params, signal: options?.signal })
   }

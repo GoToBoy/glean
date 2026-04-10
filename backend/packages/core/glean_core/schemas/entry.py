@@ -29,6 +29,7 @@ class EntryResponse(BaseModel):
     content: str | None
     summary: str | None
     published_at: datetime | None
+    ingested_at: datetime | None
     created_at: datetime
     # User-specific fields (from UserEntry)
     is_read: bool = False

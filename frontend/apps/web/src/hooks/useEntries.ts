@@ -22,9 +22,11 @@ export interface EntryFilters {
   is_read?: boolean
   is_liked?: boolean
   read_later?: boolean
+  collected_after?: string
+  collected_before?: string
   page?: number
   per_page?: number
-  view?: 'timeline' | 'smart'
+  view?: 'timeline' | 'smart' | 'today-board'
 }
 
 export type InfiniteEntryFilters = Omit<EntryFilters, 'page'>

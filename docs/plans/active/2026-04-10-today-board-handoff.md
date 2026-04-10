@@ -2,8 +2,9 @@
 
 ## What Changed
 
-- Added a new `今日看板` reader entry in the feed sidebar below `智能列表`.
+- Added a new `今日收录` reader entry in the feed sidebar below `智能列表`.
 - Added a dedicated `view=today-board` reader mode with a desktop-first board layout instead of the standard narrow list pane.
+- Updated `today-board` fetches to use explicit collection-time bounds against `/entries` rather than relying on the default timeline page.
 - Implemented explicit today-board data shaping in a helper that:
   - prefers `ingested_at`
   - falls back to `created_at`
@@ -18,8 +19,9 @@
   - weakened styling for read entries
   - collapsible right-side detail panel
   - blank-area click to close detail
-- Added i18n strings for the new sidebar entry and today-board header/empty state.
+- Added i18n strings for the new sidebar entry and the collection-time header/empty state copy.
 - Added focused tests for helper behavior and blank-space close interaction.
+- Added a regression test proving mobile `today-board` no longer falls back to the normal entry list.
 
 ## Files Touched
 
@@ -31,7 +33,14 @@
 - `frontend/apps/web/src/pages/reader/shared/components/TodayBoard.tsx`
 - `frontend/apps/web/src/__tests__/pages/reader/todayBoard.test.ts`
 - `frontend/apps/web/src/__tests__/pages/reader/todayBoard.interaction.test.tsx`
+- `frontend/apps/web/src/__tests__/pages/reader/ReaderCore.todayBoard.test.tsx`
 - `frontend/apps/web/src/__tests__/setup.ts`
+- `frontend/apps/web/src/hooks/useEntries.ts`
+- `frontend/packages/api-client/src/services/entries.ts`
+- `backend/apps/api/glean_api/routers/entries.py`
+- `backend/packages/core/glean_core/schemas/entry.py`
+- `backend/packages/core/glean_core/services/entry_service.py`
+- `backend/tests/integration/test_entries_api.py`
 - `frontend/packages/i18n/src/locales/en/feeds.json`
 - `frontend/packages/i18n/src/locales/en/reader.json`
 - `frontend/packages/i18n/src/locales/zh-CN/feeds.json`
@@ -48,9 +57,10 @@
 
 ## Known Gaps
 
-- The mobile branch intentionally keeps the existing single-column reading flow rather than implementing a split-pane board.
+- The mobile branch now keeps the existing single-column reading flow, but uses the same `today-board` data path as desktop.
 - Sidebar rendering for the new entry is covered by typecheck and manual code-path review, not by a dedicated component test.
 - Feed summaries come from the subscription sync cache, not a board-specific API payload.
+- Backend integration test coverage was added but could not be executed locally in this session because the local Python env is missing `sqlalchemy`.
 
 ## Reviewer Focus
 
