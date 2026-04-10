@@ -44,12 +44,17 @@ This keeps the feature conceptually distinct from Smart recommendations and from
 
 The `今日看板` screen uses a dedicated aggregated layout:
 
-- center area: scrollable dense card-list
-- right area: collapsible detail panel
+- full main content area: scrollable card-list board
+- far-right area: collapsible detail panel
 
-The center area remains the primary surface. Opening detail must not replace or hide the board. The user should still be able to keep scanning and switching cards while the detail panel is open.
+The board remains the primary surface. Opening detail must not replace or hide the board. The user should still be able to keep scanning and switching cards while the detail panel is open.
 
 The card-list should favor information density over large magazine-style tiles. The intended feel is "overview first, inspect second."
+
+Responsive desktop behavior:
+
+- when detail is closed, the board uses the full content area and can show multiple card columns
+- when detail opens, the far-right detail bar expands and the board compresses to a single-column card list
 
 ### Card Content
 
@@ -83,22 +88,23 @@ The first implementation should reuse as much of the existing article-detail sur
 
 `今日看板` membership is determined per entry using:
 
-1. `published_at` if present
-2. otherwise `ingested_at`
+1. `ingested_at` if present
+2. otherwise `created_at`
+3. otherwise `published_at`
 
 An entry belongs to the board when the chosen timestamp falls within the user's current local day.
 
 This matches the desired product meaning:
 
-- prefer "published today" when source metadata is available
-- still surface newly ingested items that lack a publish timestamp
+- prefer "collected into today's board today"
+- still fall back safely when the ingest timestamp is missing
 
 ### Sorting
 
 Entries are ordered in two stages:
 
 1. unread entries first, read entries second
-2. within each group, newest first by the same effective timestamp used for today membership
+2. within each group, newest first by the same collection timestamp used for today membership
 
 This preserves "what still needs attention" while keeping the day grouped as one coherent board.
 

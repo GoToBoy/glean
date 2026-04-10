@@ -4,7 +4,7 @@
 
 **Goal:** Build a dedicated `今日看板` reader view that aggregates today's entries across all subscriptions into a dense card-list board with a collapsible desktop detail panel.
 
-**Architecture:** Reuse the existing entry list plus subscription-sync cache instead of adding a board-specific API surface, then branch the reader UI with a dedicated `today-board` mode instead of forcing the timeline list to impersonate a board. Keep the board's data shaping explicit in a focused helper so today's filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
+**Architecture:** Reuse the existing entry list plus subscription-sync cache instead of adding a board-specific API surface, then branch the reader UI with a dedicated `today-board` mode instead of forcing the timeline list to impersonate a board. Keep the board's data shaping explicit in a focused helper so collection-time filtering, timestamp precedence, unread-first ordering, and detail-open state stay inspectable and testable.
 
 **Tech Stack:** TypeScript, React 18, React Router, TanStack Query, Zustand, Tailwind CSS, Vitest
 

@@ -3,6 +3,7 @@ import type { EntryWithState } from '@glean/types'
 export interface TodayBoardEntry extends EntryWithState {
   feed_description: string | null
   effective_timestamp: Date
+  collection_timestamp: Date
 }
 
 function parseTimestamp(value: string | null | undefined): Date | null {
@@ -16,6 +17,14 @@ export function getEffectiveEntryTimestamp(entry: EntryWithState): Date | null {
     parseTimestamp(entry.published_at) ??
     parseTimestamp(entry.ingested_at) ??
     parseTimestamp(entry.created_at)
+  )
+}
+
+export function getCollectionTimestamp(entry: EntryWithState): Date | null {
+  return (
+    parseTimestamp(entry.ingested_at) ??
+    parseTimestamp(entry.created_at) ??
+    parseTimestamp(entry.published_at)
   )
 }
 
@@ -39,15 +48,18 @@ export function buildTodayBoardEntries(
 
   return entries
     .map((entry) => {
-      const effectiveTimestamp = getEffectiveEntryTimestamp(entry)
-      if (!effectiveTimestamp || !isSameLocalDay(effectiveTimestamp, now)) {
+      const collectionTimestamp = getCollectionTimestamp(entry)
+      if (!collectionTimestamp || !isSameLocalDay(collectionTimestamp, now)) {
         return null
       }
+
+      const effectiveTimestamp = getEffectiveEntryTimestamp(entry) ?? collectionTimestamp
 
       return {
         ...entry,
         feed_description: getFeedDescription(entry.feed_id) ?? null,
         effective_timestamp: effectiveTimestamp,
+        collection_timestamp: collectionTimestamp,
       }
     })
     .filter((entry): entry is TodayBoardEntry => entry !== null)
@@ -56,6 +68,6 @@ export function buildTodayBoardEntries(
         return left.is_read ? 1 : -1
       }
 
-      return right.effective_timestamp.getTime() - left.effective_timestamp.getTime()
+      return right.collection_timestamp.getTime() - left.collection_timestamp.getTime()
     })
 }

@@ -69,10 +69,14 @@ describe('TodayBoard interaction', () => {
 
     TodayBoardHarness({ entries })
 
+    expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
+
     fireEvent.click(screen.getByRole('button', { name: /first entry/i }))
     expect(screen.getByTestId('today-board-detail')).toHaveTextContent('First entry')
+    expect(screen.getByTestId('today-board-grid').className).toContain('grid-cols-1')
 
     fireEvent.click(screen.getByTestId('today-board-blank-space'))
     expect(screen.queryByTestId('today-board-detail')).not.toBeInTheDocument()
+    expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
   })
 })

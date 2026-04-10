@@ -64,7 +64,7 @@ describe('todayBoard helpers', () => {
     )
   })
 
-  it('keeps only today entries and sorts unread before read, newest first within each group', () => {
+  it('uses collection time for today membership and sorts unread before read, newest first within each group', () => {
     const now = new Date('2026-04-10T12:00:00+08:00')
 
     const results = buildTodayBoardEntries(
@@ -78,11 +78,15 @@ describe('todayBoard helpers', () => {
           id: 'unread-older',
           is_read: false,
           published_at: '2026-04-10T09:00:00+08:00',
+          ingested_at: '2026-04-10T09:00:00+08:00',
+          created_at: '2026-04-10T09:00:00+08:00',
         }),
         makeEntry({
           id: 'unread-newest',
           is_read: false,
           published_at: '2026-04-10T10:00:00+08:00',
+          ingested_at: '2026-04-10T10:00:00+08:00',
+          created_at: '2026-04-10T10:00:00+08:00',
         }),
         makeEntry({
           id: 'fallback-ingested',
@@ -108,6 +112,7 @@ describe('todayBoard helpers', () => {
       'unread-newest',
       'unread-older',
       'fallback-ingested',
+      'published-yesterday-ingested-today',
       'read-newest',
     ])
     expect(results.every((entry) => entry.feed_description === 'Feed summary text')).toBe(true)

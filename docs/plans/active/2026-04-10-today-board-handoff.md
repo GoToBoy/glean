@@ -5,14 +5,16 @@
 - Added a new `今日看板` reader entry in the feed sidebar below `智能列表`.
 - Added a dedicated `view=today-board` reader mode with a desktop-first board layout instead of the standard narrow list pane.
 - Implemented explicit today-board data shaping in a helper that:
-  - prefers `published_at`
-  - falls back to `ingested_at`
-  - then falls back to `created_at`
+  - prefers `ingested_at`
+  - falls back to `created_at`
+  - then falls back to `published_at`
   - filters to the current local day
   - sorts unread entries ahead of read entries
   - hydrates feed summaries from the cached subscription list
 - Added a `TodayBoard` component with:
   - dense card-list presentation
+  - full-width multi-column overview when detail is closed
+  - single-column list compression when detail is open
   - weakened styling for read entries
   - collapsible right-side detail panel
   - blank-area click to close detail

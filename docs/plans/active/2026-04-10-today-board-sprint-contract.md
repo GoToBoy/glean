@@ -11,8 +11,9 @@ Add a `今日看板` reader mode that aggregates today's entries across all subs
 - Reuse the existing subscription sync cache to resolve feed descriptions for board cards.
 - Add a dedicated desktop today-board layout with:
   - unread-first then read ordering
-  - today's effective-date filtering
+  - today's collection-time filtering
   - right-side detail panel that closes on blank-space clicks
+  - multi-column board when detail is closed, single-column board when detail is open
 - Keep mobile behavior simple and reuse existing reading flow.
 - Add focused tests for date selection, sorting, and detail-panel interaction.
 - Exclude Smart scoring changes, per-feed today views, and a mobile split-pane implementation.
@@ -20,7 +21,7 @@ Add a `今日看板` reader mode that aggregates today's entries across all subs
 ## Done Means
 
 - The sidebar renders a `今日看板` entry below `智能列表`.
-- Selecting `今日看板` shows only today's aggregated entries using `published_at` first, then `ingested_at`, then `created_at`.
+- Selecting `今日看板` shows only today's aggregated entries using `ingested_at` first, then `created_at`, then `published_at`.
 - The board shows feed title, feed summary, article summary, time, and feed icon when available.
 - Unread entries render before read entries, and read entries use weakened read-state styling.
 - Clicking a card opens the detail panel without removing the board.
@@ -36,7 +37,7 @@ Add a `今日看板` reader mode that aggregates today's entries across all subs
 
 ## Evaluator Focus
 
-- Check that today's membership uses the correct timestamp precedence.
+- Check that today's membership uses collection-time precedence instead of publication precedence.
 - Check that read/unread grouping is stable and visually reflected.
 - Check that detail open/close behavior works from card clicks and board blank-space clicks.
 - Check that Smart and timeline flows were not regressed by new reader view branching.

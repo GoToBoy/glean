@@ -4,15 +4,15 @@
 
 - Pass: sidebar now has a `今日看板` entry below `智能列表`.
 - Pass: desktop `today-board` uses a dedicated board layout with persistent board visibility while detail is open.
-- Pass: today membership uses `published_at -> ingested_at -> created_at`.
+- Pass: today membership now uses `ingested_at -> created_at -> published_at`.
 - Pass: read items are grouped after unread items and rendered with weaker visual treatment.
 - Pass: focused tests for timestamp precedence, sorting, and blank-space close interaction were added and pass.
 
 ## Behavioral Correctness
 
 - Evidence from `todayBoard.test.ts` shows:
-  - `published_at` wins over ingest timestamps when present
-  - ingest and created fallback logic works when publish time is absent
+  - collection-time precedence is `ingested_at -> created_at -> published_at`
+  - publication time no longer controls board inclusion when an item was collected today
   - unread-first sorting and local-day filtering work together
 - Evidence from `todayBoard.interaction.test.tsx` shows card click opens detail and board blank-space click closes it.
 - Manual code-path review shows desktop detail rendering reuses `ArticleReader`, so the board does not need a parallel detail implementation.

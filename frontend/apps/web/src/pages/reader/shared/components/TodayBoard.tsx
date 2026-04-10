@@ -23,11 +23,17 @@ export function TodayBoard({
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null
+  const gridClassName = selectedEntry
+    ? 'grid grid-cols-1 gap-3 p-3'
+    : 'grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3'
 
   return (
     <div className="flex h-full min-w-0 bg-[linear-gradient(180deg,rgba(250,248,242,0.9),rgba(255,255,255,0.96))]">
       <div
-        className="min-w-0 flex-1 overflow-y-auto"
+        className={cn(
+          'min-w-0 overflow-y-auto transition-[width,max-width] duration-200',
+          selectedEntry ? 'flex-1' : 'w-full flex-1'
+        )}
         data-testid="today-board-blank-space"
         onClick={() => onCloseDetail()}
       >
@@ -46,7 +52,13 @@ export function TodayBoard({
             <p className="text-muted-foreground text-sm">{t('todayBoard.empty')}</p>
           </div>
         ) : (
-          <div className="space-y-3 p-3">
+          <div
+            data-testid="today-board-grid"
+            className={cn(
+              gridClassName,
+              selectedEntry ? 'max-w-2xl' : 'max-w-none'
+            )}
+          >
             {entries.map((entry) => {
               const isSelected = entry.id === selectedEntryId
               return (
