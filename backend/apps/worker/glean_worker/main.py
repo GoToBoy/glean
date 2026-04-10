@@ -7,7 +7,6 @@ cron jobs, and Redis connection settings.
 
 from collections.abc import Awaitable, Callable
 from typing import Any, cast
-from zoneinfo import ZoneInfo
 
 from arq import cron
 from arq.connections import RedisSettings
@@ -28,6 +27,7 @@ from .tasks import (
     subscription_cleanup,
     translation,
 )
+from .timezone import resolve_worker_timezone
 
 # Initialize logging system
 init_logging()
@@ -175,4 +175,4 @@ class WorkerSettings:
     job_timeout = settings.worker_job_timeout_seconds
     keep_result = 3600
     log_results = False
-    timezone = ZoneInfo(settings.worker_timezone)
+    timezone = resolve_worker_timezone(settings.worker_timezone)

@@ -228,6 +228,15 @@ def test_midnight_supplement_uses_configured_worker_timezone(monkeypatch: pytest
     assert _should_run_midnight_supplement(datetime(2026, 4, 9, 15, 0, tzinfo=UTC)) is False
 
 
+def test_midnight_supplement_falls_back_to_utc_when_timezone_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.setattr("glean_worker.tasks.feed_fetcher.settings.worker_timezone", "Mars/Olympus")
+
+    assert _should_run_midnight_supplement(datetime(2026, 4, 10, 0, 0, tzinfo=UTC)) is True
+    assert _should_run_midnight_supplement(datetime(2026, 4, 10, 1, 0, tzinfo=UTC)) is False
+
+
 @pytest.mark.asyncio
 async def test_fetch_all_feeds_midnight_supplement_queues_feed_without_success_today():
     midnight_feed = MagicMock()

@@ -10,6 +10,7 @@ dependencies = [
     "structlog>=24.1.0",
     "pydantic-settings>=2.2.0",
     "loguru>=0.7.0",
+    "tzdata>=2025.2",
     "glean-database",
     "glean-rss",
     "glean-vector",

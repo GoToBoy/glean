@@ -10,7 +10,6 @@ import math
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
-from zoneinfo import ZoneInfo
 
 import httpx
 from arq import Retry
@@ -32,6 +31,7 @@ from glean_database.session import get_session_context
 from glean_rss import fetch_feed, parse_feed, postprocess_html
 
 from ..config import settings
+from ..timezone import resolve_worker_timezone
 from .content_extraction import should_backfill_entry
 from .feed_fetch_progress import (
     advance_feed_fetch_stage,
@@ -64,14 +64,14 @@ def _midnight_guard_minutes(interval_minutes: int) -> int:
 
 def _local_day_start_utc(now_utc: datetime) -> datetime:
     """Convert the current local midnight back to UTC for day-bounded comparisons."""
-    local_now = now_utc.astimezone(ZoneInfo(settings.worker_timezone))
+    local_now = now_utc.astimezone(resolve_worker_timezone(settings.worker_timezone))
     local_midnight = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
     return local_midnight.astimezone(UTC)
 
 
 def _should_run_midnight_supplement(now_utc: datetime) -> bool:
     """Return True when the current scheduled tick is the local midnight batch."""
-    local_now = now_utc.astimezone(ZoneInfo(settings.worker_timezone))
+    local_now = now_utc.astimezone(resolve_worker_timezone(settings.worker_timezone))
     return local_now.hour == 0 and local_now.minute == 0
 
 
