@@ -63,7 +63,10 @@
   "todayBoard": {
     "title": "Today's Intake",
     "description": "Items collected today across all subscriptions",
-    "empty": "Nothing collected today yet"
+    "empty": "Nothing collected today yet",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "unknownFeed": "Unknown feed"
   },
   "empty": {
     "selectArticle": "Select an article",

@@ -31,6 +31,7 @@ const ENTRY_ROW_ESTIMATED_HEIGHT = 144
 const VIRTUALIZATION_THRESHOLD = 80
 const VIRTUALIZATION_OVERSCAN = 8
 const ENTRY_FADE_ANIMATION_LIMIT = 24
+const AUTO_MARK_READ_DELAY_MS = 2000
 
 export function calculateVirtualWindow(params: {
   totalCount: number
@@ -115,6 +116,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const pendingTranslationEntryIdsRef = useRef<Set<string>>(new Set())
   const translatedEntryIdsRef = useRef<Set<string>>(new Set())
   const listTranslationSessionRef = useRef(0)
+  const autoMarkedEntryIdsRef = useRef<Set<string>>(new Set())
   const [isListTranslationActive, setIsListTranslationActive] = useState(
     user?.settings?.list_translation_auto_enabled ?? false
   )
@@ -189,7 +191,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     view: isTodayBoardView ? 'today-board' : usesSmartSorting ? 'smart' : 'timeline',
   })
 
-  const rawEntries = entriesData?.pages.flatMap((page) => page.items) || []
+  const rawEntries = useMemo(
+    () => entriesData?.pages.flatMap((page) => page.items) ?? [],
+    [entriesData?.pages]
+  )
   const feedDescriptionById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const subscription of subscriptions) {
@@ -305,6 +310,28 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [visibleEntries])
   const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
   const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
+
+  useEffect(() => {
+    if (!selectedEntryId || !resolvedSelectedEntry || resolvedSelectedEntry.is_read) return
+    if (autoMarkedEntryIdsRef.current.has(selectedEntryId)) return
+
+    const entryId = selectedEntryId
+    const timer = window.setTimeout(() => {
+      autoMarkedEntryIdsRef.current.add(entryId)
+      void updateMutation
+        .mutateAsync({
+          entryId,
+          data: { is_read: true },
+        })
+        .catch(() => {
+          autoMarkedEntryIdsRef.current.delete(entryId)
+        })
+    }, AUTO_MARK_READ_DELAY_MS)
+
+    return () => {
+      window.clearTimeout(timer)
+    }
+  }, [resolvedSelectedEntry, selectedEntryId, updateMutation])
 
   const shouldVirtualize = visibleEntries.length >= VIRTUALIZATION_THRESHOLD
   const virtualizedList = useMemo(() => {
@@ -729,7 +756,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return () => document.removeEventListener('keydown', handleKeyboardNavigation)
   }, [handleKeyboardNavigation])
 
-  // Handle entry selection - automatically mark as read
+  // Handle entry selection. A separate effect marks unread entries as read after
+  // they remain open briefly, so quick peeks do not immediately consume them.
   const handleSelectEntry = async (entry: EntryWithState) => {
     // Seed detail cache immediately for perceived instant open.
     queryClient.setQueryData(entryKeys.detail(entry.id), (old: EntryWithState | undefined) => ({
@@ -755,14 +783,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         preferenceScore: entry.preference_score,
         publishedAt: entry.published_at,
       }
-    }
-
-    // Auto-mark as read when selecting an unread entry
-    if (!entry.is_read) {
-      await updateMutation.mutateAsync({
-        entryId: entry.id,
-        data: { is_read: true },
-      })
     }
   }
 

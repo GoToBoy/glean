@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { TodayBoard } from '@/pages/reader/shared/components/TodayBoard'
 import { buildTodayBoardEntries } from '@/pages/reader/shared/todayBoard'
@@ -62,7 +62,51 @@ function TodayBoardHarness({ entries }: { entries: EntryWithState[] }) {
 }
 
 describe('TodayBoard interaction', () => {
-  it('opens detail on card click, keeps the board layout growing, and closes detail when blank board space is clicked', () => {
+  afterEach(() => {
+    cleanup()
+  })
+
+  it('groups card-mode entries by feed, shows counts, and keeps read entries collapsed by default', () => {
+    const entries = [
+      makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),
+      makeEntry({ id: 'unread-2', title: 'Unread two', ingested_at: '2026-04-10T10:00:00+08:00' }),
+      makeEntry({ id: 'unread-3', title: 'Unread three', ingested_at: '2026-04-10T09:00:00+08:00' }),
+      makeEntry({ id: 'unread-4', title: 'Unread four', ingested_at: '2026-04-10T08:00:00+08:00' }),
+      makeEntry({ id: 'read-1', title: 'Read one', is_read: true, ingested_at: '2026-04-10T07:00:00+08:00' }),
+    ]
+
+    TodayBoardHarness({ entries })
+
+    expect(screen.getByText('4 / 5')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /unread one/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /unread two/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /unread three/i })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /unread four/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Read one')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Expand' })).toHaveClass('text-center')
+  })
+
+  it('expands collapsed feed groups with lightweight text controls', () => {
+    const entries = [
+      makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),
+      makeEntry({ id: 'unread-2', title: 'Unread two', ingested_at: '2026-04-10T10:00:00+08:00' }),
+      makeEntry({ id: 'unread-3', title: 'Unread three', ingested_at: '2026-04-10T09:00:00+08:00' }),
+      makeEntry({ id: 'unread-4', title: 'Unread four', ingested_at: '2026-04-10T08:00:00+08:00' }),
+      makeEntry({ id: 'read-1', title: 'Read one', is_read: true, ingested_at: '2026-04-10T07:00:00+08:00' }),
+    ]
+
+    TodayBoardHarness({ entries })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+
+    expect(screen.getByRole('button', { name: /unread four/i })).toBeInTheDocument()
+    expect(screen.getByText('Read one')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument()
+  })
+
+  it('opens detail on card click, changes the left side to a list, scrolls to the selected item, and closes detail when blank space is clicked', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
     const entries = [
       makeEntry({ id: 'entry-1', title: 'First entry' }),
       makeEntry({ id: 'entry-2', title: 'Second entry' }),
@@ -71,17 +115,19 @@ describe('TodayBoard interaction', () => {
     TodayBoardHarness({ entries })
 
     expect(screen.getByTestId('today-board-layout').className).toContain('flex-1')
-    expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
+    expect(screen.getByTestId('today-board-card-board').className).toContain('columns-1')
 
     fireEvent.click(screen.getByRole('button', { name: /first entry/i }))
     expect(screen.getByTestId('today-board-detail')).toHaveTextContent('First entry')
-    expect(screen.getByTestId('today-board-grid').className).toContain('grid-cols-1')
+    expect(screen.getByTestId('today-board-detail-list')).toBeInTheDocument()
+    expect(screen.queryByTestId('today-board-card-board')).not.toBeInTheDocument()
     expect(screen.getByTestId('today-board-blank-space')).toHaveStyle({ width: '360px' })
     expect(screen.getByTestId('today-board-detail-pane').className).toContain('flex-1')
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
 
     fireEvent.click(screen.getByTestId('today-board-blank-space'))
     expect(screen.queryByTestId('today-board-detail')).not.toBeInTheDocument()
-    expect(screen.getByTestId('today-board-grid').className).toContain('xl:grid-cols-3')
+    expect(screen.getByTestId('today-board-card-board')).toBeInTheDocument()
   })
 
   it('renders translated card text and exposes a translation toggle', () => {

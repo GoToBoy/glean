@@ -63,7 +63,10 @@
   "todayBoard": {
     "title": "今日收录",
     "description": "按收录时间汇总今天进入 Glean 的内容",
-    "empty": "今天还没有新收录"
+    "empty": "今天还没有新收录",
+    "expand": "展开",
+    "collapse": "收起",
+    "unknownFeed": "未知订阅"
   },
   "empty": {
     "selectArticle": "选择文章",

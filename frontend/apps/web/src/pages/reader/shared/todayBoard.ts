@@ -6,6 +6,21 @@ export interface TodayBoardEntry extends EntryWithState {
   collection_timestamp: Date
 }
 
+export interface TodayBoardFeedGroup {
+  feedId: string
+  feedTitle: string | null
+  feedDescription: string | null
+  feedIconUrl: string | null
+  unreadCount: number
+  totalCount: number
+  entries: TodayBoardEntry[]
+  visibleEntries: TodayBoardEntry[]
+  isExpanded: boolean
+  isCollapsible: boolean
+}
+
+const DEFAULT_VISIBLE_UNREAD_PER_FEED = 3
+
 export function getTodayCollectionRange(now: Date = new Date()) {
   const start = new Date(now)
   start.setHours(0, 0, 0, 0)
@@ -82,5 +97,66 @@ export function buildTodayBoardEntries(
       }
 
       return right.collection_timestamp.getTime() - left.collection_timestamp.getTime()
+    })
+}
+
+export function buildTodayBoardGroups(
+  entries: TodayBoardEntry[],
+  options: {
+    expandedFeedIds?: Set<string>
+    selectedEntryId?: string | null
+    visibleUnreadLimit?: number
+  } = {}
+): TodayBoardFeedGroup[] {
+  const expandedFeedIds = options.expandedFeedIds ?? new Set<string>()
+  const selectedEntryId = options.selectedEntryId ?? null
+  const visibleUnreadLimit = options.visibleUnreadLimit ?? DEFAULT_VISIBLE_UNREAD_PER_FEED
+  const groupsByFeed = new Map<string, TodayBoardEntry[]>()
+
+  for (const entry of entries) {
+    const groupEntries = groupsByFeed.get(entry.feed_id) ?? []
+    groupEntries.push(entry)
+    groupsByFeed.set(entry.feed_id, groupEntries)
+  }
+
+  return Array.from(groupsByFeed.entries())
+    .map(([feedId, groupEntries]) => {
+      const entriesForFeed = [...groupEntries].sort((left, right) => {
+        if (left.is_read !== right.is_read) {
+          return left.is_read ? 1 : -1
+        }
+
+        return right.collection_timestamp.getTime() - left.collection_timestamp.getTime()
+      })
+      const unreadEntries = entriesForFeed.filter((entry) => !entry.is_read)
+      const isExpanded = expandedFeedIds.has(feedId)
+      const defaultVisibleEntries = unreadEntries.slice(0, visibleUnreadLimit)
+      const selectedEntry = selectedEntryId
+        ? entriesForFeed.find((entry) => entry.id === selectedEntryId)
+        : undefined
+      const visibleEntries =
+        isExpanded || entriesForFeed.length <= defaultVisibleEntries.length
+          ? entriesForFeed
+          : selectedEntry && !defaultVisibleEntries.some((entry) => entry.id === selectedEntry.id)
+            ? [...defaultVisibleEntries, selectedEntry]
+            : defaultVisibleEntries
+
+      return {
+        feedId,
+        feedTitle: entriesForFeed[0]?.feed_title ?? null,
+        feedDescription: entriesForFeed[0]?.feed_description ?? null,
+        feedIconUrl: entriesForFeed[0]?.feed_icon_url ?? null,
+        unreadCount: unreadEntries.length,
+        totalCount: entriesForFeed.length,
+        entries: entriesForFeed,
+        visibleEntries,
+        isExpanded,
+        isCollapsible: entriesForFeed.length > defaultVisibleEntries.length,
+      }
+    })
+    .sort((left, right) => {
+      const leftLatest = left.entries[0]?.collection_timestamp.getTime() ?? 0
+      const rightLatest = right.entries[0]?.collection_timestamp.getTime() ?? 0
+      return rightLatest - leftLatest
     })
 }

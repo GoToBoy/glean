@@ -1,13 +1,15 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
 
-const { todayBoardSpy, useInfiniteEntriesSpy, readerControllerState } = vi.hoisted(() => ({
+const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControllerState } =
+  vi.hoisted(() => ({
   todayBoardSpy: vi.fn((props: { entries: Array<{ id: string }> }) => (
     <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
   )),
   useInfiniteEntriesSpy: vi.fn(),
+  updateEntryStateSpy: vi.fn(),
   readerControllerState: {
     entryIdFromUrl: null as string | null,
     selectedEntryId: null as string | null,
@@ -84,8 +86,18 @@ vi.mock('@/hooks/useEntries', () => ({
       isFetchingNextPage: false,
     }
   },
-  useEntry: () => ({ data: null, isLoading: false }),
-  useUpdateEntryState: () => ({ mutateAsync: vi.fn().mockResolvedValue(undefined) }),
+  useEntry: (entryId: string) => ({
+    data: entryId
+      ? makeEntry({
+          id: entryId,
+          is_read: false,
+          ingested_at: '2026-04-10T10:00:00+08:00',
+          created_at: '2026-04-10T10:00:00+08:00',
+        })
+      : null,
+    isLoading: false,
+  }),
+  useUpdateEntryState: () => ({ mutateAsync: updateEntryStateSpy }),
   entryKeys: {
     detail: (id: string) => ['entries', 'detail', id],
   },
@@ -166,6 +178,7 @@ describe('ReaderCore today-board route', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.clearAllMocks()
+    updateEntryStateSpy.mockResolvedValue(undefined)
     readerControllerState.entryIdFromUrl = null
     readerControllerState.selectedEntryId = null
   })
@@ -218,5 +231,50 @@ describe('ReaderCore today-board route', () => {
       }),
       expect.anything()
     )
+  })
+
+  it('does not mark a selected today-board entry read immediately after opening detail', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    expect(updateEntryStateSpy).not.toHaveBeenCalled()
+  })
+
+  it('marks a selected today-board entry read after the open delay', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(updateEntryStateSpy).toHaveBeenCalledWith({
+      entryId: 'today-entry',
+      data: { is_read: true },
+    })
   })
 })

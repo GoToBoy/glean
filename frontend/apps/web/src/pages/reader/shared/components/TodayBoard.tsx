@@ -2,9 +2,9 @@ import { format } from 'date-fns'
 import { Clock, Inbox, Languages } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import { cn } from '@glean/ui'
-import type { ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { stripHtmlTags } from '../../../../lib/html'
-import type { TodayBoardEntry } from '../todayBoard'
+import { buildTodayBoardGroups, type TodayBoardEntry } from '../todayBoard'
 
 interface TodayBoardProps {
   entries: TodayBoardEntry[]
@@ -35,9 +35,35 @@ export function TodayBoard({
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null
-  const gridClassName = selectedEntry
-    ? 'grid grid-cols-1 gap-3 p-3'
-    : 'grid grid-cols-1 gap-3 p-3 md:grid-cols-2 xl:grid-cols-3'
+  const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(() => new Set())
+  const selectedEntryRefs = useRef(new Map<string, HTMLButtonElement>())
+  const groups = useMemo(
+    () =>
+      buildTodayBoardGroups(entries, {
+        expandedFeedIds,
+        selectedEntryId,
+      }),
+    [entries, expandedFeedIds, selectedEntryId]
+  )
+
+  useEffect(() => {
+    if (!selectedEntryId || !selectedEntry) return
+    selectedEntryRefs.current
+      .get(selectedEntryId)
+      ?.scrollIntoView({ block: 'center' })
+  }, [selectedEntryId, selectedEntry])
+
+  const toggleFeed = (feedId: string) => {
+    setExpandedFeedIds((current) => {
+      const next = new Set(current)
+      if (next.has(feedId)) {
+        next.delete(feedId)
+      } else {
+        next.add(feedId)
+      }
+      return next
+    })
+  }
 
   return (
     <div
@@ -109,98 +135,16 @@ export function TodayBoard({
             <p className="text-muted-foreground text-sm">{t('todayBoard.empty')}</p>
           </div>
         ) : (
-          <div
-            data-testid="today-board-grid"
-            className={cn(
-              gridClassName,
-              selectedEntry ? 'max-w-none' : 'max-w-none'
-            )}
-          >
-            {entries.map((entry) => {
-              const isSelected = entry.id === selectedEntryId
-              const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
-              const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
-              return (
-                <button
-                  key={entry.id}
-                  type="button"
-                  data-entry-id={entry.id}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    onSelectEntry(entry)
-                  }}
-                  className={cn(
-                    'w-full rounded-2xl border px-4 py-3 text-left transition-all duration-200',
-                    'shadow-[0_1px_0_rgba(15,23,42,0.02)] hover:-translate-y-0.5 hover:shadow-[0_10px_30px_rgba(15,23,42,0.08)]',
-                    entry.is_read
-                      ? 'border-stone-200 bg-stone-100/85 text-stone-500'
-                      : 'border-amber-200/80 bg-white text-slate-900',
-                    isSelected && 'ring-primary/20 border-primary/40 ring-2'
-                  )}
-                >
-                  <div className="mb-2 flex items-start gap-3">
-                    {entry.feed_icon_url ? (
-                      <img
-                        src={entry.feed_icon_url}
-                        alt=""
-                        className="mt-0.5 h-9 w-9 rounded-xl object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="bg-muted mt-0.5 h-9 w-9 rounded-xl" />
-                    )}
-
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={cn(
-                          'mb-1 flex items-center gap-2 text-xs',
-                          entry.is_read ? 'text-stone-400' : 'text-amber-700'
-                        )}
-                      >
-                        <span className="truncate font-medium">{entry.feed_title || 'Unknown feed'}</span>
-                        <span className="text-muted-foreground/50">·</span>
-                        <span className="inline-flex items-center gap-1 tabular-nums">
-                          <Clock className="h-3 w-3" />
-                          {format(entry.effective_timestamp, 'HH:mm')}
-                        </span>
-                      </div>
-
-                      <h3
-                        className={cn(
-                          'mb-2 text-sm leading-6 sm:text-[15px]',
-                          entry.is_read ? 'text-stone-500' : 'font-semibold text-slate-900'
-                        )}
-                      >
-                        {translated?.title ?? entry.title}
-                      </h3>
-
-                      {summary && (
-                        <p
-                          className={cn(
-                            'mb-2 line-clamp-2 text-sm leading-6',
-                            entry.is_read ? 'text-stone-400' : 'text-slate-600'
-                          )}
-                        >
-                          {summary}
-                        </p>
-                      )}
-
-                      {entry.feed_description && (
-                        <p
-                          className={cn(
-                            'line-clamp-1 text-xs leading-5',
-                            entry.is_read ? 'text-stone-400' : 'text-slate-500'
-                          )}
-                        >
-                          {entry.feed_description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                </button>
-              )
-            })}
-          </div>
+          <TodayBoardEntries
+            groups={groups}
+            selectedEntryId={selectedEntryId}
+            selectedEntryRefs={selectedEntryRefs}
+            isDetailOpen={!!selectedEntry}
+            isTranslationActive={isTranslationActive}
+            translatedTexts={translatedTexts}
+            onSelectEntry={onSelectEntry}
+            onToggleFeed={toggleFeed}
+          />
         )}
       </div>
 
@@ -212,6 +156,321 @@ export function TodayBoard({
           {renderDetail(selectedEntry)}
         </aside>
       ) : null}
+    </div>
+  )
+}
+
+function TodayBoardEntries({
+  groups,
+  selectedEntryId,
+  selectedEntryRefs,
+  isDetailOpen,
+  isTranslationActive,
+  translatedTexts,
+  onSelectEntry,
+  onToggleFeed,
+}: {
+  groups: ReturnType<typeof buildTodayBoardGroups>
+  selectedEntryId: string | null
+  selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
+  isDetailOpen: boolean
+  isTranslationActive: boolean
+  translatedTexts: Record<string, { title?: string; summary?: string }>
+  onSelectEntry: (entry: TodayBoardEntry) => void
+  onToggleFeed: (feedId: string) => void
+}) {
+  return isDetailOpen ? (
+    <div data-testid="today-board-detail-list" className="space-y-3 p-3">
+      {groups.map((group) => (
+        <FeedListGroup
+          key={group.feedId}
+          group={group}
+          selectedEntryId={selectedEntryId}
+          selectedEntryRefs={selectedEntryRefs}
+          isTranslationActive={isTranslationActive}
+          translatedTexts={translatedTexts}
+          onSelectEntry={onSelectEntry}
+          onToggleFeed={onToggleFeed}
+        />
+      ))}
+    </div>
+  ) : (
+    <div
+      data-testid="today-board-card-board"
+      className="columns-1 gap-3 p-3 md:columns-2 xl:columns-3"
+    >
+      {groups.map((group) => (
+        <FeedCardGroup
+          key={group.feedId}
+          group={group}
+          selectedEntryId={selectedEntryId}
+          isTranslationActive={isTranslationActive}
+          translatedTexts={translatedTexts}
+          onSelectEntry={onSelectEntry}
+          onToggleFeed={onToggleFeed}
+        />
+      ))}
+    </div>
+  )
+}
+
+function FeedCardGroup({
+  group,
+  selectedEntryId,
+  isTranslationActive,
+  translatedTexts,
+  onSelectEntry,
+  onToggleFeed,
+}: {
+  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  selectedEntryId: string | null
+  isTranslationActive: boolean
+  translatedTexts: Record<string, { title?: string; summary?: string }>
+  onSelectEntry: (entry: TodayBoardEntry) => void
+  onToggleFeed: (feedId: string) => void
+}) {
+  const { t } = useTranslation('reader')
+
+  return (
+    <section className="border-border/70 mb-3 inline-block w-full break-inside-avoid overflow-hidden rounded-lg border bg-white shadow-[0_1px_0_rgba(15,23,42,0.03)]">
+      <FeedGroupHeader group={group} />
+      <div className="space-y-2 p-2">
+        {group.visibleEntries.map((entry) => (
+          <TodayBoardEntryCard
+            key={entry.id}
+            entry={entry}
+            isSelected={entry.id === selectedEntryId}
+            isTranslationActive={isTranslationActive}
+            translatedTexts={translatedTexts}
+            onSelectEntry={onSelectEntry}
+          />
+        ))}
+        {group.isCollapsible ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onToggleFeed(group.feedId)
+            }}
+            className="text-primary hover:text-primary/80 block w-full py-1 text-center text-[13px] font-medium transition-colors"
+          >
+            {group.isExpanded ? t('todayBoard.collapse') : t('todayBoard.expand')}
+          </button>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+function FeedListGroup({
+  group,
+  selectedEntryId,
+  selectedEntryRefs,
+  isTranslationActive,
+  translatedTexts,
+  onSelectEntry,
+  onToggleFeed,
+}: {
+  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  selectedEntryId: string | null
+  selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
+  isTranslationActive: boolean
+  translatedTexts: Record<string, { title?: string; summary?: string }>
+  onSelectEntry: (entry: TodayBoardEntry) => void
+  onToggleFeed: (feedId: string) => void
+}) {
+  const { t } = useTranslation('reader')
+
+  return (
+    <section className="border-border/60 border-b pb-2 last:border-b-0">
+      <FeedGroupHeader group={group} compact />
+      <div className="divide-border/50 divide-y">
+        {group.visibleEntries.map((entry) => (
+          <TodayBoardEntryListItem
+            key={entry.id}
+            entry={entry}
+            isSelected={entry.id === selectedEntryId}
+            isTranslationActive={isTranslationActive}
+            translatedTexts={translatedTexts}
+            onSelectEntry={onSelectEntry}
+            selectedEntryRefs={selectedEntryRefs}
+          />
+        ))}
+      </div>
+      {group.isCollapsible ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggleFeed(group.feedId)
+          }}
+          className="text-primary hover:text-primary/80 block w-full py-2 text-center text-[13px] font-medium transition-colors"
+        >
+          {group.isExpanded ? t('todayBoard.collapse') : t('todayBoard.expand')}
+        </button>
+      ) : null}
+    </section>
+  )
+}
+
+function FeedGroupHeader({
+  group,
+  compact = false,
+}: {
+  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  compact?: boolean
+}) {
+  const { t } = useTranslation('reader')
+
+  return (
+    <div
+      className={cn(
+        'bg-stone-100/80 flex items-center justify-between gap-3 px-3',
+        compact ? 'py-2' : 'py-2.5'
+      )}
+    >
+      <div className="min-w-0">
+        <div className="truncate text-[13px] font-semibold text-stone-700">
+          {group.feedTitle || t('todayBoard.unknownFeed')}
+        </div>
+        {group.feedDescription ? (
+          <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-stone-500">
+            {group.feedDescription}
+          </div>
+        ) : null}
+      </div>
+      <div className="shrink-0 text-xs font-normal tabular-nums text-stone-500">
+        {group.unreadCount} / {group.totalCount}
+      </div>
+    </div>
+  )
+}
+
+function TodayBoardEntryCard({
+  entry,
+  isSelected,
+  isTranslationActive,
+  translatedTexts,
+  onSelectEntry,
+}: {
+  entry: TodayBoardEntry
+  isSelected: boolean
+  isTranslationActive: boolean
+  translatedTexts: Record<string, { title?: string; summary?: string }>
+  onSelectEntry: (entry: TodayBoardEntry) => void
+}) {
+  const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
+  const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
+
+  return (
+    <button
+      type="button"
+      data-entry-id={entry.id}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelectEntry(entry)
+      }}
+      className={cn(
+        'w-full rounded-lg border px-3 py-2.5 text-left transition-all duration-200',
+        'shadow-[0_1px_0_rgba(15,23,42,0.02)] hover:-translate-y-0.5 hover:shadow-[0_10px_24px_rgba(15,23,42,0.07)]',
+        entry.is_read
+          ? 'border-stone-200 bg-stone-100/85 text-stone-500'
+          : 'border-amber-200/70 bg-white text-slate-900',
+        isSelected && 'ring-primary/20 border-primary/40 ring-2'
+      )}
+    >
+      <EntryContent entry={entry} translatedTitle={translated?.title} summary={summary} />
+    </button>
+  )
+}
+
+function TodayBoardEntryListItem({
+  entry,
+  isSelected,
+  isTranslationActive,
+  translatedTexts,
+  onSelectEntry,
+  selectedEntryRefs,
+}: {
+  entry: TodayBoardEntry
+  isSelected: boolean
+  isTranslationActive: boolean
+  translatedTexts: Record<string, { title?: string; summary?: string }>
+  onSelectEntry: (entry: TodayBoardEntry) => void
+  selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
+}) {
+  const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
+  const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
+
+  return (
+    <button
+      type="button"
+      data-entry-id={entry.id}
+      ref={(node) => {
+        if (node) {
+          selectedEntryRefs.current.set(entry.id, node)
+        } else {
+          selectedEntryRefs.current.delete(entry.id)
+        }
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        onSelectEntry(entry)
+      }}
+      className={cn(
+        'w-full px-3 py-2.5 text-left transition-colors',
+        entry.is_read ? 'text-stone-500' : 'text-slate-900',
+        isSelected && 'bg-emerald-50'
+      )}
+    >
+      <EntryContent entry={entry} translatedTitle={translated?.title} summary={summary} compact />
+    </button>
+  )
+}
+
+function EntryContent({
+  entry,
+  translatedTitle,
+  summary,
+  compact = false,
+}: {
+  entry: TodayBoardEntry
+  translatedTitle?: string
+  summary: string
+  compact?: boolean
+}) {
+  return (
+    <div>
+      <h3
+        className={cn(
+          compact ? 'text-[13px]' : 'text-sm sm:text-[15px]',
+          'leading-6',
+          entry.is_read ? 'font-medium text-stone-500' : 'font-semibold text-slate-900'
+        )}
+      >
+        {translatedTitle ?? entry.title}
+      </h3>
+
+      {summary ? (
+        <p
+          className={cn(
+            'mt-1 text-sm leading-6',
+            entry.is_read ? 'text-stone-400' : 'text-slate-600'
+          )}
+        >
+          {summary}
+        </p>
+      ) : null}
+
+      <div
+        className={cn(
+          'mt-2 inline-flex items-center gap-1 text-xs tabular-nums',
+          entry.is_read ? 'text-stone-400' : 'text-stone-500'
+        )}
+      >
+        <Clock className="h-3 w-3" />
+        {format(entry.effective_timestamp, 'HH:mm')}
+      </div>
     </div>
   )
 }

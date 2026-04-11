@@ -3,6 +3,7 @@ import type { EntryWithState } from '@glean/types'
 import {
   getEffectiveEntryTimestamp,
   buildTodayBoardEntries,
+  buildTodayBoardGroups,
   getTodayCollectionRange,
 } from '@/pages/reader/shared/todayBoard'
 
@@ -129,5 +130,96 @@ describe('todayBoard helpers', () => {
       'read-newest',
     ])
     expect(results.every((entry) => entry.feed_description === 'Feed summary text')).toBe(true)
+  })
+
+  it('groups today-board entries by feed and exposes unread and total counts', () => {
+    const now = new Date('2026-04-10T12:00:00+08:00')
+    const entries = buildTodayBoardEntries(
+      [
+        makeEntry({
+          id: 'feed-a-new',
+          feed_id: 'feed-a',
+          feed_title: 'Feed A',
+          ingested_at: '2026-04-10T10:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'feed-b-new',
+          feed_id: 'feed-b',
+          feed_title: 'Feed B',
+          ingested_at: '2026-04-10T09:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'feed-a-read',
+          feed_id: 'feed-a',
+          feed_title: 'Feed A',
+          is_read: true,
+          ingested_at: '2026-04-10T11:00:00+08:00',
+        }),
+      ],
+      { now }
+    )
+
+    const groups = buildTodayBoardGroups(entries)
+
+    expect(groups.map((group) => group.feedId)).toEqual(['feed-a', 'feed-b'])
+    expect(groups[0]).toMatchObject({
+      feedTitle: 'Feed A',
+      unreadCount: 1,
+      totalCount: 2,
+    })
+    expect(groups[0].entries.map((entry) => entry.id)).toEqual(['feed-a-new', 'feed-a-read'])
+  })
+
+  it('shows at most three unread entries and hides read entries while a feed group is collapsed', () => {
+    const now = new Date('2026-04-10T12:00:00+08:00')
+    const entries = buildTodayBoardEntries(
+      [
+        makeEntry({ id: 'unread-1', ingested_at: '2026-04-10T11:00:00+08:00' }),
+        makeEntry({ id: 'unread-2', ingested_at: '2026-04-10T10:00:00+08:00' }),
+        makeEntry({ id: 'unread-3', ingested_at: '2026-04-10T09:00:00+08:00' }),
+        makeEntry({ id: 'unread-4', ingested_at: '2026-04-10T08:00:00+08:00' }),
+        makeEntry({ id: 'read-1', is_read: true, ingested_at: '2026-04-10T12:00:00+08:00' }),
+      ],
+      { now }
+    )
+
+    const [group] = buildTodayBoardGroups(entries)
+
+    expect(group.visibleEntries.map((entry) => entry.id)).toEqual([
+      'unread-1',
+      'unread-2',
+      'unread-3',
+    ])
+    expect(group.isCollapsible).toBe(true)
+  })
+
+  it('shows all feed entries when expanded and keeps the selected entry visible while collapsed', () => {
+    const now = new Date('2026-04-10T12:00:00+08:00')
+    const entries = buildTodayBoardEntries(
+      [
+        makeEntry({ id: 'unread-1', ingested_at: '2026-04-10T11:00:00+08:00' }),
+        makeEntry({ id: 'unread-2', ingested_at: '2026-04-10T10:00:00+08:00' }),
+        makeEntry({ id: 'unread-3', ingested_at: '2026-04-10T09:00:00+08:00' }),
+        makeEntry({ id: 'unread-4', ingested_at: '2026-04-10T08:00:00+08:00' }),
+        makeEntry({ id: 'read-selected', is_read: true, ingested_at: '2026-04-10T12:00:00+08:00' }),
+      ],
+      { now }
+    )
+
+    const [expandedGroup] = buildTodayBoardGroups(entries, {
+      expandedFeedIds: new Set(['feed-1']),
+    })
+    const [collapsedWithSelected] = buildTodayBoardGroups(entries, {
+      selectedEntryId: 'read-selected',
+    })
+
+    expect(expandedGroup.visibleEntries.map((entry) => entry.id)).toEqual([
+      'unread-1',
+      'unread-2',
+      'unread-3',
+      'unread-4',
+      'read-selected',
+    ])
+    expect(collapsedWithSelected.visibleEntries.map((entry) => entry.id)).toContain('read-selected')
   })
 })
