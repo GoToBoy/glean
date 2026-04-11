@@ -13,6 +13,9 @@ Refine `今日收录` so it supports two attention-aware modes: a feed-grouped c
   - show feed title, feed description, and a weak `unread / total` count aligned with the full title/description block
   - show at most three unread articles per feed by default
   - keep read articles collapsed by default
+  - move feeds with no unread articles after feeds that still have unread articles
+  - show all-read feed counts as `total · 已阅完`
+  - show at most three read articles by default for all-read feeds
   - use centered lightweight `展开` / `收起` text for group expansion
 - In detail mode:
   - keep the right-side article detail pane
@@ -25,7 +28,9 @@ Refine `今日收录` so it supports two attention-aware modes: a feed-grouped c
 ## Done Means
 
 - Card mode is a flowing, non-equal-height feed-group board.
-- Feed groups default to at most three unread visible articles and no visible read articles.
+- Feed groups with unread articles default to at most three unread visible articles and no visible read articles.
+- Feed groups with all articles read are moved after unread groups and default to at most three visible read articles.
+- All-read feed headers show `total · 已阅完`.
 - Expanded feed groups show all of that feed's entries, with read entries visually weakened.
 - Detail mode shows a compact list on the left and the article detail on the right.
 - Detail mode scrolls the selected item into view.

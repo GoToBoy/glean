@@ -20,11 +20,11 @@ export interface TodayBoardFeedGroup {
 }
 
 const DEFAULT_VISIBLE_UNREAD_PER_FEED = 3
-export const TODAY_BOARD_CARD_SUMMARY_MAX_CHARACTERS = 180
+export const TODAY_BOARD_SUMMARY_MAX_CHARACTERS = 180
 
-export function truncateTodayBoardCardSummary(
+export function truncateTodayBoardSummary(
   summary: string,
-  maxCharacters: number = TODAY_BOARD_CARD_SUMMARY_MAX_CHARACTERS
+  maxCharacters: number = TODAY_BOARD_SUMMARY_MAX_CHARACTERS
 ) {
   const characters = Array.from(summary)
   if (characters.length <= maxCharacters) return summary
@@ -141,7 +141,10 @@ export function buildTodayBoardGroups(
       })
       const unreadEntries = entriesForFeed.filter((entry) => !entry.is_read)
       const isExpanded = expandedFeedIds.has(feedId)
-      const defaultVisibleEntries = unreadEntries.slice(0, visibleUnreadLimit)
+      const isCompleted = unreadEntries.length === 0
+      const defaultVisibleEntries = isCompleted
+        ? entriesForFeed.slice(0, visibleUnreadLimit)
+        : unreadEntries.slice(0, visibleUnreadLimit)
       const selectedEntry = selectedEntryId
         ? entriesForFeed.find((entry) => entry.id === selectedEntryId)
         : undefined
@@ -166,6 +169,12 @@ export function buildTodayBoardGroups(
       }
     })
     .sort((left, right) => {
+      const leftCompleted = left.unreadCount === 0
+      const rightCompleted = right.unreadCount === 0
+      if (leftCompleted !== rightCompleted) {
+        return leftCompleted ? 1 : -1
+      }
+
       const leftLatest = left.entries[0]?.collection_timestamp.getTime() ?? 0
       const rightLatest = right.entries[0]?.collection_timestamp.getTime() ?? 0
       return rightLatest - leftLatest

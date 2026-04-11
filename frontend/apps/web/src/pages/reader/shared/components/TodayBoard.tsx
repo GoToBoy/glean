@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState, type MutableRefObject, type React
 import { stripHtmlTags } from '../../../../lib/html'
 import {
   buildTodayBoardGroups,
-  truncateTodayBoardCardSummary,
+  truncateTodayBoardSummary,
   type TodayBoardEntry,
 } from '../todayBoard'
 
@@ -325,6 +325,10 @@ function FeedGroupHeader({
   compact?: boolean
 }) {
   const { t } = useTranslation('reader')
+  const statusText =
+    group.unreadCount === 0
+      ? `${group.totalCount} · ${t('todayBoard.readComplete')}`
+      : `${group.unreadCount} / ${group.totalCount}`
 
   return (
     <div
@@ -344,7 +348,7 @@ function FeedGroupHeader({
         ) : null}
       </div>
       <div className="shrink-0 text-xs font-normal tabular-nums text-stone-500">
-        {group.unreadCount} / {group.totalCount}
+        {statusText}
       </div>
     </div>
   )
@@ -364,7 +368,7 @@ function TodayBoardEntryCard({
   onSelectEntry: (entry: TodayBoardEntry) => void
 }) {
   const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
-  const summary = truncateTodayBoardCardSummary(
+  const summary = truncateTodayBoardSummary(
     translated?.summary ?? stripHtmlTags(entry.summary || '')
   )
 
@@ -406,7 +410,9 @@ function TodayBoardEntryListItem({
   selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
 }) {
   const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
-  const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
+  const summary = truncateTodayBoardSummary(
+    translated?.summary ?? stripHtmlTags(entry.summary || '')
+  )
 
   return (
     <button

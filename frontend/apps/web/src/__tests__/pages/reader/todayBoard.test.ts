@@ -193,6 +193,64 @@ describe('todayBoard helpers', () => {
     expect(group.isCollapsible).toBe(true)
   })
 
+  it('moves completed feed groups after unread groups and shows up to three read entries by default', () => {
+    const now = new Date('2026-04-10T12:00:00+08:00')
+    const entries = buildTodayBoardEntries(
+      [
+        makeEntry({
+          id: 'completed-read-1',
+          feed_id: 'completed-feed',
+          feed_title: 'Completed feed',
+          is_read: true,
+          ingested_at: '2026-04-10T12:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'completed-read-2',
+          feed_id: 'completed-feed',
+          feed_title: 'Completed feed',
+          is_read: true,
+          ingested_at: '2026-04-10T11:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'completed-read-3',
+          feed_id: 'completed-feed',
+          feed_title: 'Completed feed',
+          is_read: true,
+          ingested_at: '2026-04-10T10:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'completed-read-4',
+          feed_id: 'completed-feed',
+          feed_title: 'Completed feed',
+          is_read: true,
+          ingested_at: '2026-04-10T09:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'active-unread',
+          feed_id: 'active-feed',
+          feed_title: 'Active feed',
+          is_read: false,
+          ingested_at: '2026-04-10T08:00:00+08:00',
+        }),
+      ],
+      { now }
+    )
+
+    const groups = buildTodayBoardGroups(entries)
+
+    expect(groups.map((group) => group.feedId)).toEqual(['active-feed', 'completed-feed'])
+    expect(groups[1]).toMatchObject({
+      unreadCount: 0,
+      totalCount: 4,
+      isCollapsible: true,
+    })
+    expect(groups[1].visibleEntries.map((entry) => entry.id)).toEqual([
+      'completed-read-1',
+      'completed-read-2',
+      'completed-read-3',
+    ])
+  })
+
   it('shows all feed entries when expanded and keeps the selected entry visible while collapsed', () => {
     const now = new Date('2026-04-10T12:00:00+08:00')
     const entries = buildTodayBoardEntries(

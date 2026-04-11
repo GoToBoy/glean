@@ -66,6 +66,7 @@
     "empty": "Nothing collected today yet",
     "expand": "Expand",
     "collapse": "Collapse",
+    "readComplete": "Read",
     "unknownFeed": "Unknown feed"
   },
   "empty": {

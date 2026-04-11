@@ -16,9 +16,9 @@
 - Modify: `frontend/apps/web/src/pages/reader/shared/todayBoard.ts`
 - Test: `frontend/apps/web/src/__tests__/pages/reader/todayBoard.test.ts`
 
-- [ ] Write failing tests for feed grouping, `unread / total` counts, collapsed visibility, expanded visibility, and selected-entry visibility.
+- [ ] Write failing tests for feed grouping, `unread / total` counts, all-read `total · 已阅完` counts, collapsed visibility, expanded visibility, and selected-entry visibility.
 - [ ] Run `pnpm --filter @glean/web test -- src/__tests__/pages/reader/todayBoard.test.ts`.
-- [ ] Implement grouping helpers with unread-first group contents and read-collapsed defaults.
+- [ ] Implement grouping helpers with unread-first group contents, read-collapsed defaults for active feeds, and all-read feed groups moved after active feeds with up to three read entries visible by default.
 - [ ] Re-run the focused helper test.
 
 ### Task 2: TodayBoard Presentation

@@ -104,14 +104,62 @@ describe('TodayBoard interaction', () => {
     expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument()
   })
 
-  it('truncates very long summaries in card mode', () => {
+  it('moves completed feed groups after unread groups and shows read entries without expansion', () => {
+    const entries = [
+      makeEntry({
+        id: 'completed-read-1',
+        feed_id: 'completed-feed',
+        feed_title: 'Completed feed',
+        title: 'Completed read one',
+        is_read: true,
+        ingested_at: '2026-04-10T12:00:00+08:00',
+      }),
+      makeEntry({
+        id: 'completed-read-2',
+        feed_id: 'completed-feed',
+        feed_title: 'Completed feed',
+        title: 'Completed read two',
+        is_read: true,
+        ingested_at: '2026-04-10T11:00:00+08:00',
+      }),
+      makeEntry({
+        id: 'active-unread',
+        feed_id: 'active-feed',
+        feed_title: 'Active feed',
+        title: 'Active unread',
+        ingested_at: '2026-04-10T08:00:00+08:00',
+      }),
+    ]
+
+    TodayBoardHarness({ entries })
+
+    expect(screen.getByText('1 / 1')).toBeInTheDocument()
+    expect(screen.getByText('2 · Read')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /completed read one/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /completed read two/i })).toBeInTheDocument()
+    expect(
+      screen.getByText('Active feed').compareDocumentPosition(screen.getByText('Completed feed')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it('truncates very long summaries consistently in card and detail-list modes', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
     const longSummary = 'a'.repeat(220)
+    const truncatedSummary = `${'a'.repeat(180)}...`
 
     TodayBoardHarness({
       entries: [makeEntry({ id: 'entry-1', title: 'Long summary entry', summary: longSummary })],
     })
 
-    expect(screen.getByText(`${'a'.repeat(180)}...`)).toBeInTheDocument()
+    expect(screen.getByText(truncatedSummary)).toBeInTheDocument()
+    expect(screen.queryByText(longSummary)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /long summary entry/i }))
+
+    expect(screen.getByTestId('today-board-detail-list')).toBeInTheDocument()
+    expect(screen.getByText(truncatedSummary)).toBeInTheDocument()
     expect(screen.queryByText(longSummary)).not.toBeInTheDocument()
   })
 
