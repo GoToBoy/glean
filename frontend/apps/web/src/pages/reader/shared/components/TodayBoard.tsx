@@ -4,7 +4,11 @@ import { useTranslation } from '@glean/i18n'
 import { cn } from '@glean/ui'
 import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
 import { stripHtmlTags } from '../../../../lib/html'
-import { buildTodayBoardGroups, type TodayBoardEntry } from '../todayBoard'
+import {
+  buildTodayBoardGroups,
+  truncateTodayBoardCardSummary,
+  type TodayBoardEntry,
+} from '../todayBoard'
 
 interface TodayBoardProps {
   entries: TodayBoardEntry[]
@@ -360,7 +364,9 @@ function TodayBoardEntryCard({
   onSelectEntry: (entry: TodayBoardEntry) => void
 }) {
   const translated = isTranslationActive ? translatedTexts[entry.id] : undefined
-  const summary = translated?.summary ?? stripHtmlTags(entry.summary || '')
+  const summary = truncateTodayBoardCardSummary(
+    translated?.summary ?? stripHtmlTags(entry.summary || '')
+  )
 
   return (
     <button

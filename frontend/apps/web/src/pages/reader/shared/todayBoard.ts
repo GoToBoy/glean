@@ -20,6 +20,17 @@ export interface TodayBoardFeedGroup {
 }
 
 const DEFAULT_VISIBLE_UNREAD_PER_FEED = 3
+export const TODAY_BOARD_CARD_SUMMARY_MAX_CHARACTERS = 180
+
+export function truncateTodayBoardCardSummary(
+  summary: string,
+  maxCharacters: number = TODAY_BOARD_CARD_SUMMARY_MAX_CHARACTERS
+) {
+  const characters = Array.from(summary)
+  if (characters.length <= maxCharacters) return summary
+
+  return `${characters.slice(0, maxCharacters).join('').trimEnd()}...`
+}
 
 export function getTodayCollectionRange(now: Date = new Date()) {
   const start = new Date(now)

@@ -104,6 +104,17 @@ describe('TodayBoard interaction', () => {
     expect(screen.getByRole('button', { name: 'Collapse' })).toBeInTheDocument()
   })
 
+  it('truncates very long summaries in card mode', () => {
+    const longSummary = 'a'.repeat(220)
+
+    TodayBoardHarness({
+      entries: [makeEntry({ id: 'entry-1', title: 'Long summary entry', summary: longSummary })],
+    })
+
+    expect(screen.getByText(`${'a'.repeat(180)}...`)).toBeInTheDocument()
+    expect(screen.queryByText(longSummary)).not.toBeInTheDocument()
+  })
+
   it('opens detail on card click, changes the left side to a list, scrolls to the selected item, and closes detail when blank space is clicked', () => {
     const scrollIntoView = vi.fn()
     Element.prototype.scrollIntoView = scrollIntoView
