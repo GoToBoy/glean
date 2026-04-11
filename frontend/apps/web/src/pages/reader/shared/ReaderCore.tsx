@@ -24,7 +24,7 @@ import {
 import { TodayBoard } from './components/TodayBoard'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
-import { buildTodayBoardEntries, getTodayCollectionRange } from './todayBoard'
+import { buildTodayBoardEntries, getTodayBoardCollectionRange } from './todayBoard'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
@@ -70,6 +70,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     selectedEntryId,
     selectEntry,
     clearSelectedEntry,
+    todayBoardDate,
+    todayBoardTodayDate,
+    recentTodayBoardDates,
+    setTodayBoardDate,
   } = useReaderController()
   const { user } = useAuthStore()
   const { showPreferenceScore } = useUIStore()
@@ -152,7 +156,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Computed value: whether we're using smart sorting (by preference score vs timeline)
   const usesSmartSorting = isSmartView || filterType === 'smart'
-  const todayCollectionRange = isTodayBoardView ? getTodayCollectionRange() : undefined
+  const todayCollectionRange = isTodayBoardView
+    ? getTodayBoardCollectionRange(todayBoardDate)
+    : undefined
 
   const getFilterParams = () => {
     if (isTodayBoardView) {
@@ -205,9 +211,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const todayBoardEntries = useMemo(
     () =>
       buildTodayBoardEntries(rawEntries, {
+        selectedDate: todayBoardDate,
         getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
       }),
-    [rawEntries, feedDescriptionById]
+    [rawEntries, feedDescriptionById, todayBoardDate]
   )
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
@@ -839,13 +846,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
     return (
       <div className="flex h-full w-full min-w-0">
-        {isLoading ? (
-          <div className="w-full space-y-3 p-3">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <EntryListItemSkeleton key={index} />
-            ))}
-          </div>
-        ) : error ? (
+        {error ? (
           <div className="w-full p-4">
             <Alert variant="error">
               <AlertCircle />
@@ -857,6 +858,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           <TodayBoard
             entries={todayBoardEntries}
             selectedEntryId={isMobile ? null : selectedEntryId}
+            selectedDateKey={todayBoardDate}
+            todayDateKey={todayBoardTodayDate}
+            recentDates={recentTodayBoardDates}
+            onSelectDate={setTodayBoardDate}
+            isLoading={isLoading}
             onSelectEntry={handleSelectEntry}
             onCloseDetail={() => clearSelectedEntry(true)}
             listWidthPx={entriesWidth}

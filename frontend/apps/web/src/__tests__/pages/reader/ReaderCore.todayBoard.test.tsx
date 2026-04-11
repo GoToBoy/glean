@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react'
+import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
@@ -13,6 +13,14 @@ const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControl
   readerControllerState: {
     entryIdFromUrl: null as string | null,
     selectedEntryId: null as string | null,
+    todayBoardDate: '2026-04-10',
+    recentTodayBoardDates: [
+      { key: '2026-04-10', date: new Date(2026, 3, 10), isToday: true },
+      { key: '2026-04-09', date: new Date(2026, 3, 9), isToday: false },
+      { key: '2026-04-07', date: new Date(2026, 3, 7), isToday: false },
+    ],
+    setTodayBoardDate: vi.fn(),
+    isLoading: false,
   },
 }))
 
@@ -79,7 +87,7 @@ vi.mock('@/hooks/useEntries', () => ({
           },
         ],
       },
-      isLoading: false,
+      isLoading: readerControllerState.isLoading,
       error: null,
       fetchNextPage: vi.fn(),
       hasNextPage: false,
@@ -157,6 +165,9 @@ vi.mock('@/pages/reader/shared/useReaderController', () => ({
     selectedEntryId: readerControllerState.selectedEntryId,
     selectEntry: vi.fn(),
     clearSelectedEntry: vi.fn(),
+    todayBoardDate: readerControllerState.todayBoardDate,
+    recentTodayBoardDates: readerControllerState.recentTodayBoardDates,
+    setTodayBoardDate: readerControllerState.setTodayBoardDate,
   }),
 }))
 
@@ -176,11 +187,14 @@ vi.mock('@/pages/reader/shared/components/TodayBoard', () => ({
 
 describe('ReaderCore today-board route', () => {
   afterEach(() => {
+    cleanup()
     vi.useRealTimers()
     vi.clearAllMocks()
     updateEntryStateSpy.mockResolvedValue(undefined)
     readerControllerState.entryIdFromUrl = null
     readerControllerState.selectedEntryId = null
+    readerControllerState.todayBoardDate = '2026-04-10'
+    readerControllerState.isLoading = false
   })
 
   it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
@@ -205,6 +219,64 @@ describe('ReaderCore today-board route', () => {
         per_page: 500,
       })
     )
+  })
+
+  it('uses the selected today-board date when querying and filtering entries', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.todayBoardDate = '2026-04-07'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={true} />)
+
+    expect(useInfiniteEntriesSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        view: 'today-board',
+        collected_after: '2026-04-06T16:00:00.000Z',
+        collected_before: '2026-04-07T16:00:00.000Z',
+      })
+    )
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedDateKey: '2026-04-07',
+        recentDates: readerControllerState.recentTodayBoardDates,
+        onSelectDate: readerControllerState.setTodayBoardDate,
+      }),
+      expect.anything()
+    )
+  })
+
+  it('keeps the today-board header mounted while a selected date is loading', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.todayBoardDate = '2026-04-07'
+    readerControllerState.isLoading = true
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={true} />)
+
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedDateKey: '2026-04-07',
+        isLoading: true,
+      }),
+      expect.anything()
+    )
+    expect(screen.getByTestId('today-board-probe')).toBeInTheDocument()
   })
 
   it('keeps desktop selected entries inside the today-board layout so the detail pane can grow', () => {

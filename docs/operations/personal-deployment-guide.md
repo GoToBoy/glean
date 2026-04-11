@@ -177,6 +177,12 @@ environment:
 
 `WORKER_TIMEZONE` 会决定 worker cron 和“午夜补跑”按哪个时区计算。部署在国内 NAS 上时，建议显式设置为 `Asia/Shanghai`，不要依赖容器默认时区。
 
+注意：
+
+- 命名时区如 `Asia/Shanghai` 依赖 worker 镜像内可用的 IANA 时区数据
+- 如果镜像里缺少系统时区库或 Python `tzdata`，worker 可能在启动时直接报 `ZoneInfoNotFoundError`
+- 部署自定义 tag 时，确认 worker 镜像包含 `tzdata` 支持和时区不可用时的 `UTC` 回退逻辑
+
 ---
 
 ## Rollback: 回滚到官方版本

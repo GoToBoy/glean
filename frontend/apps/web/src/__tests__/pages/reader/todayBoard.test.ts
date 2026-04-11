@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import {
+  buildRecentTodayBoardDates,
   getEffectiveEntryTimestamp,
   buildTodayBoardEntries,
   buildTodayBoardGroups,
+  getTodayBoardCollectionRange,
+  getTodayBoardDateKey,
   getTodayCollectionRange,
+  resolveTodayBoardDateParam,
 } from '@/pages/reader/shared/todayBoard'
 
 function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
@@ -40,6 +44,48 @@ function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
 }
 
 describe('todayBoard helpers', () => {
+  it('builds local date keys and selectable recent days for the today board calendar', () => {
+    const now = new Date('2026-04-10T12:34:56+08:00')
+
+    expect(getTodayBoardDateKey(now)).toBe('2026-04-10')
+
+    const recentDays = buildRecentTodayBoardDates(now)
+
+    expect(recentDays).toHaveLength(30)
+    expect(recentDays[0]).toMatchObject({
+      key: '2026-04-10',
+      isToday: true,
+    })
+    expect(recentDays[1]).toMatchObject({
+      key: '2026-04-09',
+      isToday: false,
+    })
+    expect(recentDays[29]).toMatchObject({
+      key: '2026-03-12',
+      isToday: false,
+    })
+  })
+
+  it('resolves today board URL date params against the recent selectable window', () => {
+    const now = new Date('2026-04-10T12:34:56+08:00')
+
+    expect(resolveTodayBoardDateParam('2026-04-07', now)).toBe('2026-04-07')
+    expect(resolveTodayBoardDateParam('2026-04-10', now)).toBe('2026-04-10')
+    expect(resolveTodayBoardDateParam(null, now)).toBe('2026-04-10')
+    expect(resolveTodayBoardDateParam('2026-03-01', now)).toBe('2026-04-10')
+    expect(resolveTodayBoardDateParam('2026-4-7', now)).toBe('2026-04-10')
+    expect(resolveTodayBoardDateParam('not-a-date', now)).toBe('2026-04-10')
+  })
+
+  it('builds an inclusive-exclusive local day range for a selected date', () => {
+    const range = getTodayBoardCollectionRange('2026-04-07')
+
+    expect(range).toEqual({
+      collected_after: '2026-04-06T16:00:00.000Z',
+      collected_before: '2026-04-07T16:00:00.000Z',
+    })
+  })
+
   it('builds an inclusive-exclusive local day range for collection queries', () => {
     const range = getTodayCollectionRange(new Date('2026-04-10T12:34:56+08:00'))
 
@@ -130,6 +176,28 @@ describe('todayBoard helpers', () => {
       'read-newest',
     ])
     expect(results.every((entry) => entry.feed_description === 'Feed summary text')).toBe(true)
+  })
+
+  it('uses the selected date for membership when building today-board entries', () => {
+    const results = buildTodayBoardEntries(
+      [
+        makeEntry({
+          id: 'selected-day-entry',
+          ingested_at: '2026-04-07T09:00:00+08:00',
+          created_at: '2026-04-07T09:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'today-entry',
+          ingested_at: '2026-04-10T09:00:00+08:00',
+          created_at: '2026-04-10T09:00:00+08:00',
+        }),
+      ],
+      {
+        selectedDate: '2026-04-07',
+      }
+    )
+
+    expect(results.map((entry) => entry.id)).toEqual(['selected-day-entry'])
   })
 
   it('groups today-board entries by feed and exposes unread and total counts', () => {

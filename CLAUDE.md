@@ -75,6 +75,33 @@ Glean (拾灵) is a personal knowledge management tool and RSS reader built with
 
 For backend-specific development guidance, see [backend/CLAUDE.md](backend/CLAUDE.md).
 For frontend-specific development guidance, see [frontend/CLAUDE.md](frontend/CLAUDE.md).
+For the repository knowledge map, see [AGENTS.md](AGENTS.md) and [docs/index.md](docs/index.md).
+
+## Feed Fetch Change Gate
+
+Before changing RSS/feed fetch queueing, worker scheduling, or feed fetch progress behavior, read:
+
+- `docs/operations/feed-fetch-guardrails.md`
+- `docs/architecture/feed-fetch-flow.md`
+
+This applies in particular to changes under:
+
+- `backend/apps/api/glean_api/feed_fetch_progress.py`
+- `backend/apps/api/glean_api/feed_refresh.py`
+- `backend/apps/api/glean_api/routers/feeds.py`
+- `backend/apps/api/glean_api/routers/admin.py`
+- `backend/apps/worker/glean_worker/main.py`
+- `backend/apps/worker/glean_worker/config.py`
+- `backend/apps/worker/glean_worker/tasks/feed_fetcher.py`
+- `backend/apps/worker/glean_worker/tasks/feed_fetch_progress.py`
+
+Do not modify these areas based only on surface UI symptoms. Preserve the documented guardrails around:
+
+- Redis job vs persisted active-run reconciliation
+- idempotent terminal-stage writes
+- `queue_wait` not being a worker-liveness signal
+- explicit `WORKER_TIMEZONE` usage
+- `tzdata` support and UTC fallback for named timezones
 
 ## Quick Start
 
@@ -303,7 +330,7 @@ cd frontend/apps/web && pnpm test
 - Feed: https://ameow.xyz/feed.xml
 
 **Admin Account**:
-- See [docs/admin-setup.md](docs/admin-setup.md) for detailed setup instructions
+- See [docs/operations/admin-setup.md](docs/operations/admin-setup.md) for detailed setup instructions
 - Quick setup: `python backend/scripts/create-admin.py`
 - Docker setup: Set `CREATE_ADMIN=true` in `.env` or use `docker exec -it glean-backend /app/scripts/create-admin-docker.sh`
 - Default credentials (development only): admin / Admin123!

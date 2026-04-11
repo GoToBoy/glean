@@ -4,7 +4,7 @@
 
 > [!IMPORTANT]
 > 本 README 描述的是此 fork 的主分支 `personal-main`，而不是上游 `main`。
-> 与 `main` 的差异概览请见 [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md)。
+> 与 `main` 的差异概览请见 [docs/references/branch-delta.zh-CN.md](./docs/references/branch-delta.zh-CN.md)。
 
 > [!NOTE]
 > 欢迎加入我们的 [Discord](https://discord.gg/KMKC4sRVSJ) 获取更新和支持。
@@ -180,6 +180,9 @@ make db-upgrade
 
 # 启动全部开发服务
 make dev-all
+
+# 推荐的一体化本地启动入口
+python3 -m harness up
 ```
 
 开发环境地址：
@@ -190,9 +193,11 @@ make dev-all
 
 ## 分支相关文档
 
-- [docs/README.main-vs-feature.zh-CN.md](./docs/README.main-vs-feature.zh-CN.md) - `personal-main` 相对上游 `main` 的能力差异概览
-- [docs/feature-change-log.md](./docs/feature-change-log.md) - 功能级变更记录
-- [docs/rss-browser-extraction-plan.md](./docs/rss-browser-extraction-plan.md) - RSS 正文浏览器回退抓取方案
+- [docs/index.md](./docs/index.md) - 仓库文档索引
+- [docs/references/branch-delta.zh-CN.md](./docs/references/branch-delta.zh-CN.md) - `personal-main` 相对上游 `main` 的能力差异概览
+- [docs/product/feature-change-log.md](./docs/product/feature-change-log.md) - 功能级变更记录
+- [docs/product/rss-browser-extraction-plan.md](./docs/product/rss-browser-extraction-plan.md) - RSS 正文浏览器回退抓取方案
+- [docs/operations/local-harness.md](./docs/operations/local-harness.md) - 本地 harness 启动与诊断入口
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 本地开发指南
 
 ## 参与贡献

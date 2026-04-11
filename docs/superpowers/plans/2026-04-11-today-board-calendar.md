@@ -23,8 +23,9 @@
   - Use `todayBoardDate` for range and entry filtering.
   - Pass date props to `TodayBoard`.
 - Modify `frontend/apps/web/src/pages/reader/shared/components/TodayBoard.tsx`
-  - Render recent-day selector in the sticky header.
-  - Render date-aware heading/description/empty copy.
+  - Render a calendar icon button in the sticky header control group.
+  - Render recent-day date selection in a popover.
+  - Render date-aware empty copy while keeping the header title stable.
 - Modify `frontend/packages/i18n/src/locales/en/reader.json`
   - Add Today Board calendar strings.
 - Modify `frontend/packages/i18n/src/locales/zh-CN/reader.json`
@@ -193,9 +194,13 @@ onSelectDate={selectDateSpy}
 
 Assertions:
 
-- selected historical date is visibly active
+- clicking the calendar icon opens the popover
+- selected historical date is visibly active inside the popover
 - clicking another date calls `onSelectDate('2026-04-09')`
-- clicking Today calls `onSelectDate('2026-04-10')`
+- clicking previous day calls the older adjacent date
+- clicking next day calls the newer adjacent date
+- the header title stays stable for historical selections
+- the old header subtitle is not rendered
 - empty state for a historical day uses the historical empty copy
 
 - [ ] **Step 2: Run tests to verify RED**
@@ -218,13 +223,15 @@ In `TodayBoard.tsx`:
   - `todayDateKey`
   - `recentDates`
   - `onSelectDate`
-- Add `TodayBoardDateSelector` local component.
-- Place it in the sticky header below/next to the title and description.
-- Use a horizontally scrollable row for recent dates.
-- Stop propagation on selector clicks so blank-space close does not trigger.
-- Keep translation toggle visible.
+- Add a calendar icon button in the sticky header control group beside the translation toggle.
+- Add a popover component for the recent-day calendar.
+- Show day-of-month numbers for the recent 30 days.
+- Add previous-day and next-day buttons.
+- Stop propagation on calendar clicks so blank-space close does not trigger.
+- Keep translation toggle visible beside the calendar icon.
+- Keep the Today Board title stable when dates change.
 - Use `date-fns/format` for compact labels.
-- Use i18n keys for Today, selected-date label, and empty state.
+- Use i18n keys for Today, calendar controls, and empty state.
 
 - [ ] **Step 4: Add i18n strings**
 
@@ -233,8 +240,8 @@ Add English strings under `todayBoard`, for example:
 ```json
 "today": "Today",
 "dateSelectorLabel": "Select intake date",
-"selectedDateLabel": "Intake date",
-"historicalDescription": "Items collected on {{date}} across all subscriptions",
+"previousDay": "Previous day",
+"nextDay": "Next day",
 "historicalEmpty": "Nothing collected on {{date}}"
 ```
 
@@ -243,8 +250,8 @@ Add corresponding Simplified Chinese strings:
 ```json
 "today": "今天",
 "dateSelectorLabel": "选择收录日期",
-"selectedDateLabel": "收录日期",
-"historicalDescription": "{{date}}进入 Glean 的内容",
+"previousDay": "前一天",
+"nextDay": "后一天",
 "historicalEmpty": "{{date}}没有新收录"
 ```
 
@@ -311,6 +318,7 @@ Use the local harness or existing frontend dev workflow if available. Verify:
 - Refresh preserves the historical date.
 - Browser back/forward restores the date.
 - Opening an article and then switching date removes the `entry` param and closes stale detail.
+- Switching date keeps the Today Board header mounted; only the card-list content enters loading/refresh state.
 
 - [ ] **Step 5: Record handoff**
 

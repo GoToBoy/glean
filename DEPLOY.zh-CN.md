@@ -967,7 +967,7 @@ docker compose restart backend
 请使用以下文件：
 
 - Compose 覆盖文件：`docker-compose.cloudflare.yml`
-- 优化指南：`docs/cloudflare-tunnel-optimization.md`
+- 优化指南：`docs/operations/cloudflare-tunnel-optimization.md`
 
 快速启动：
 

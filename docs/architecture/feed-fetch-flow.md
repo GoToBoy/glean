@@ -1,8 +1,10 @@
 # Feed Fetch Flow
 
-Last updated: 2026-04-03
+Last updated: 2026-04-10
 
 This document describes the current feed fetching pipeline implemented in `glean`, based on the worker task, API refresh entrypoints, and RSS parsing/content extraction packages.
+
+For failure modes and non-obvious invariants learned from recent NAS incidents, also read `docs/operations/feed-fetch-guardrails.md`.
 
 ## 1. Scope
 
@@ -25,7 +27,7 @@ There are three ways a feed fetch starts:
 2. Manual refresh enqueue:
    `POST /api/feeds/{subscription_id}/refresh` and `POST /api/feeds/refresh-all` enqueue `fetch_feed_task` with `backfill_existing_entries=true`.
 3. Scheduled refresh enqueue:
-   the worker cron runs every 15 minutes, finds active feeds whose `next_fetch_at` is due, and enqueues `fetch_feed_task`.
+   the worker cron runs according to `FEED_REFRESH_INTERVAL_MINUTES`, finds active feeds whose `next_fetch_at` is due, and enqueues `fetch_feed_task`.
 
 ## 3. Flow Diagram
 
@@ -35,7 +37,7 @@ flowchart TD
     T1["New subscription"] --> T2["enqueue fetch_feed_task"]
     T3["Manual refresh /api/feeds/{subscription_id}/refresh<br/>backfill_existing_entries=true"] --> T2
     T4["Manual refresh all /api/feeds/refresh-all<br/>backfill_existing_entries=true"] --> T2
-    T5["Worker cron every 15 minutes"] --> T6["scheduled_fetch -> fetch_all_feeds"]
+    T5["Worker cron based on FEED_REFRESH_INTERVAL_MINUTES"] --> T6["scheduled_fetch -> fetch_all_feeds"]
     T6 --> T7["Select ACTIVE feeds with due next_fetch_at"]
     T7 --> T2
   end
@@ -47,7 +49,7 @@ flowchart TD
 
   F4 --> F5["fetch_feed(url, etag, last_modified)"]
   F5 --> F6{"304 Not Modified?"}
-  F6 -->|Yes| R1["Clear error state<br/>update success timestamps<br/>next_fetch_at = now + 15m<br/>return not_modified"]
+  F6 -->|Yes| R1["Clear error state<br/>update success timestamps<br/>next_fetch_at = now + refresh interval<br/>return not_modified"]
   F6 -->|No| F7["parse_feed(xml, attempt_url)"]
 
   F7 --> F8{"Parse ok?"}
@@ -97,14 +99,14 @@ flowchart TD
   E15 --> F10
   E13 -->|No| F10
 
-  F10 --> F11["Update last_entry_at and next_fetch_at = now + 15m"]
+  F10 --> F11["Update last_entry_at and next_fetch_at = now + refresh interval"]
   F11 --> R2["return success(new_entries, total_entries)"]
 
   F4 --> ERR["All attempts failed or task raised"]
   ERR --> D1{"Duplicate GUID race?"}
   D1 -->|Yes| R3["Treat as success<br/>do not count feed failure"]
   D1 -->|No| D2{"Database index corruption?"}
-  D2 -->|Yes| R4["Keep feed ACTIVE<br/>record infra error<br/>next_fetch_at = now + 15m"]
+  D2 -->|Yes| R4["Keep feed ACTIVE<br/>record infra error<br/>next_fetch_at = now + refresh interval"]
   D2 -->|No| D3["error_count++ and save fetch_error_message"]
   D3 --> D4{"error_count >= 10?"}
   D4 -->|Yes| D5["Set feed status = ERROR"]
@@ -117,9 +119,11 @@ flowchart TD
 
 ### 4.1 Scheduling and queueing
 
-- The worker registers `fetch_feed_task` and a cron job at minutes `0, 15, 30, 45`.
+- The worker registers `fetch_feed_task` plus cron jobs derived from `FEED_REFRESH_INTERVAL_MINUTES`.
+- The interval must evenly divide 1440 minutes so one day can be represented as deterministic cron buckets.
 - Scheduled sync does not fetch feeds inline. It first selects due feeds, then enqueues one job per feed.
 - Manual refresh endpoints also enqueue jobs instead of performing feed fetch synchronously in the API process.
+- At local midnight, the worker can also run a supplemental scheduled batch for active feeds that still have not succeeded since the local day started.
 
 ### 4.2 Feed-level fetch behavior
 
@@ -155,6 +159,14 @@ flowchart TD
 - Database index corruption is treated as infrastructure failure, not feed failure.
 - Other exceptions increment `error_count`, store `fetch_error_message`, schedule exponential backoff, and raise an arq retry.
 - After 10 consecutive errors, the feed status becomes `ERROR`.
+
+### 4.7 Operational guardrails
+
+- Queue views must reconcile persisted active runs against Redis because a database row can outlive its ARQ job.
+- Long `queue_wait` durations do not prove a worker is healthy; always check worker liveness separately.
+- Terminal feed-fetch stage writes must remain idempotent and concurrency-safe.
+- `WORKER_TIMEZONE` controls both cron scheduling and midnight supplementation.
+- Named timezones such as `Asia/Shanghai` require timezone data in the worker image, currently provided by the Python `tzdata` dependency.
 
 ## 5. Source References
 

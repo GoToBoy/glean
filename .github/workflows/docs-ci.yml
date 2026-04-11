@@ -1,0 +1,34 @@
+name: Docs CI
+
+on:
+  push:
+    branches: [main, develop, personal-main]
+    paths:
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'backend/CLAUDE.md'
+      - 'README.md'
+      - 'README.zh-CN.md'
+      - 'docs/**'
+      - 'scripts/validate-docs.py'
+      - '.github/workflows/docs-ci.yml'
+  pull_request:
+    branches: [main, develop, personal-main]
+    paths:
+      - 'AGENTS.md'
+      - 'CLAUDE.md'
+      - 'backend/CLAUDE.md'
+      - 'README.md'
+      - 'README.zh-CN.md'
+      - 'docs/**'
+      - 'scripts/validate-docs.py'
+      - '.github/workflows/docs-ci.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate docs structure and references
+        run: python3 scripts/validate-docs.py

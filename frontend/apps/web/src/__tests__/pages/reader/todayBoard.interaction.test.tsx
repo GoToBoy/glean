@@ -66,6 +66,48 @@ describe('TodayBoard interaction', () => {
     cleanup()
   })
 
+  it('opens a calendar popover and emits selected date changes', () => {
+    const onSelectDate = vi.fn()
+
+    render(
+      <TodayBoard
+        entries={[]}
+        selectedEntryId={null}
+        selectedDateKey="2026-04-07"
+        todayDateKey="2026-04-10"
+        recentDates={[
+          { key: '2026-04-10', date: new Date(2026, 3, 10), isToday: true },
+          { key: '2026-04-09', date: new Date(2026, 3, 9), isToday: false },
+          { key: '2026-04-08', date: new Date(2026, 3, 8), isToday: false },
+          { key: '2026-04-07', date: new Date(2026, 3, 7), isToday: false },
+          { key: '2026-04-06', date: new Date(2026, 3, 6), isToday: false },
+        ]}
+        onSelectDate={onSelectDate}
+        onSelectEntry={vi.fn()}
+        onCloseDetail={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select intake date' }))
+
+    expect(screen.getByTestId('today-board-blank-space')).toHaveStyle({
+      scrollbarGutter: 'stable',
+    })
+    expect(screen.queryByText('Items collected today across all subscriptions')).not.toBeInTheDocument()
+    expect(screen.queryByText('Intake date')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Apr 7' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText('Nothing collected on Apr 7')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Apr 9' }))
+    expect(onSelectDate).toHaveBeenCalledWith('2026-04-09')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous day' }))
+    expect(onSelectDate).toHaveBeenCalledWith('2026-04-06')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Next day' }))
+    expect(onSelectDate).toHaveBeenCalledWith('2026-04-08')
+  })
+
   it('groups card-mode entries by feed, shows counts, and keeps read entries collapsed by default', () => {
     const entries = [
       makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),
@@ -153,13 +195,13 @@ describe('TodayBoard interaction', () => {
       entries: [makeEntry({ id: 'entry-1', title: 'Long summary entry', summary: longSummary })],
     })
 
-    expect(screen.getByText(truncatedSummary)).toBeInTheDocument()
+    expect(screen.getByText(truncatedSummary)).toHaveClass('line-clamp-2')
     expect(screen.queryByText(longSummary)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /long summary entry/i }))
 
     expect(screen.getByTestId('today-board-detail-list')).toBeInTheDocument()
-    expect(screen.getByText(truncatedSummary)).toBeInTheDocument()
+    expect(screen.getByText(truncatedSummary)).toHaveClass('line-clamp-2')
     expect(screen.queryByText(longSummary)).not.toBeInTheDocument()
   })
 

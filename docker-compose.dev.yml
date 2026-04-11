@@ -8,14 +8,13 @@
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: glean-dev-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: glean
       POSTGRES_USER: glean
       POSTGRES_PASSWORD: devpassword
     ports:
-      - "5432:5432"
+      - "${HARNESS_POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_dev_data:/var/lib/postgresql/data
     healthcheck:
@@ -28,11 +27,10 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: glean-dev-redis
     command: redis-server --appendonly yes
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "${HARNESS_REDIS_PORT:-6379}:6379"
     volumes:
       - redis_dev_data:/data
     healthcheck:

@@ -62,8 +62,12 @@
   },
   "todayBoard": {
     "title": "Today's Intake",
-    "description": "Items collected today across all subscriptions",
     "empty": "Nothing collected today yet",
+    "historicalEmpty": "Nothing collected on {{date}}",
+    "today": "Today",
+    "dateSelectorLabel": "Select intake date",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
     "expand": "Expand",
     "collapse": "Collapse",
     "readComplete": "Read",

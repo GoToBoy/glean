@@ -1011,7 +1011,7 @@ For domain access via Cloudflare Zero Trust Tunnel (and lower cross-region laten
 dedicated compose overlay and optimization guide:
 
 - Compose overlay: `docker-compose.cloudflare.yml`
-- Tuning guide: `docs/cloudflare-tunnel-optimization.md`
+- Tuning guide: `docs/operations/cloudflare-tunnel-optimization.md`
 
 Quick start:
 

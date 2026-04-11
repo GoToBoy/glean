@@ -91,6 +91,8 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+.harness/
+.harness-registry.json
 
 # Jupyter
 .ipynb_checkpoints/
@@ -102,4 +104,3 @@ docker-compose.personal.yml
 # Database
 *.db
 *.sqlite3
-

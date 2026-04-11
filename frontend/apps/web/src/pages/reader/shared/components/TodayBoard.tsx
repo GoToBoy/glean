@@ -1,21 +1,35 @@
 import { format } from 'date-fns'
-import { Clock, Inbox, Languages } from 'lucide-react'
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Inbox, Languages } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
 import { cn } from '@glean/ui'
-import { useEffect, useMemo, useRef, useState, type MutableRefObject, type ReactNode } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type MutableRefObject,
+  type ReactNode,
+} from 'react'
 import { stripHtmlTags } from '../../../../lib/html'
 import {
   buildTodayBoardGroups,
   truncateTodayBoardSummary,
+  type TodayBoardCalendarDay,
   type TodayBoardEntry,
 } from '../todayBoard'
 
 interface TodayBoardProps {
   entries: TodayBoardEntry[]
   selectedEntryId: string | null
+  selectedDateKey?: string
+  todayDateKey?: string
+  recentDates?: TodayBoardCalendarDay[]
+  onSelectDate?: (dateKey: string) => void
   onSelectEntry: (entry: TodayBoardEntry) => void
   onCloseDetail: () => void
   listWidthPx?: number
+  isLoading?: boolean
   isTranslationActive?: boolean
   isTranslationLoading?: boolean
   translationLoadingPhase?: 'idle' | 'start' | 'settled'
@@ -27,9 +41,14 @@ interface TodayBoardProps {
 export function TodayBoard({
   entries,
   selectedEntryId,
+  selectedDateKey,
+  todayDateKey,
+  recentDates = [],
+  onSelectDate,
   onSelectEntry,
   onCloseDetail,
   listWidthPx = 360,
+  isLoading = false,
   isTranslationActive = false,
   isTranslationLoading = false,
   translationLoadingPhase = 'idle',
@@ -39,6 +58,21 @@ export function TodayBoard({
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null
+  const isDateSelectorEnabled = !!selectedDateKey && !!todayDateKey && !!onSelectDate
+  const selectedCalendarDay =
+    recentDates.find((day) => day.key === selectedDateKey) ?? recentDates[0] ?? null
+  const selectedDateLabel = selectedCalendarDay
+    ? selectedCalendarDay.isToday
+      ? t('todayBoard.today')
+      : format(selectedCalendarDay.date, 'MMM d')
+    : selectedDateKey
+      ? selectedDateKey
+      : ''
+  const isTodaySelected = !isDateSelectorEnabled || selectedDateKey === todayDateKey
+  const emptyText = isTodaySelected
+    ? t('todayBoard.empty')
+    : t('todayBoard.historicalEmpty', { date: selectedDateLabel })
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(() => new Set())
   const selectedEntryRefs = useRef(new Map<string, HTMLButtonElement>())
   const groups = useMemo(
@@ -68,6 +102,9 @@ export function TodayBoard({
       return next
     })
   }
+  const listPanelStyle: CSSProperties = selectedEntry
+    ? { width: `${listWidthPx}px`, minWidth: 280, maxWidth: 500, scrollbarGutter: 'stable' }
+    : { scrollbarGutter: 'stable' }
 
   return (
     <div
@@ -79,64 +116,88 @@ export function TodayBoard({
           'min-w-0 overflow-y-auto transition-[width,max-width] duration-200',
           selectedEntry ? 'shrink-0' : 'w-full flex-1'
         )}
-        style={
-          selectedEntry
-            ? { width: `${listWidthPx}px`, minWidth: 280, maxWidth: 500 }
-            : undefined
-        }
+        style={listPanelStyle}
         data-testid="today-board-blank-space"
         onClick={() => onCloseDetail()}
       >
         <div className="border-border/60 sticky top-0 z-10 flex items-start justify-between gap-3 border-b bg-[linear-gradient(180deg,rgba(255,251,245,0.96),rgba(255,255,255,0.92))] px-4 py-3 backdrop-blur">
           <div className="min-w-0">
-            <div className="text-primary mb-1 text-xs font-semibold tracking-[0.18em] uppercase">
+            <div className="text-primary text-xs font-semibold tracking-[0.18em] uppercase">
               {t('todayBoard.title')}
             </div>
-            <div className="text-muted-foreground text-sm">{t('todayBoard.description')}</div>
           </div>
-          {onToggleTranslation ? (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                onToggleTranslation()
-              }}
-              title={
-                isTranslationLoading
-                  ? t('translation.translating')
-                  : isTranslationActive
-                    ? t('translation.hideTranslation')
-                    : t('translation.translate')
-              }
-              aria-label={
-                isTranslationLoading
-                  ? t('translation.translating')
-                  : isTranslationActive
-                    ? t('translation.hideTranslation')
-                    : t('translation.translate')
-              }
-              className={cn(
-                'list-translation-toggle hover:bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
-                isTranslationActive ? 'text-primary' : 'text-muted-foreground',
-                isTranslationLoading && 'list-translation-toggle-loading',
-                translationLoadingPhase === 'start' && 'list-translation-toggle-loading-start',
-                translationLoadingPhase === 'settled' && 'list-translation-toggle-loading-settled'
-              )}
-            >
-              <span className="list-translation-toggle__icon-wrap">
-                <span className="list-translation-toggle__ring" aria-hidden="true" />
-                <Languages className="list-translation-toggle__icon h-4 w-4" />
-              </span>
-            </button>
-          ) : null}
+          <div className="relative flex shrink-0 items-center gap-1">
+            {isDateSelectorEnabled ? (
+              <div onClick={(event) => event.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => setIsCalendarOpen((value) => !value)}
+                  title={t('todayBoard.dateSelectorLabel')}
+                  aria-label={t('todayBoard.dateSelectorLabel')}
+                  aria-expanded={isCalendarOpen}
+                  className={cn(
+                    'hover:bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                    isTodaySelected ? 'text-muted-foreground' : 'text-primary'
+                  )}
+                >
+                  <CalendarDays className="h-4 w-4" />
+                </button>
+                {isCalendarOpen ? (
+                  <TodayBoardCalendarPopover
+                    selectedDateKey={selectedDateKey}
+                    recentDates={recentDates}
+                    selectedDateLabel={selectedDateLabel}
+                    onSelectDate={onSelectDate}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+            {onToggleTranslation ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onToggleTranslation()
+                }}
+                title={
+                  isTranslationLoading
+                    ? t('translation.translating')
+                    : isTranslationActive
+                      ? t('translation.hideTranslation')
+                      : t('translation.translate')
+                }
+                aria-label={
+                  isTranslationLoading
+                    ? t('translation.translating')
+                    : isTranslationActive
+                      ? t('translation.hideTranslation')
+                      : t('translation.translate')
+                }
+                className={cn(
+                  'list-translation-toggle hover:bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                  isTranslationActive ? 'text-primary' : 'text-muted-foreground',
+                  isTranslationLoading && 'list-translation-toggle-loading',
+                  translationLoadingPhase === 'start' && 'list-translation-toggle-loading-start',
+                  translationLoadingPhase === 'settled' && 'list-translation-toggle-loading-settled'
+                )}
+              >
+                <span className="list-translation-toggle__icon-wrap">
+                  <span className="list-translation-toggle__ring" aria-hidden="true" />
+                  <Languages className="list-translation-toggle__icon h-4 w-4" />
+                </span>
+              </button>
+            ) : null}
+          </div>
         </div>
 
-        {entries.length === 0 ? (
+        {isLoading ? (
+          <TodayBoardLoadingState />
+        ) : entries.length === 0 ? (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-10 text-center">
             <div className="bg-muted mb-4 flex h-16 w-16 items-center justify-center rounded-full">
               <Inbox className="text-muted-foreground h-8 w-8" />
             </div>
-            <p className="text-muted-foreground text-sm">{t('todayBoard.empty')}</p>
+            <p className="text-muted-foreground text-sm">{emptyText}</p>
           </div>
         ) : (
           <TodayBoardEntries
@@ -160,6 +221,102 @@ export function TodayBoard({
           {renderDetail(selectedEntry)}
         </aside>
       ) : null}
+    </div>
+  )
+}
+
+function TodayBoardLoadingState() {
+  return (
+    <div className="space-y-3 p-3" data-testid="today-board-loading">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div
+          key={index}
+          className="border-border/70 overflow-hidden rounded-lg border bg-white p-3"
+        >
+          <div className="bg-muted h-4 w-2/3 rounded" />
+          <div className="bg-muted mt-3 h-3 w-full rounded" />
+          <div className="bg-muted mt-2 h-3 w-5/6 rounded" />
+          <div className="bg-muted mt-4 h-3 w-20 rounded" />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function TodayBoardCalendarPopover({
+  selectedDateKey,
+  recentDates,
+  selectedDateLabel,
+  onSelectDate,
+}: {
+  selectedDateKey: string
+  recentDates: TodayBoardCalendarDay[]
+  selectedDateLabel: string
+  onSelectDate: (dateKey: string) => void
+}) {
+  const { t } = useTranslation('reader')
+  const selectedIndex = recentDates.findIndex((day) => day.key === selectedDateKey)
+  const previousDay = selectedIndex >= 0 ? recentDates[selectedIndex + 1] : undefined
+  const nextDay = selectedIndex > 0 ? recentDates[selectedIndex - 1] : undefined
+
+  return (
+    <div
+      className="border-border bg-background absolute top-10 right-0 z-20 w-[280px] rounded-lg border p-3 text-left shadow-lg"
+      aria-label={t('todayBoard.dateSelectorLabel')}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-stone-800">{selectedDateLabel}</div>
+        </div>
+      </div>
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <button
+          type="button"
+          aria-label={t('todayBoard.previousDay')}
+          disabled={!previousDay}
+          onClick={() => previousDay && onSelectDate(previousDay.key)}
+          className="border-border hover:bg-muted disabled:text-muted-foreground/50 flex items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium disabled:pointer-events-none"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          {t('todayBoard.previousDay')}
+        </button>
+        <button
+          type="button"
+          aria-label={t('todayBoard.nextDay')}
+          disabled={!nextDay}
+          onClick={() => nextDay && onSelectDate(nextDay.key)}
+          className="border-border hover:bg-muted disabled:text-muted-foreground/50 flex items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium disabled:pointer-events-none"
+        >
+          {t('todayBoard.nextDay')}
+          <ChevronRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+      <div className="grid grid-cols-7 gap-1">
+        {recentDates.map((day) => {
+          const isSelected = day.key === selectedDateKey
+          const label = format(day.date, 'd')
+          const ariaLabel = day.isToday ? t('todayBoard.today') : format(day.date, 'MMM d')
+
+          return (
+            <button
+              key={day.key}
+              type="button"
+              aria-label={ariaLabel}
+              aria-pressed={isSelected}
+              onClick={() => onSelectDate(day.key)}
+              className={cn(
+                'flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium tabular-nums transition-colors',
+                isSelected
+                  ? 'bg-primary text-primary-foreground'
+                  : 'text-stone-600 hover:bg-stone-100'
+              )}
+            >
+              {label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -466,7 +623,7 @@ function EntryContent({
       {summary ? (
         <p
           className={cn(
-            'mt-1 text-sm leading-6',
+            'mt-1 line-clamp-2 text-sm leading-6',
             entry.is_read ? 'text-stone-400' : 'text-slate-600'
           )}
         >

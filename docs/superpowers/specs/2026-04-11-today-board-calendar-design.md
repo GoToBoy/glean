@@ -72,26 +72,29 @@ After the API response, `buildTodayBoardEntries` must filter membership against 
 
 ## UI Design
 
-The Today Board header gains a compact date navigation area near the title and description.
+The Today Board header gains a compact calendar icon button placed with the existing translation icon controls. The date selector is a low-frequency control, so the full recent-day chooser stays hidden until the calendar button is clicked.
 
 Required controls:
 
-- a visible selected-day label
-- a "Today" action when the selected day is not today
-- selectable recent dates for the last 30 days
+- a calendar button in the existing header control area
+- a popover showing the selected date
+- selectable day numbers for the last 30 days
+- a previous-day action
+- a next-day action
 
 Desktop behavior:
 
-- show the date selector in the sticky board header without pushing the translation toggle out of view
+- keep the header title stable when the date changes
+- show the calendar popover from the header calendar button
+- keep the calendar button visually grouped with the translation toggle
 - keep the existing board/list/detail layout intact
 
 Mobile behavior:
 
-- use the same selector and selected-date state
-- allow the date row to scroll horizontally if needed
+- use the same calendar button and selected-date state
 - keep article opening behavior unchanged
 
-The empty state copy changes from "nothing collected today" to a date-aware message when a historical date is selected.
+Only the card-list content area refreshes when the date changes. The empty state copy may be date-aware because it is part of the list content, not the header.
 
 ## Component Boundaries
 
@@ -117,9 +120,11 @@ The empty state copy changes from "nothing collected today" to a date-aware mess
 
 `TodayBoard.tsx`
 
-- Render the date selector in the existing header.
+- Render a calendar button in the existing header control area.
+- Render the recent-day calendar in a popover after the button is clicked.
+- Support previous-day and next-day actions in the popover.
 - Emit date changes through props.
-- Use date-aware title/description/empty copy where needed.
+- Keep the header title stable while using date-aware empty copy where needed.
 
 i18n files
 

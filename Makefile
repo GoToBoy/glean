@@ -1,5 +1,6 @@
 .PHONY: help setup up down api worker web admin electron db-migrate db-upgrade db-downgrade \
         test test-db-up test-db-down test-cov lint format clean logs install-backend install-frontend install-root verify dev-all \
+        harness-up harness-down harness-status harness-health harness-logs harness-doctor harness-snapshot harness-instances docs-validate \
         pre-commit-install pre-commit-uninstall pre-commit-run
 
 # Default target
@@ -24,6 +25,14 @@ help:
 	@echo "  make admin          - Start admin dashboard"
 	@echo "  make electron       - Start Electron desktop app"
 	@echo "  make dev-all        - Start all services concurrently (api + worker + web)"
+	@echo "  make harness-up     - Start local dev harness"
+	@echo "  make harness-down   - Stop local dev harness"
+	@echo "  make harness-status - Show harness status"
+	@echo "  make harness-health - Run harness health checks"
+	@echo "  make harness-logs SERVICE=api - Show service logs from harness"
+	@echo "  make harness-doctor - Summarize harness diagnostics and recent errors"
+	@echo "  make harness-snapshot - Emit machine-readable harness diagnostics JSON"
+	@echo "  make harness-instances - List harness instances across worktrees"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate MSG=\"description\"  - Create new migration"
@@ -41,6 +50,7 @@ help:
 	@echo "  make format         - Format code"
 	@echo "  make pre-commit-install   - Install pre-commit hooks"
 	@echo "  make pre-commit-run       - Run pre-commit on all files"
+	@echo "  make docs-validate  - Validate required docs and references"
 	@echo ""
 	@echo "Other:"
 	@echo "  make verify         - Verify M0 setup"
@@ -226,3 +236,33 @@ dev:
 	@echo "    Terminal 1: make api"
 	@echo "    Terminal 2: make worker"
 	@echo "    Terminal 3: make web"
+
+harness-up:
+	@python3 -m harness up $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-down:
+	@python3 -m harness down $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-status:
+	@python3 -m harness status $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-health:
+	@python3 -m harness health $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-logs:
+ifndef SERVICE
+	$(error SERVICE is required. Usage: make harness-logs SERVICE=api)
+endif
+	@python3 -m harness logs $(SERVICE) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-doctor:
+	@python3 -m harness doctor $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-snapshot:
+	@python3 -m harness snapshot $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
+
+harness-instances:
+	@python3 -m harness instances
+
+docs-validate:
+	@python3 scripts/validate-docs.py

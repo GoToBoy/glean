@@ -4,7 +4,7 @@
 
 > [!IMPORTANT]
 > This README describes the fork's primary branch `personal-main`, not upstream `main`.
-> For a branch-to-main delta summary, see [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md).
+> For a branch-to-main delta summary, see [docs/references/branch-delta.md](./docs/references/branch-delta.md).
 
 > [!NOTE]
 > Join our [Discord](https://discord.gg/KMKC4sRVSJ) to follow updates and get support.
@@ -181,6 +181,9 @@ make db-upgrade
 
 # Start all dev services
 make dev-all
+
+# Preferred local orchestration entrypoint
+python3 -m harness up
 ```
 
 Development endpoints:
@@ -191,9 +194,11 @@ Development endpoints:
 
 ## Branch-Specific Docs
 
-- [docs/README.main-vs-feature.md](./docs/README.main-vs-feature.md) - summary of what `personal-main` adds over upstream `main`
-- [docs/feature-change-log.md](./docs/feature-change-log.md) - feature-level change log
-- [docs/rss-browser-extraction-plan.md](./docs/rss-browser-extraction-plan.md) - browser fallback plan for blocked RSS article pages
+- [docs/index.md](./docs/index.md) - repository docs index
+- [docs/references/branch-delta.md](./docs/references/branch-delta.md) - summary of what `personal-main` adds over upstream `main`
+- [docs/product/feature-change-log.md](./docs/product/feature-change-log.md) - feature-level change log
+- [docs/product/rss-browser-extraction-plan.md](./docs/product/rss-browser-extraction-plan.md) - browser fallback plan for blocked RSS article pages
+- [docs/operations/local-harness.md](./docs/operations/local-harness.md) - local harness commands and runtime model
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - local development guide
 
 ## Contributing

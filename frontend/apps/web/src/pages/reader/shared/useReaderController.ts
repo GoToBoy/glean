@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import {
+  buildRecentTodayBoardDates,
+  getTodayBoardDateKey,
+  resolveTodayBoardDateParam,
+} from './todayBoard'
 
 export type FilterType = 'all' | 'unread' | 'smart' | 'read-later'
 
@@ -18,6 +23,13 @@ export function useReaderController() {
   const tabParam = searchParams.get('tab') as FilterType | null
   const isSmartView = viewParam === 'smart'
   const isTodayBoardView = viewParam === 'today-board'
+  const todayBoardDateParam = isTodayBoardView ? searchParams.get('date') : null
+  const todayBoardNow = new Date()
+  const todayBoardTodayDate = getTodayBoardDateKey(todayBoardNow)
+  const todayBoardDate = isTodayBoardView
+    ? resolveTodayBoardDateParam(todayBoardDateParam, todayBoardNow)
+    : todayBoardTodayDate
+  const recentTodayBoardDates = buildRecentTodayBoardDates(todayBoardNow)
 
   const [filterType, setFilterType] = useState<FilterType>(() => {
     if (isTodayBoardView) {
@@ -67,9 +79,61 @@ export function useReaderController() {
     [selectedEntryId, entryIdFromUrl, syncEntryParam]
   )
 
+  const setTodayBoardDate = useCallback(
+    (dateKey: string) => {
+      const now = new Date()
+      const todayKey = getTodayBoardDateKey(now)
+      const resolvedDateKey = resolveTodayBoardDateParam(dateKey, now)
+
+      setSelectedEntryId(null)
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('view', 'today-board')
+          next.delete('entry')
+          next.delete('tab')
+
+          if (resolvedDateKey === todayKey) {
+            next.delete('date')
+          } else {
+            next.set('date', resolvedDateKey)
+          }
+
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams]
+  )
+
   useEffect(() => {
     setSelectedEntryId(entryIdFromUrl)
   }, [entryIdFromUrl])
+
+  useEffect(() => {
+    if (!isTodayBoardView || !todayBoardDateParam) return
+    if (todayBoardDateParam === todayBoardDate && todayBoardDate !== todayBoardTodayDate) return
+
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        if (todayBoardDate === todayBoardTodayDate) {
+          next.delete('date')
+        } else {
+          next.set('date', todayBoardDate)
+        }
+        return next
+      },
+      { replace: true }
+    )
+  }, [
+    isTodayBoardView,
+    todayBoardDateParam,
+    todayBoardDate,
+    todayBoardTodayDate,
+    setSearchParams,
+  ])
 
   useEffect(() => {
     setSearchParams(
@@ -100,5 +164,9 @@ export function useReaderController() {
     selectedEntryId,
     selectEntry,
     clearSelectedEntry,
+    todayBoardDate,
+    todayBoardTodayDate,
+    recentTodayBoardDates,
+    setTodayBoardDate,
   }
 }

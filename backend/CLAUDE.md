@@ -57,6 +57,29 @@ backend/
 2. Register in `WorkerSettings.functions` or `WorkerSettings.cron_jobs` in `main.py`
 3. Tasks are async functions with `ctx` parameter
 
+### Feed Fetch And Scheduler Changes
+
+Before changing any of the files below, read `docs/operations/feed-fetch-guardrails.md` and `docs/architecture/feed-fetch-flow.md` first:
+
+- `backend/apps/api/glean_api/feed_fetch_progress.py`
+- `backend/apps/api/glean_api/feed_refresh.py`
+- `backend/apps/api/glean_api/routers/feeds.py`
+- `backend/apps/api/glean_api/routers/admin.py`
+- `backend/apps/worker/glean_worker/main.py`
+- `backend/apps/worker/glean_worker/config.py`
+- `backend/apps/worker/glean_worker/tasks/feed_fetcher.py`
+- `backend/apps/worker/glean_worker/tasks/feed_fetch_progress.py`
+- `backend/apps/api/tests/test_feed_fetch_progress.py`
+- `backend/apps/api/tests/test_feeds_router_active_runs.py`
+- `backend/apps/worker/tests/test_feed_refresh_scheduler.py`
+
+These files carry non-obvious failure contracts from production incidents. Any change in this area must preserve:
+
+- Redis job and persisted active-run reconciliation
+- idempotent, concurrency-safe terminal-stage writes
+- explicit `WORKER_TIMEZONE` handling for cron and midnight supplementation
+- `tzdata` availability or safe UTC fallback when named timezones are unavailable
+
 ## Code Style
 
 - 100 char line length, ruff for formatting

@@ -94,7 +94,7 @@
 关键位置：
 - `frontend/apps/admin/src/pages/FeedsPage.tsx`
 - `frontend/apps/web/scripts/precompress-assets.mjs`
-- `docs/cloudflare-tunnel-optimization.md`
+- `docs/operations/cloudflare-tunnel-optimization.md`
 - `docker-compose.personal.yml`
 
 ### 3.4 测试覆盖增强

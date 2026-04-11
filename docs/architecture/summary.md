@@ -8,7 +8,7 @@ Glean uses a three-tier architecture:
 
 1. Client layer: React Web app, Electron desktop wrapper, and Admin dashboard.
 2. Service layer: FastAPI API + arq background worker.
-3. Storage layer: PostgreSQL + Redis + Milvus (optional, for recommendation/vector features).
+3. Storage layer: PostgreSQL + Redis + optional pgvector-backed vector features.
 
 Primary flow: `Frontend -> REST API -> Core Services -> Database/Queue -> Worker`.
 
@@ -50,7 +50,7 @@ glean/
   - Models: `backend/packages/database/glean_database/models/`
   - Migrations: `backend/packages/database/glean_database/migrations/`
 - Worker entrypoint: `backend/apps/worker/glean_worker/main.py`
-  - Scheduled feed fetch every 15 minutes
+  - Scheduled feed fetch derived from `FEED_REFRESH_INTERVAL_MINUTES`
   - Cleanup jobs hourly
   - Async tasks for feed fetch, translation, embedding, preference updates
 
@@ -76,9 +76,7 @@ Default Docker Compose deployment includes:
 - `worker` (arq)
 - `web`
 - `admin`
-- `milvus` (+ etcd/minio dependencies)
-
-Lite mode can run without Milvus (`docker-compose.lite.yml`), disabling vector-dependent features.
+- vector features now run through PostgreSQL + `pgvector`, so the default stack does not require a separate Milvus deployment.
 
 ## 6. Key Data & Control Patterns
 
@@ -92,5 +90,5 @@ Lite mode can run without Milvus (`docker-compose.lite.yml`), disabling vector-d
 - High-level guide: `CLAUDE.md`
 - Backend guide: `backend/CLAUDE.md`
 - Frontend guide: `frontend/CLAUDE.md`
-- Detailed architecture: `docs/technical-architecture.md`
+- Detailed architecture: `docs/architecture/technical-architecture.md`
 - Deployment details: `README.md`, `DEPLOY.md`
