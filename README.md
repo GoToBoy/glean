@@ -109,7 +109,7 @@ Important environment variables:
 | `WEB_PORT` | Web UI port | `80` |
 | `ADMIN_PORT` | Admin UI port | `3001` |
 | `IMAGE_TAG` | Docker image tag | `latest` |
-| `MTRAN_SERVER_URL` | Backend/worker translation endpoint | `http://mtranserver:5001` |
+| `MTRAN_SERVER_URL` | Backend/worker translation endpoint | `http://mtranserver:8989` |
 | `WORKER_JOB_TIMEOUT_SECONDS` | Worker timeout for long-running jobs | `1800` |
 | `WORKER_MAX_JOBS` | Max concurrent arq jobs in the worker | `4` |
 | `FEED_REFRESH_INTERVAL_MINUTES` | Scheduled feed refresh interval and default `next_fetch_at` delay | `720` |

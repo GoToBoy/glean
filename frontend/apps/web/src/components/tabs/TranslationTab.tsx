@@ -15,7 +15,7 @@ import { useTranslation } from '@glean/i18n'
 import type { TranslationTargetLanguage } from '@glean/types'
 
 type Provider = 'google' | 'deepl' | 'openai' | 'mtran'
-const DEFAULT_MTRAN_BASE_URL = 'http://mtranserver:5001'
+const DEFAULT_MTRAN_BASE_URL = 'http://mtranserver:8989'
 
 const PROVIDERS: { value: Provider; nameKey: string; descKey: string }[] = [
   { value: 'google', nameKey: 'translation.google.name', descKey: 'translation.google.desc' },

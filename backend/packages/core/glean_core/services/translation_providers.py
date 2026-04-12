@@ -21,7 +21,7 @@ logger = get_logger(__name__)
 # Google Translate has a ~5000 character limit per request
 _CHUNK_SIZE = 4500
 _SEPARATOR = " ||| "
-DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:5001"
+DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:8989"
 MTRAN_BATCH_SIZE = 24
 
 
@@ -334,17 +334,23 @@ class MTranProvider(TranslationProvider):
             headers["Authorization"] = f"Bearer {self.api_key}"
         return headers
 
+    def _language_code(self, lang: str) -> str:
+        normalized = lang.strip()
+        if not normalized:
+            return "auto"
+        if normalized.lower() == "auto":
+            return "auto"
+        primary = re.split(r"[-_]", normalized, maxsplit=1)[0].lower()
+        if primary in {"zh", "cmn", "yue"}:
+            return "zh"
+        return primary
+
     def _payload(self, text: str, source: str, target: str) -> dict[str, Any]:
-        payload: dict[str, Any] = {
+        return {
             "text": text,
-            "source": source,
-            "target": target,
-            "source_language": source,
-            "target_language": target,
+            "from": self._language_code(source),
+            "to": self._language_code(target),
         }
-        if self.model:
-            payload["model"] = self.model
-        return payload
 
     def _extract_single(self, data: Any) -> str | None:
         if isinstance(data, str):
@@ -420,13 +426,9 @@ class MTranProvider(TranslationProvider):
     def _translate_batch_chunk(self, texts: list[str], source: str, target: str) -> list[str]:
         payload: dict[str, Any] = {
             "texts": texts,
-            "source": source,
-            "target": target,
-            "source_language": source,
-            "target_language": target,
+            "from": self._language_code(source),
+            "to": self._language_code(target),
         }
-        if self.model:
-            payload["model"] = self.model
 
         try:
             with httpx.Client(timeout=self.timeout) as client:

@@ -3,6 +3,7 @@
 from typing import Any
 
 from glean_core.services.translation_providers import (
+    DEFAULT_MTRAN_SERVER_URL,
     FallbackProvider,
     GoogleFreeProvider,
     MTranProvider,
@@ -100,7 +101,7 @@ def test_create_provider_falls_back_to_google_for_unknown() -> None:
 
 
 def test_mtran_translate_parses_standard_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    fake_client = _FakeClient({"translation": "你好世界"})
+    fake_client = _FakeClient({"result": "你好世界"})
 
     def _client_factory(*args: Any, **kwargs: Any) -> _FakeClient:
         return fake_client
@@ -115,10 +116,15 @@ def test_mtran_translate_parses_standard_payload(monkeypatch) -> None:  # type: 
 
     assert result == "你好世界"
     assert fake_client.calls[0][0] == "http://mtran.local/translate"
+    assert fake_client.calls[0][1]["json"] == {
+        "from": "auto",
+        "to": "zh",
+        "text": "Hello world",
+    }
 
 
 def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
-    fake_client = _FakeClient({"translations": ["你好", "世界"]})
+    fake_client = _FakeClient({"results": ["你好", "世界"]})
 
     def _client_factory(*args: Any, **kwargs: Any) -> _FakeClient:
         return fake_client
@@ -133,6 +139,11 @@ def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-unt
 
     assert result == ["你好", "世界"]
     assert fake_client.calls[0][0] == "http://mtran.local/translate/batch"
+    assert fake_client.calls[0][1]["json"] == {
+        "from": "auto",
+        "to": "zh",
+        "texts": ["hello", "world"],
+    }
 
 
 def test_mtran_batch_chunks_large_payloads(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -152,6 +163,13 @@ def test_mtran_batch_chunks_large_payloads(monkeypatch) -> None:  # type: ignore
 
     assert result == [f"translated {text}" for text in texts]
     assert [len(call[1]["json"]["texts"]) for call in fake_client.calls] == [24, 6]
+
+
+def test_mtran_default_url_uses_container_port() -> None:
+    provider = MTranProvider()
+
+    assert DEFAULT_MTRAN_SERVER_URL == "http://mtranserver:8989"
+    assert provider.base_url == "http://mtranserver:8989"
 
 
 def test_parse_openai_batch_response_numbered() -> None:

@@ -108,7 +108,7 @@ docker compose --profile mtran up -d
 | `WEB_PORT` | Web 端口 | `80` |
 | `ADMIN_PORT` | 管理后台端口 | `3001` |
 | `IMAGE_TAG` | Docker 镜像标签 | `latest` |
-| `MTRAN_SERVER_URL` | backend/worker 使用的翻译服务地址 | `http://mtranserver:5001` |
+| `MTRAN_SERVER_URL` | backend/worker 使用的翻译服务地址 | `http://mtranserver:8989` |
 | `WORKER_JOB_TIMEOUT_SECONDS` | 长任务 worker 超时 | `1800` |
 | `WORKER_MAX_JOBS` | worker 的最大并发 job 数 | `4` |
 | `FEED_REFRESH_INTERVAL_MINUTES` | 定时抓取间隔，以及默认的 `next_fetch_at` 推进延迟 | `720` |
