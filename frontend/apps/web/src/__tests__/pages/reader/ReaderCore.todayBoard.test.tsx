@@ -20,6 +20,7 @@ const {
     (props: {
       entries: Array<{ id: string; is_read?: boolean }>
       onSelectFeed?: (feedId: string) => void
+      onCloseDetail?: () => void
     }) => (
       <div data-testid="today-board-probe">
         {props.entries.map((entry) => entry.id).join(',')}
@@ -420,6 +421,33 @@ describe('ReaderCore today-board route', () => {
     expect(updateEntryStateSpy).not.toHaveBeenCalled()
   })
 
+  it('keeps an unread desktop today-board entry unread when detail closes before the delay', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    const lastCall = todayBoardSpy.mock.calls[todayBoardSpy.mock.calls.length - 1]
+    expect(lastCall?.[0].onCloseDetail).toBeTypeOf('function')
+
+    await act(async () => {
+      lastCall?.[0].onCloseDetail?.()
+      await Promise.resolve()
+    })
+
+    expect(updateEntryStateSpy).not.toHaveBeenCalled()
+  })
+
   it('marks a selected today-board entry read after the open delay', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
@@ -443,6 +471,53 @@ describe('ReaderCore today-board route', () => {
     expect(updateEntryStateSpy).toHaveBeenCalledWith({
       entryId: 'today-entry',
       data: { is_read: true },
+    })
+  })
+
+  it('optimistically updates today-board entries when delayed auto-read starts', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    let resolveUpdate: (entry: EntryWithState) => void = () => undefined
+    updateEntryStateSpy.mockReturnValue(
+      new Promise<EntryWithState>((resolve) => {
+        resolveUpdate = resolve
+      })
+    )
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(false)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+    })
+
+    expect(updateEntryStateSpy).toHaveBeenCalledWith({
+      entryId: 'today-entry',
+      data: { is_read: true },
+    })
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(true)
+
+    await act(async () => {
+      resolveUpdate(
+        makeEntry({
+          id: 'today-entry',
+          is_read: true,
+          ingested_at: '2026-04-10T01:00:00+08:00',
+          created_at: '2026-04-10T01:00:00+08:00',
+        })
+      )
+      await Promise.resolve()
     })
   })
 

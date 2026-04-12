@@ -333,13 +333,19 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
   const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
 
-  useEffect(() => {
-    if (!selectedEntryId || !resolvedSelectedEntry || resolvedSelectedEntry.is_read) return
-    if (autoMarkedEntryIdsRef.current.has(selectedEntryId)) return
-
-    const entryId = selectedEntryId
-    const timer = window.setTimeout(() => {
+  const markEntryRead = useCallback(
+    (entryId: string) => {
+      if (autoMarkedEntryIdsRef.current.has(entryId)) return
       autoMarkedEntryIdsRef.current.add(entryId)
+
+      if (isTodayBoardView) {
+        const optimisticReadAt = new Date().toISOString()
+        setTodayBoardAutoReadAtById((current) => ({
+          ...current,
+          [entryId]: current[entryId] ?? optimisticReadAt,
+        }))
+      }
+
       void updateMutation
         .mutateAsync({
           entryId,
@@ -349,18 +355,36 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           if (!isTodayBoardView) return
           setTodayBoardAutoReadAtById((current) => ({
             ...current,
-            [entryId]: updatedEntry?.read_at ?? new Date().toISOString(),
+            [entryId]: updatedEntry?.read_at ?? current[entryId] ?? new Date().toISOString(),
           }))
         })
         .catch(() => {
           autoMarkedEntryIdsRef.current.delete(entryId)
+          if (!isTodayBoardView) return
+          setTodayBoardAutoReadAtById((current) => {
+            if (!current[entryId]) return current
+            const next = { ...current }
+            delete next[entryId]
+            return next
+          })
         })
+    },
+    [isTodayBoardView, updateMutation]
+  )
+
+  useEffect(() => {
+    if (!selectedEntryId || !resolvedSelectedEntry || resolvedSelectedEntry.is_read) return
+    if (autoMarkedEntryIdsRef.current.has(selectedEntryId)) return
+
+    const entryId = selectedEntryId
+    const timer = window.setTimeout(() => {
+      markEntryRead(entryId)
     }, AUTO_MARK_READ_DELAY_MS)
 
     return () => {
       window.clearTimeout(timer)
     }
-  }, [isTodayBoardView, resolvedSelectedEntry, selectedEntryId, updateMutation])
+  }, [markEntryRead, resolvedSelectedEntry, selectedEntryId])
 
   useEffect(() => {
     if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) return
@@ -840,6 +864,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     [navigate]
   )
 
+  const handleTodayBoardDetailClose = useCallback(() => {
+    clearSelectedEntry(true)
+  }, [clearSelectedEntry])
+
   useEffect(() => {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
@@ -899,7 +927,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 onSelectFeed={handleTodayBoardFeedSelect}
                 isLoading={isLoading}
                 onSelectEntry={handleSelectEntry}
-                onCloseDetail={() => clearSelectedEntry(true)}
+                onCloseDetail={handleTodayBoardDetailClose}
                 listWidthPx={entriesWidth}
                 isTranslationActive={isListTranslationActive}
                 isTranslationLoading={isListTranslationLoading}
@@ -916,7 +944,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                               ? resolvedSelectedEntry
                               : entry
                           }
-                          onClose={() => clearSelectedEntry(true)}
+                          onClose={handleTodayBoardDetailClose}
                           isFullscreen={isFullscreen}
                           onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
                           showCloseButton

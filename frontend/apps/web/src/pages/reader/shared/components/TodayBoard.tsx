@@ -4,6 +4,7 @@ import { useTranslation } from '@glean/i18n'
 import { cn } from '@glean/ui'
 import {
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -77,6 +78,9 @@ export function TodayBoard({
   const [isCalendarOpen, setIsCalendarOpen] = useState(false)
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(() => new Set())
   const selectedEntryRefs = useRef(new Map<string, HTMLButtonElement>())
+  const listPanelRef = useRef<HTMLDivElement>(null)
+  const cardBoardScrollTopRef = useRef(0)
+  const previousSelectedEntryIdRef = useRef<string | null>(null)
   const groups = useMemo(
     () =>
       buildTodayBoardGroups(entries, {
@@ -93,6 +97,14 @@ export function TodayBoard({
       ?.scrollIntoView({ block: 'center' })
   }, [selectedEntryId, selectedEntry])
 
+  useLayoutEffect(() => {
+    const previousSelectedEntryId = previousSelectedEntryIdRef.current
+    if (previousSelectedEntryId && !selectedEntryId && listPanelRef.current) {
+      listPanelRef.current.scrollTop = cardBoardScrollTopRef.current
+    }
+    previousSelectedEntryIdRef.current = selectedEntryId
+  }, [selectedEntryId])
+
   const toggleFeed = (feedId: string) => {
     setExpandedFeedIds((current) => {
       const next = new Set(current)
@@ -104,6 +116,12 @@ export function TodayBoard({
       return next
     })
   }
+  const handleSelectEntry = (entry: TodayBoardEntry) => {
+    if (!selectedEntryId) {
+      cardBoardScrollTopRef.current = listPanelRef.current?.scrollTop ?? 0
+    }
+    onSelectEntry(entry)
+  }
   const listPanelStyle: CSSProperties = selectedEntry
     ? { width: `${listWidthPx}px`, minWidth: 280, maxWidth: 500, scrollbarGutter: 'stable' }
     : { scrollbarGutter: 'stable' }
@@ -114,6 +132,7 @@ export function TodayBoard({
       data-testid="today-board-layout"
     >
       <div
+        ref={listPanelRef}
         className={cn(
           'min-w-0 overflow-y-auto transition-[width,max-width] duration-200',
           selectedEntry ? 'shrink-0' : 'w-full flex-1'
@@ -209,7 +228,7 @@ export function TodayBoard({
             isDetailOpen={!!selectedEntry}
             isTranslationActive={isTranslationActive}
             translatedTexts={translatedTexts}
-            onSelectEntry={onSelectEntry}
+            onSelectEntry={handleSelectEntry}
             onSelectFeed={onSelectFeed}
             onToggleFeed={toggleFeed}
           />

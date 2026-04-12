@@ -263,6 +263,28 @@ describe('TodayBoard interaction', () => {
     expect(screen.getByTestId('today-board-card-board')).toBeInTheDocument()
   })
 
+  it('restores the card-board scroll position after desktop detail closes', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    const entries = [
+      makeEntry({ id: 'entry-1', title: 'First entry' }),
+      makeEntry({ id: 'entry-2', title: 'Second entry' }),
+    ]
+
+    TodayBoardHarness({ entries })
+
+    const scrollContainer = screen.getByTestId('today-board-blank-space')
+    scrollContainer.scrollTop = 240
+
+    fireEvent.click(screen.getByRole('button', { name: /first entry/i }))
+
+    scrollContainer.scrollTop = 999
+    fireEvent.click(scrollContainer)
+
+    expect(screen.getByTestId('today-board-card-board')).toBeInTheDocument()
+    expect(scrollContainer.scrollTop).toBe(240)
+  })
+
   it('renders translated card text and exposes a translation toggle', () => {
     const boardEntries = buildTodayBoardEntries(
       [makeEntry({ id: 'entry-1', title: 'Original title', summary: 'Original summary' })],
