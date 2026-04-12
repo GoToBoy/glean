@@ -176,7 +176,8 @@ describe('TodayBoard interaction', () => {
     TodayBoardHarness({ entries })
 
     expect(screen.getByText('1 / 1')).toBeInTheDocument()
-    expect(screen.getByText('2 · Read')).toBeInTheDocument()
+    expect(screen.getByText('Read')).toBeInTheDocument()
+    expect(screen.queryByText('2 · Read')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /completed read one/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /completed read two/i })).toBeInTheDocument()
     expect(

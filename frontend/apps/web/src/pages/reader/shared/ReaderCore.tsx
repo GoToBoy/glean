@@ -133,6 +133,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   >('idle')
   const [listScrollTop, setListScrollTop] = useState(0)
   const [listViewportHeight, setListViewportHeight] = useState(0)
+  const [todayBoardAutoReadAtById, setTodayBoardAutoReadAtById] = useState<
+    Record<string, string>
+  >({})
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
@@ -201,6 +204,16 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     () => entriesData?.pages.flatMap((page) => page.items) ?? [],
     [entriesData?.pages]
   )
+  const todayBoardSourceEntries = useMemo(() => {
+    if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) {
+      return rawEntries
+    }
+
+    return rawEntries.map((entry) => {
+      const readAt = todayBoardAutoReadAtById[entry.id]
+      return readAt ? { ...entry, is_read: true, read_at: entry.read_at ?? readAt } : entry
+    })
+  }, [isTodayBoardView, rawEntries, todayBoardAutoReadAtById])
   const feedDescriptionById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const subscription of subscriptions) {
@@ -210,11 +223,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [subscriptions])
   const todayBoardEntries = useMemo(
     () =>
-      buildTodayBoardEntries(rawEntries, {
+      buildTodayBoardEntries(todayBoardSourceEntries, {
         selectedDate: todayBoardDate,
         getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
       }),
-    [rawEntries, feedDescriptionById, todayBoardDate]
+    [todayBoardSourceEntries, feedDescriptionById, todayBoardDate]
   )
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
@@ -330,6 +343,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           entryId,
           data: { is_read: true },
         })
+        .then((updatedEntry) => {
+          if (!isTodayBoardView) return
+          setTodayBoardAutoReadAtById((current) => ({
+            ...current,
+            [entryId]: updatedEntry?.read_at ?? new Date().toISOString(),
+          }))
+        })
         .catch(() => {
           autoMarkedEntryIdsRef.current.delete(entryId)
         })
@@ -338,7 +358,23 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [resolvedSelectedEntry, selectedEntryId, updateMutation])
+  }, [isTodayBoardView, resolvedSelectedEntry, selectedEntryId, updateMutation])
+
+  useEffect(() => {
+    if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) return
+
+    setTodayBoardAutoReadAtById((current) => {
+      let changed = false
+      const next = { ...current }
+      for (const entry of rawEntries) {
+        if (entry.is_read && next[entry.id]) {
+          delete next[entry.id]
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+  }, [isTodayBoardView, rawEntries, todayBoardAutoReadAtById])
 
   const shouldVirtualize = visibleEntries.length >= VIRTUALIZATION_THRESHOLD
   const virtualizedList = useMemo(() => {

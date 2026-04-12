@@ -5,7 +5,7 @@ import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
 
 const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControllerState } =
   vi.hoisted(() => ({
-  todayBoardSpy: vi.fn((props: { entries: Array<{ id: string }> }) => (
+  todayBoardSpy: vi.fn((props: { entries: Array<{ id: string; is_read?: boolean }> }) => (
     <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
   )),
   useInfiniteEntriesSpy: vi.fn(),
@@ -23,6 +23,11 @@ const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControl
     isLoading: false,
   },
 }))
+
+function getLastTodayBoardEntry(entryId: string) {
+  const lastCall = todayBoardSpy.mock.calls[todayBoardSpy.mock.calls.length - 1]
+  return lastCall?.[0].entries.find((entry) => entry.id === entryId)
+}
 
 function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
   return {
@@ -348,5 +353,39 @@ describe('ReaderCore today-board route', () => {
       entryId: 'today-entry',
       data: { is_read: true },
     })
+  })
+
+  it('updates today-board entries after delayed auto-read resolves so returning to cards shows read state', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    updateEntryStateSpy.mockResolvedValue(
+      makeEntry({
+        id: 'today-entry',
+        is_read: true,
+        ingested_at: '2026-04-10T01:00:00+08:00',
+        created_at: '2026-04-10T01:00:00+08:00',
+      })
+    )
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(false)
+
+    await act(async () => {
+      vi.advanceTimersByTime(2000)
+      await Promise.resolve()
+    })
+
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(true)
   })
 })

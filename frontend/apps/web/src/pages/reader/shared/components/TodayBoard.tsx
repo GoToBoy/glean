@@ -484,7 +484,7 @@ function FeedGroupHeader({
   const { t } = useTranslation('reader')
   const statusText =
     group.unreadCount === 0
-      ? `${group.totalCount} · ${t('todayBoard.readComplete')}`
+      ? t('todayBoard.readComplete')
       : `${group.unreadCount} / ${group.totalCount}`
 
   return (
