@@ -38,6 +38,22 @@ class _FakeClient:
         return _FakeResponse(self.payload)
 
 
+class _EchoBatchClient:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def __enter__(self) -> "_EchoBatchClient":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:  # type: ignore[no-untyped-def]
+        return False
+
+    def post(self, url: str, **kwargs: Any) -> _FakeResponse:
+        self.calls.append((url, kwargs))
+        texts = kwargs["json"]["texts"]
+        return _FakeResponse({"translations": [f"translated {text}" for text in texts]})
+
+
 def test_create_provider_returns_mtran() -> None:
     from unittest.mock import patch
 
@@ -117,6 +133,25 @@ def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-unt
 
     assert result == ["你好", "世界"]
     assert fake_client.calls[0][0] == "http://mtran.local/translate/batch"
+
+
+def test_mtran_batch_chunks_large_payloads(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake_client = _EchoBatchClient()
+
+    def _client_factory(*args: Any, **kwargs: Any) -> _EchoBatchClient:
+        return fake_client
+
+    monkeypatch.setattr(
+        "glean_core.services.translation_providers.httpx.Client",
+        _client_factory,
+    )
+
+    provider = MTranProvider(base_url="http://mtran.local")
+    texts = [f"text {index}" for index in range(30)]
+    result = provider.translate_batch(texts, "auto", "zh-CN")
+
+    assert result == [f"translated {text}" for text in texts]
+    assert [len(call[1]["json"]["texts"]) for call in fake_client.calls] == [24, 6]
 
 
 def test_parse_openai_batch_response_numbered() -> None:

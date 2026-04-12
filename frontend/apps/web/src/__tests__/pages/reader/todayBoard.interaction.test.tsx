@@ -93,7 +93,9 @@ describe('TodayBoard interaction', () => {
     expect(screen.getByTestId('today-board-blank-space')).toHaveStyle({
       scrollbarGutter: 'stable',
     })
-    expect(screen.queryByText('Items collected today across all subscriptions')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Items collected today across all subscriptions')
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Intake date')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Apr 7' })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText('Nothing collected on Apr 7')).toBeInTheDocument()
@@ -112,9 +114,18 @@ describe('TodayBoard interaction', () => {
     const entries = [
       makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),
       makeEntry({ id: 'unread-2', title: 'Unread two', ingested_at: '2026-04-10T10:00:00+08:00' }),
-      makeEntry({ id: 'unread-3', title: 'Unread three', ingested_at: '2026-04-10T09:00:00+08:00' }),
+      makeEntry({
+        id: 'unread-3',
+        title: 'Unread three',
+        ingested_at: '2026-04-10T09:00:00+08:00',
+      }),
       makeEntry({ id: 'unread-4', title: 'Unread four', ingested_at: '2026-04-10T08:00:00+08:00' }),
-      makeEntry({ id: 'read-1', title: 'Read one', is_read: true, ingested_at: '2026-04-10T07:00:00+08:00' }),
+      makeEntry({
+        id: 'read-1',
+        title: 'Read one',
+        is_read: true,
+        ingested_at: '2026-04-10T07:00:00+08:00',
+      }),
     ]
 
     TodayBoardHarness({ entries })
@@ -163,9 +174,18 @@ describe('TodayBoard interaction', () => {
     const entries = [
       makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),
       makeEntry({ id: 'unread-2', title: 'Unread two', ingested_at: '2026-04-10T10:00:00+08:00' }),
-      makeEntry({ id: 'unread-3', title: 'Unread three', ingested_at: '2026-04-10T09:00:00+08:00' }),
+      makeEntry({
+        id: 'unread-3',
+        title: 'Unread three',
+        ingested_at: '2026-04-10T09:00:00+08:00',
+      }),
       makeEntry({ id: 'unread-4', title: 'Unread four', ingested_at: '2026-04-10T08:00:00+08:00' }),
-      makeEntry({ id: 'read-1', title: 'Read one', is_read: true, ingested_at: '2026-04-10T07:00:00+08:00' }),
+      makeEntry({
+        id: 'read-1',
+        title: 'Read one',
+        is_read: true,
+        ingested_at: '2026-04-10T07:00:00+08:00',
+      }),
     ]
 
     TodayBoardHarness({ entries })
@@ -256,11 +276,51 @@ describe('TodayBoard interaction', () => {
     expect(screen.queryByTestId('today-board-card-board')).not.toBeInTheDocument()
     expect(screen.getByTestId('today-board-blank-space')).toHaveStyle({ width: '360px' })
     expect(screen.getByTestId('today-board-detail-pane').className).toContain('flex-1')
-    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'center' })
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
 
     fireEvent.click(screen.getByTestId('today-board-blank-space'))
     expect(screen.queryByTestId('today-board-detail')).not.toBeInTheDocument()
     expect(screen.getByTestId('today-board-card-board')).toBeInTheDocument()
+  })
+
+  it('does not keep scrolling the selected detail-list item when entry data refreshes', () => {
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    const renderBoardEntries = (entries: EntryWithState[]) =>
+      buildTodayBoardEntries(entries, {
+        now: new Date('2026-04-10T12:00:00+08:00'),
+        getFeedDescription: () => 'Feed summary',
+      })
+    const props = {
+      selectedEntryId: 'entry-1',
+      onSelectEntry: vi.fn(),
+      onCloseDetail: vi.fn(),
+      listWidthPx: 360,
+      renderDetail: (entry: { title: string }) => (
+        <div data-testid="today-board-detail">{entry.title}</div>
+      ),
+    }
+
+    const { rerender } = render(
+      <TodayBoard
+        {...props}
+        entries={renderBoardEntries([makeEntry({ id: 'entry-1', title: 'First entry' })])}
+      />
+    )
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' })
+
+    rerender(
+      <TodayBoard
+        {...props}
+        entries={renderBoardEntries([
+          makeEntry({ id: 'entry-1', title: 'First entry', is_read: true }),
+        ])}
+      />
+    )
+
+    expect(scrollIntoView).toHaveBeenCalledTimes(1)
   })
 
   it('restores the card-board scroll position after desktop detail closes', () => {

@@ -81,6 +81,7 @@ export function TodayBoard({
   const listPanelRef = useRef<HTMLDivElement>(null)
   const cardBoardScrollTopRef = useRef(0)
   const previousSelectedEntryIdRef = useRef<string | null>(null)
+  const lastScrolledEntryIdRef = useRef<string | null>(null)
   const groups = useMemo(
     () =>
       buildTodayBoardGroups(entries, {
@@ -91,10 +92,16 @@ export function TodayBoard({
   )
 
   useEffect(() => {
-    if (!selectedEntryId || !selectedEntry) return
-    selectedEntryRefs.current
-      .get(selectedEntryId)
-      ?.scrollIntoView({ block: 'center' })
+    if (!selectedEntryId || !selectedEntry) {
+      lastScrolledEntryIdRef.current = null
+      return
+    }
+    if (lastScrolledEntryIdRef.current === selectedEntryId) return
+    const selectedEntryNode = selectedEntryRefs.current.get(selectedEntryId)
+    if (!selectedEntryNode) return
+
+    lastScrolledEntryIdRef.current = selectedEntryId
+    selectedEntryNode.scrollIntoView({ block: 'nearest' })
   }, [selectedEntryId, selectedEntry])
 
   useLayoutEffect(() => {
@@ -519,7 +526,7 @@ function FeedGroupHeader({
   return (
     <div
       className={cn(
-        'bg-stone-100/80 flex items-center justify-between gap-3 px-3',
+        'flex items-center justify-between gap-3 bg-stone-100/80 px-3',
         compact ? 'py-2' : 'py-2.5'
       )}
     >
@@ -546,9 +553,7 @@ function FeedGroupHeader({
           </div>
         ) : null}
       </div>
-      <div className="shrink-0 text-xs font-normal tabular-nums text-stone-500">
-        {statusText}
-      </div>
+      <div className="shrink-0 text-xs font-normal text-stone-500 tabular-nums">{statusText}</div>
     </div>
   )
 }

@@ -1,7 +1,12 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { useInfiniteEntries, useEntry, useUpdateEntryState, entryKeys } from '../../../hooks/useEntries'
+import {
+  useInfiniteEntries,
+  useEntry,
+  useUpdateEntryState,
+  entryKeys,
+} from '../../../hooks/useEntries'
 import { useAllSubscriptions } from '../../../hooks/useSubscriptions'
 import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
@@ -33,6 +38,7 @@ const VIRTUALIZATION_THRESHOLD = 80
 const VIRTUALIZATION_OVERSCAN = 8
 const ENTRY_FADE_ANIMATION_LIMIT = 24
 const AUTO_MARK_READ_DELAY_MS = 2000
+const LIST_TRANSLATION_BATCH_SIZE = 24
 
 export function calculateVirtualWindow(params: {
   totalCount: number
@@ -55,7 +61,7 @@ export function calculateVirtualWindow(params: {
  * Reader page.
  *
  * Main reading interface with entry list, filters, and reading pane.
-*/
+ */
 export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { t } = useTranslation('reader')
   const navigate = useNavigate()
@@ -122,6 +128,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const pendingTranslationEntryIdsRef = useRef<Set<string>>(new Set())
   const translatedEntryIdsRef = useRef<Set<string>>(new Set())
   const listTranslationSessionRef = useRef(0)
+  const todayBoardTranslationKeyRef = useRef<string | null>(null)
   const autoMarkedEntryIdsRef = useRef<Set<string>>(new Set())
   const [isListTranslationActive, setIsListTranslationActive] = useState(
     user?.settings?.list_translation_auto_enabled ?? false
@@ -135,12 +142,17 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   >('idle')
   const [listScrollTop, setListScrollTop] = useState(0)
   const [listViewportHeight, setListViewportHeight] = useState(0)
-  const [todayBoardAutoReadAtById, setTodayBoardAutoReadAtById] = useState<
-    Record<string, string>
-  >({})
+  const [todayBoardAutoReadAtById, setTodayBoardAutoReadAtById] = useState<Record<string, string>>(
+    {}
+  )
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
+  const updateEntryStateRef = useRef(updateMutation.mutateAsync)
+  useEffect(() => {
+    updateEntryStateRef.current = updateMutation.mutateAsync
+  }, [updateMutation.mutateAsync])
+
   const prefetchEntryDetail = useCallback(
     (entryId: string) => {
       if (!entryId || prefetchingEntryIdsRef.current.has(entryId)) return
@@ -230,6 +242,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
       }),
     [todayBoardSourceEntries, feedDescriptionById, todayBoardDate]
+  )
+  const todayBoardTranslationEntryIds = useMemo(
+    () => todayBoardEntries.map((entry) => entry.id),
+    [todayBoardEntries]
   )
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
@@ -346,8 +362,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         }))
       }
 
-      void updateMutation
-        .mutateAsync({
+      void updateEntryStateRef
+        .current({
           entryId,
           data: { is_read: true },
         })
@@ -369,11 +385,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
           })
         })
     },
-    [isTodayBoardView, updateMutation]
+    [isTodayBoardView]
   )
 
+  const resolvedSelectedEntryId = resolvedSelectedEntry?.id
+  const resolvedSelectedEntryIsRead = resolvedSelectedEntry?.is_read ?? false
   useEffect(() => {
-    if (!selectedEntryId || !resolvedSelectedEntry || resolvedSelectedEntry.is_read) return
+    if (!selectedEntryId || !resolvedSelectedEntryId || resolvedSelectedEntryIsRead) return
     if (autoMarkedEntryIdsRef.current.has(selectedEntryId)) return
 
     const entryId = selectedEntryId
@@ -384,7 +402,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     return () => {
       window.clearTimeout(timer)
     }
-  }, [markEntryRead, resolvedSelectedEntry, selectedEntryId])
+  }, [markEntryRead, resolvedSelectedEntryId, resolvedSelectedEntryIsRead, selectedEntryId])
 
   useEffect(() => {
     if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) return
@@ -428,7 +446,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       endIndex,
       entries: visibleEntries.slice(startIndex, endIndex),
       topSpacerHeight: startIndex * ENTRY_ROW_ESTIMATED_HEIGHT,
-      bottomSpacerHeight: Math.max(0, (visibleEntries.length - endIndex) * ENTRY_ROW_ESTIMATED_HEIGHT),
+      bottomSpacerHeight: Math.max(
+        0,
+        (visibleEntries.length - endIndex) * ENTRY_ROW_ESTIMATED_HEIGHT
+      ),
     }
   }, [shouldVirtualize, visibleEntries, listViewportHeight, listScrollTop])
 
@@ -582,10 +603,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         const entry = entriesById.get(id)
         if (!entry) continue
         const summaryPlain = stripHtmlTags(entry.summary || '').trim()
-        const hasTranslatableText =
-          [entry.title, summaryPlain]
-            .filter((t) => t.length > 0)
-            .some((t) => shouldAutoTranslate(t, preferredTargetLanguage))
+        const hasTranslatableText = [entry.title, summaryPlain]
+          .filter((t) => t.length > 0)
+          .some((t) => shouldAutoTranslate(t, preferredTargetLanguage))
         if (!hasTranslatableText) continue
         entryTexts.push({ entry, title: entry.title, summaryPlain })
         pendingTranslationEntryIdsRef.current.add(id)
@@ -597,20 +617,24 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       const allTexts = entryTexts.flatMap(({ title, summaryPlain }) =>
         [title, summaryPlain].filter((t) => t.length > 0)
       )
-      const uncachedTexts = [...new Set(allTexts.filter((t) => !translationCacheRef.current.has(t)))]
+      const uncachedTexts = [
+        ...new Set(allTexts.filter((t) => !translationCacheRef.current.has(t))),
+      ]
       setListTranslationBatchCount((count) => count + 1)
 
       try {
-        if (uncachedTexts.length > 0) {
-          // Single API call for all entries
+        for (let index = 0; index < uncachedTexts.length; index += LIST_TRANSLATION_BATCH_SIZE) {
+          const batch = uncachedTexts.slice(index, index + LIST_TRANSLATION_BATCH_SIZE)
+          if (batch.length === 0) continue
+
           const response = await entryService.translateTexts(
-            uncachedTexts,
+            batch,
             listTranslationTargetLanguage,
             'auto'
           )
           if (sessionId !== listTranslationSessionRef.current) return
-          uncachedTexts.forEach((text, index) => {
-            const translated = response.translations[index]
+          batch.forEach((text, batchIndex) => {
+            const translated = response.translations[batchIndex]
             if (translated && translated.trim()) {
               translationCacheRef.current.set(text, translated.trim())
             }
@@ -618,18 +642,17 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         }
         if (sessionId !== listTranslationSessionRef.current) return
 
-        // Apply results to all entries at once
-        setTranslatedEntryTexts((prev) => {
-          const updates: Record<string, { title?: string; summary?: string }> = {}
-          for (const { entry, title, summaryPlain } of entryTexts) {
-            updates[entry.id] = {
-              title: translationCacheRef.current.get(title),
-              summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
-            }
-            translatedEntryIdsRef.current.add(entry.id)
+        const updates: Record<string, { title?: string; summary?: string }> = {}
+        for (const { entry, title, summaryPlain } of entryTexts) {
+          updates[entry.id] = {
+            title: translationCacheRef.current.get(title),
+            summary: summaryPlain ? translationCacheRef.current.get(summaryPlain) : undefined,
           }
-          return { ...prev, ...updates }
-        })
+          translatedEntryIdsRef.current.add(entry.id)
+        }
+
+        // Apply results to all entries at once.
+        setTranslatedEntryTexts((prev) => ({ ...prev, ...updates }))
       } catch (error) {
         console.error('Failed to translate list entries:', error)
       } finally {
@@ -641,12 +664,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         }
       }
     },
-    [
-      entriesById,
-      isListTranslationActive,
-      listTranslationTargetLanguage,
-      preferredTargetLanguage,
-    ]
+    [entriesById, isListTranslationActive, listTranslationTargetLanguage, preferredTargetLanguage]
   )
 
   // Viewport-only list translation to reduce API usage
@@ -696,10 +714,31 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   ])
 
   useEffect(() => {
-    if (!isTodayBoardView || !isListTranslationActive || todayBoardEntries.length === 0) return
+    if (
+      !isTodayBoardView ||
+      !isListTranslationActive ||
+      todayBoardTranslationEntryIds.length === 0
+    ) {
+      todayBoardTranslationKeyRef.current = null
+      return
+    }
 
-    void translateListEntries(todayBoardEntries.map((entry) => entry.id))
-  }, [isTodayBoardView, isListTranslationActive, todayBoardEntries, translateListEntries])
+    const translationKey = [
+      listTranslationSessionRef.current,
+      todayBoardDate,
+      todayBoardTranslationEntryIds.join('\u0000'),
+    ].join(':')
+    if (todayBoardTranslationKeyRef.current === translationKey) return
+
+    todayBoardTranslationKeyRef.current = translationKey
+    void translateListEntries(todayBoardTranslationEntryIds)
+  }, [
+    isTodayBoardView,
+    isListTranslationActive,
+    todayBoardDate,
+    todayBoardTranslationEntryIds,
+    translateListEntries,
+  ])
 
   // Reset filter when switching to smart view (default to unread)
   useEffect(() => {
@@ -760,18 +799,21 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       // Reset slide direction after animation
       setTimeout(() => setSlideDirection(null), 300)
     }
-  }, [selectedFeedId, selectedFolderId, isSmartView, isTodayBoardView, entryIdFromUrl, clearSelectedEntry])
+  }, [
+    selectedFeedId,
+    selectedFolderId,
+    isSmartView,
+    isTodayBoardView,
+    entryIdFromUrl,
+    clearSelectedEntry,
+  ])
 
   // Keyboard navigation: arrow keys and j/k to switch between entries
   const handleKeyboardNavigation = useCallback(
     (e: KeyboardEvent) => {
       // Ignore when focus is in input, textarea, or contenteditable elements
       const target = e.target as HTMLElement
-      if (
-        target.tagName === 'INPUT' ||
-        target.tagName === 'TEXTAREA' ||
-        target.isContentEditable
-      ) {
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
         return
       }
 
@@ -995,7 +1037,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                         ? 'entry-list-transition'
                         : isReaderVisibleOnMobile
                           ? 'pointer-events-none opacity-0'
-                        : ''
+                          : ''
                   }`
                 : ''
             }`}
@@ -1160,30 +1202,34 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                         : undefined
 
                     return (
-                    <EntryListItem
-                      key={entry.id}
-                      entry={entry}
-                      isSelected={selectedEntryId === entry.id}
-                      onClick={() => handleSelectEntry(entry)}
-                      onPrefetch={() => prefetchEntryDetail(entry.id)}
-                      style={delay ? { animationDelay: delay } : undefined}
-                      showFeedInfo={!selectedFeedId}
-                      showReadLaterRemaining={
-                        !isMobile &&
-                        filterType === 'read-later' &&
-                        (user?.settings?.show_read_later_remaining ?? true)
-                      }
-                      showPreferenceScore={usesSmartSorting && showPreferenceScore}
-                      hideReadStatusIndicator={isMobile}
-                      hideReadLaterIndicator={isMobile}
-                      translatedTitle={
-                        isListTranslationActive ? translatedEntryTexts[entry.id]?.title : undefined
-                      }
-                      translatedSummary={
-                        isListTranslationActive ? translatedEntryTexts[entry.id]?.summary : undefined
-                      }
-                      dataEntryId={entry.id}
-                    />
+                      <EntryListItem
+                        key={entry.id}
+                        entry={entry}
+                        isSelected={selectedEntryId === entry.id}
+                        onClick={() => handleSelectEntry(entry)}
+                        onPrefetch={() => prefetchEntryDetail(entry.id)}
+                        style={delay ? { animationDelay: delay } : undefined}
+                        showFeedInfo={!selectedFeedId}
+                        showReadLaterRemaining={
+                          !isMobile &&
+                          filterType === 'read-later' &&
+                          (user?.settings?.show_read_later_remaining ?? true)
+                        }
+                        showPreferenceScore={usesSmartSorting && showPreferenceScore}
+                        hideReadStatusIndicator={isMobile}
+                        hideReadLaterIndicator={isMobile}
+                        translatedTitle={
+                          isListTranslationActive
+                            ? translatedEntryTexts[entry.id]?.title
+                            : undefined
+                        }
+                        translatedSummary={
+                          isListTranslationActive
+                            ? translatedEntryTexts[entry.id]?.summary
+                            : undefined
+                        }
+                        dataEntryId={entry.id}
+                      />
                     )
                   })}
                   {virtualizedList.bottomSpacerHeight > 0 && (

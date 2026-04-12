@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen } from '@testing-library/react'
+import { entryService } from '@glean/api-client'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
@@ -10,8 +11,7 @@ const {
   useInfiniteEntriesSpy,
   updateEntryStateSpy,
   readerControllerState,
-} =
-  vi.hoisted(() => ({
+} = vi.hoisted(() => ({
   articleReaderSpy: vi.fn((props: { entry: EntryWithState }) => (
     <div data-testid="article-reader">{props.entry.id}</div>
   )),
@@ -22,9 +22,7 @@ const {
       onSelectFeed?: (feedId: string) => void
       onCloseDetail?: () => void
     }) => (
-      <div data-testid="today-board-probe">
-        {props.entries.map((entry) => entry.id).join(',')}
-      </div>
+      <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
     )
   ),
   useInfiniteEntriesSpy: vi.fn(),
@@ -40,6 +38,8 @@ const {
     ],
     setTodayBoardDate: vi.fn(),
     isLoading: false,
+    listTranslationAutoEnabled: false,
+    entries: null as EntryWithState[] | null,
   },
 }))
 
@@ -94,24 +94,27 @@ vi.mock('@tanstack/react-query', () => ({
 vi.mock('@/hooks/useEntries', () => ({
   useInfiniteEntries: (filters: unknown) => {
     useInfiniteEntriesSpy(filters)
+    const items =
+      readerControllerState.entries ??
+      [
+        makeEntry({
+          id: 'today-entry',
+          published_at: '2026-04-09T12:30:00+08:00',
+          ingested_at: '2026-04-10T01:00:00+08:00',
+          created_at: '2026-04-10T01:00:00+08:00',
+        }),
+        makeEntry({
+          id: 'older-entry',
+          published_at: '2026-04-08T12:30:00+08:00',
+          ingested_at: '2026-04-08T12:30:00+08:00',
+          created_at: '2026-04-08T12:30:00+08:00',
+        }),
+      ]
     return {
       data: {
         pages: [
           {
-            items: [
-              makeEntry({
-                id: 'today-entry',
-                published_at: '2026-04-09T12:30:00+08:00',
-                ingested_at: '2026-04-10T01:00:00+08:00',
-                created_at: '2026-04-10T01:00:00+08:00',
-              }),
-              makeEntry({
-                id: 'older-entry',
-                published_at: '2026-04-08T12:30:00+08:00',
-                ingested_at: '2026-04-08T12:30:00+08:00',
-                created_at: '2026-04-08T12:30:00+08:00',
-              }),
-            ],
+            items,
           },
         ],
       },
@@ -160,7 +163,13 @@ vi.mock('@/components/ArticleReader', () => ({
 }))
 
 vi.mock('@/stores/authStore', () => ({
-  useAuthStore: () => ({ user: { settings: { list_translation_auto_enabled: false } } }),
+  useAuthStore: () => ({
+    user: {
+      settings: {
+        list_translation_auto_enabled: readerControllerState.listTranslationAutoEnabled,
+      },
+    },
+  }),
 }))
 
 vi.mock('@/stores/uiStore', () => ({
@@ -221,6 +230,8 @@ describe('ReaderCore today-board route', () => {
     readerControllerState.selectedEntryId = null
     readerControllerState.todayBoardDate = '2026-04-10'
     readerControllerState.isLoading = false
+    readerControllerState.listTranslationAutoEnabled = false
+    readerControllerState.entries = null
   })
 
   it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
@@ -402,6 +413,48 @@ describe('ReaderCore today-board route', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/reader?feed=feed-target')
   })
 
+  it('chunks today-board list translation requests so large boards do not hit the provider at once', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.listTranslationAutoEnabled = true
+    readerControllerState.entries = Array.from({ length: 30 }, (_, index) =>
+      makeEntry({
+        id: `entry-${index}`,
+        title: `English headline ${index}`,
+        summary: `English summary ${index}`,
+        ingested_at: '2026-04-10T01:00:00+08:00',
+        created_at: '2026-04-10T01:00:00+08:00',
+      })
+    )
+    vi.mocked(entryService.translateTexts).mockImplementation(async (texts: string[]) => ({
+      translations: texts.map((text) => `翻译 ${text}`),
+      target_language: 'zh-CN',
+    }))
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(entryService.translateTexts).toHaveBeenCalled()
+    for (const call of vi.mocked(entryService.translateTexts).mock.calls) {
+      expect(call[0].length).toBeLessThanOrEqual(24)
+    }
+    const translatedCount = vi
+      .mocked(entryService.translateTexts)
+      .mock.calls.reduce((count, call) => count + call[0].length, 0)
+    expect(translatedCount).toBeGreaterThan(24)
+  })
+
   it('does not mark a selected today-board entry read immediately after opening detail', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
@@ -466,6 +519,47 @@ describe('ReaderCore today-board route', () => {
 
     await act(async () => {
       vi.advanceTimersByTime(2000)
+    })
+
+    expect(updateEntryStateSpy).toHaveBeenCalledWith({
+      entryId: 'today-entry',
+      data: { is_read: true },
+    })
+  })
+
+  it('keeps the delayed auto-read timer running across today-board rerenders', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    updateEntryStateSpy.mockResolvedValue(
+      makeEntry({
+        id: 'today-entry',
+        is_read: true,
+        ingested_at: '2026-04-10T01:00:00+08:00',
+        created_at: '2026-04-10T01:00:00+08:00',
+      })
+    )
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    const { rerender } = render(<ReaderCore isMobile={false} />)
+
+    await act(async () => {
+      vi.advanceTimersByTime(500)
+      rerender(<ReaderCore isMobile={false} />)
+      vi.advanceTimersByTime(500)
+      rerender(<ReaderCore isMobile={false} />)
+      vi.advanceTimersByTime(500)
+      rerender(<ReaderCore isMobile={false} />)
+      vi.advanceTimersByTime(500)
+      await Promise.resolve()
     })
 
     expect(updateEntryStateSpy).toHaveBeenCalledWith({

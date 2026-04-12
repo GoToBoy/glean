@@ -6,8 +6,8 @@ translation backends. Users configure their preferred provider and
 API key via user settings; no key falls back to Google free.
 """
 
-import os
 import json
+import os
 import re
 from abc import ABC, abstractmethod
 from typing import Any
@@ -22,6 +22,7 @@ logger = get_logger(__name__)
 _CHUNK_SIZE = 4500
 _SEPARATOR = " ||| "
 DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:5001"
+MTRAN_BATCH_SIZE = 24
 
 
 class TranslationProvider(ABC):
@@ -409,6 +410,14 @@ class MTranProvider(TranslationProvider):
         if not texts:
             return []
 
+        translated: list[str] = []
+        for start in range(0, len(texts), MTRAN_BATCH_SIZE):
+            translated.extend(
+                self._translate_batch_chunk(texts[start : start + MTRAN_BATCH_SIZE], source, target)
+            )
+        return translated
+
+    def _translate_batch_chunk(self, texts: list[str], source: str, target: str) -> list[str]:
         payload: dict[str, Any] = {
             "texts": texts,
             "source": source,
