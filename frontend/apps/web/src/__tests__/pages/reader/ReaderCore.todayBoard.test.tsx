@@ -3,11 +3,29 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { EntryWithState } from '@glean/types'
 import { ReaderCore } from '@/pages/reader/shared/ReaderCore'
 
-const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControllerState } =
+const {
+  articleReaderSpy,
+  navigateSpy,
+  todayBoardSpy,
+  useInfiniteEntriesSpy,
+  updateEntryStateSpy,
+  readerControllerState,
+} =
   vi.hoisted(() => ({
-  todayBoardSpy: vi.fn((props: { entries: Array<{ id: string; is_read?: boolean }> }) => (
-    <div data-testid="today-board-probe">{props.entries.map((entry) => entry.id).join(',')}</div>
+  articleReaderSpy: vi.fn((props: { entry: EntryWithState }) => (
+    <div data-testid="article-reader">{props.entry.id}</div>
   )),
+  navigateSpy: vi.fn(),
+  todayBoardSpy: vi.fn(
+    (props: {
+      entries: Array<{ id: string; is_read?: boolean }>
+      onSelectFeed?: (feedId: string) => void
+    }) => (
+      <div data-testid="today-board-probe">
+        {props.entries.map((entry) => entry.id).join(',')}
+      </div>
+    )
+  ),
   useInfiniteEntriesSpy: vi.fn(),
   updateEntryStateSpy: vi.fn(),
   readerControllerState: {
@@ -22,6 +40,10 @@ const { todayBoardSpy, useInfiniteEntriesSpy, updateEntryStateSpy, readerControl
     setTodayBoardDate: vi.fn(),
     isLoading: false,
   },
+}))
+
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateSpy,
 }))
 
 function getLastTodayBoardEntry(entryId: string) {
@@ -132,9 +154,7 @@ vi.mock('@/hooks/useVectorizationStatus', () => ({
 }))
 
 vi.mock('@/components/ArticleReader', () => ({
-  ArticleReader: ({ entry }: { entry: EntryWithState }) => (
-    <div data-testid="article-reader">{entry.id}</div>
-  ),
+  ArticleReader: articleReaderSpy,
   ArticleReaderSkeleton: () => <div>loading</div>,
 }))
 
@@ -308,6 +328,77 @@ describe('ReaderCore today-board route', () => {
       }),
       expect.anything()
     )
+  })
+
+  it('keeps the mobile today-board mounted behind the article reader so return preserves board position', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={true} />)
+
+    expect(screen.getByTestId('today-board-probe')).toBeInTheDocument()
+    expect(screen.getByTestId('article-reader')).toHaveTextContent('today-entry')
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        selectedEntryId: null,
+      }),
+      expect.anything()
+    )
+  })
+
+  it('disables pull-close gestures for the mobile today-board article reader', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    readerControllerState.entryIdFromUrl = 'today-entry'
+    readerControllerState.selectedEntryId = 'today-entry'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={true} />)
+
+    expect(articleReaderSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        enableMobileCloseGesture: false,
+      }),
+      expect.anything()
+    )
+  })
+
+  it('navigates from today-board feed headers to the feed list', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    const lastCall = todayBoardSpy.mock.calls[todayBoardSpy.mock.calls.length - 1]
+    expect(lastCall?.[0].onSelectFeed).toBeTypeOf('function')
+    lastCall?.[0].onSelectFeed?.('feed-target')
+
+    expect(navigateSpy).toHaveBeenCalledWith('/reader?feed=feed-target')
   })
 
   it('does not mark a selected today-board entry read immediately after opening detail', () => {

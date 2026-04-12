@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { useInfiniteEntries, useEntry, useUpdateEntryState, entryKeys } from '../../../hooks/useEntries'
 import { useAllSubscriptions } from '../../../hooks/useSubscriptions'
@@ -57,6 +58,7 @@ export function calculateVirtualWindow(params: {
 */
 export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { t } = useTranslation('reader')
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const {
     selectedFeedId,
@@ -829,6 +831,15 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     }
   }
 
+  const handleTodayBoardFeedSelect = useCallback(
+    (feedId: string) => {
+      const nextParams = new URLSearchParams()
+      nextParams.set('feed', feedId)
+      navigate(`/reader?${nextParams.toString()}`)
+    },
+    [navigate]
+  )
+
   useEffect(() => {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
@@ -859,29 +870,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isTodayBoardView) {
-    if (isMobile && selectedEntryId) {
-      if (isLoadingEntry && !resolvedSelectedEntry) {
-        return <ArticleReaderSkeleton />
-      }
-
-      if (resolvedSelectedEntry) {
-        return (
-          <ArticleReader
-            entry={resolvedSelectedEntry}
-            onClose={() => {
-              window.dispatchEvent(new CustomEvent('hideArticleReader'))
-              clearSelectedEntry(true)
-            }}
-            isFullscreen={false}
-            onToggleFullscreen={() => undefined}
-            showCloseButton
-          />
-        )
-      }
-    }
-
     return (
-      <div className="flex h-full w-full min-w-0">
+      <div className="relative flex h-full w-full min-w-0">
         {error ? (
           <div className="w-full p-4">
             <Alert variant="error">
@@ -891,37 +881,72 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             </Alert>
           </div>
         ) : (
-          <TodayBoard
-            entries={todayBoardEntries}
-            selectedEntryId={isMobile ? null : selectedEntryId}
-            selectedDateKey={todayBoardDate}
-            todayDateKey={todayBoardTodayDate}
-            recentDates={recentTodayBoardDates}
-            onSelectDate={setTodayBoardDate}
-            isLoading={isLoading}
-            onSelectEntry={handleSelectEntry}
-            onCloseDetail={() => clearSelectedEntry(true)}
-            listWidthPx={entriesWidth}
-            isTranslationActive={isListTranslationActive}
-            isTranslationLoading={isListTranslationLoading}
-            translationLoadingPhase={listTranslationLoadingPhase}
-            translatedTexts={translatedEntryTexts}
-            onToggleTranslation={() => setIsListTranslationActive((value) => !value)}
-            renderDetail={
-              isMobile
-                ? undefined
-                : (entry) => (
-                    <ArticleReader
-                      entry={selectedEntryId === entry.id && resolvedSelectedEntry ? resolvedSelectedEntry : entry}
-                      onClose={() => clearSelectedEntry(true)}
-                      isFullscreen={isFullscreen}
-                      onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
-                      showCloseButton
-                      showFullscreenButton
-                    />
-                  )
-            }
-          />
+          <>
+            <div
+              className={cn(
+                'flex min-w-0 flex-1',
+                isMobile && selectedEntryId && 'pointer-events-none opacity-0'
+              )}
+              aria-hidden={isMobile && !!selectedEntryId}
+            >
+              <TodayBoard
+                entries={todayBoardEntries}
+                selectedEntryId={isMobile ? null : selectedEntryId}
+                selectedDateKey={todayBoardDate}
+                todayDateKey={todayBoardTodayDate}
+                recentDates={recentTodayBoardDates}
+                onSelectDate={setTodayBoardDate}
+                onSelectFeed={handleTodayBoardFeedSelect}
+                isLoading={isLoading}
+                onSelectEntry={handleSelectEntry}
+                onCloseDetail={() => clearSelectedEntry(true)}
+                listWidthPx={entriesWidth}
+                isTranslationActive={isListTranslationActive}
+                isTranslationLoading={isListTranslationLoading}
+                translationLoadingPhase={listTranslationLoadingPhase}
+                translatedTexts={translatedEntryTexts}
+                onToggleTranslation={() => setIsListTranslationActive((value) => !value)}
+                renderDetail={
+                  isMobile
+                    ? undefined
+                    : (entry) => (
+                        <ArticleReader
+                          entry={
+                            selectedEntryId === entry.id && resolvedSelectedEntry
+                              ? resolvedSelectedEntry
+                              : entry
+                          }
+                          onClose={() => clearSelectedEntry(true)}
+                          isFullscreen={isFullscreen}
+                          onToggleFullscreen={() => setIsFullscreen(!isFullscreen)}
+                          showCloseButton
+                          showFullscreenButton
+                        />
+                      )
+                }
+              />
+            </div>
+
+            {isMobile && selectedEntryId ? (
+              <div className="absolute inset-0 z-20 flex min-w-0 flex-1 flex-col">
+                {isLoadingEntry && !resolvedSelectedEntry ? (
+                  <ArticleReaderSkeleton />
+                ) : resolvedSelectedEntry ? (
+                  <ArticleReader
+                    entry={resolvedSelectedEntry}
+                    onClose={() => {
+                      window.dispatchEvent(new CustomEvent('hideArticleReader'))
+                      clearSelectedEntry(true)
+                    }}
+                    isFullscreen={false}
+                    onToggleFullscreen={() => undefined}
+                    showCloseButton
+                    enableMobileCloseGesture={false}
+                  />
+                ) : null}
+              </div>
+            ) : null}
+          </>
         )}
       </div>
     )

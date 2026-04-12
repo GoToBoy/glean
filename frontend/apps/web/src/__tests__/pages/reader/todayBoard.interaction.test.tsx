@@ -128,6 +128,37 @@ describe('TodayBoard interaction', () => {
     expect(screen.getByRole('button', { name: 'Expand' })).toHaveClass('text-center')
   })
 
+  it('emits feed selection when a card-mode feed header title is clicked', () => {
+    const boardEntries = buildTodayBoardEntries(
+      [
+        makeEntry({
+          id: 'feed-entry',
+          feed_id: 'feed-target',
+          feed_title: 'Target feed',
+        }),
+      ],
+      {
+        now: new Date('2026-04-10T12:00:00+08:00'),
+        getFeedDescription: () => 'Feed summary',
+      }
+    )
+    const onSelectFeed = vi.fn()
+
+    render(
+      <TodayBoard
+        entries={boardEntries}
+        selectedEntryId={null}
+        onSelectEntry={() => undefined}
+        onCloseDetail={() => undefined}
+        onSelectFeed={onSelectFeed}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Target feed' }))
+
+    expect(onSelectFeed).toHaveBeenCalledWith('feed-target')
+  })
+
   it('expands collapsed feed groups with lightweight text controls', () => {
     const entries = [
       makeEntry({ id: 'unread-1', title: 'Unread one', ingested_at: '2026-04-10T11:00:00+08:00' }),

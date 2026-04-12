@@ -187,7 +187,7 @@ export function Layout() {
   const isReaderPage = location.pathname === '/reader'
   const isSmartView = isReaderPage && currentView === 'smart'
   const isTodayBoardView = isReaderPage && currentView === 'today-board'
-  const isMobileListMode = isReaderPage && !currentEntryId
+  const isMobileListMode = isReaderPage && !currentEntryId && !isTodayBoardView
   const currentFilter: 'all' | 'unread' | 'smart' | 'read-later' =
     currentTab === 'all' || currentTab === 'smart' || currentTab === 'read-later'
       ? currentTab
@@ -468,7 +468,7 @@ export function Layout() {
     const readerView = searchParams.get('view')
 
     if (readerView === 'today-board') {
-      return t('feeds:sidebar.todayBoard')
+      return 'Glean'
     }
 
     // Priority: folder > feed > default
@@ -495,7 +495,7 @@ export function Layout() {
     }
 
     return 'Glean'
-  }, [location.pathname, searchParams, feedFolders, subscriptions, t])
+  }, [location.pathname, searchParams, feedFolders, subscriptions])
 
   // Close mobile sidebar on navigation
   const searchParamsString = searchParams.toString()

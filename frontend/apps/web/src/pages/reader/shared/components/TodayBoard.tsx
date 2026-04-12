@@ -26,6 +26,7 @@ interface TodayBoardProps {
   todayDateKey?: string
   recentDates?: TodayBoardCalendarDay[]
   onSelectDate?: (dateKey: string) => void
+  onSelectFeed?: (feedId: string) => void
   onSelectEntry: (entry: TodayBoardEntry) => void
   onCloseDetail: () => void
   listWidthPx?: number
@@ -45,6 +46,7 @@ export function TodayBoard({
   todayDateKey,
   recentDates = [],
   onSelectDate,
+  onSelectFeed,
   onSelectEntry,
   onCloseDetail,
   listWidthPx = 360,
@@ -208,6 +210,7 @@ export function TodayBoard({
             isTranslationActive={isTranslationActive}
             translatedTexts={translatedTexts}
             onSelectEntry={onSelectEntry}
+            onSelectFeed={onSelectFeed}
             onToggleFeed={toggleFeed}
           />
         )}
@@ -329,6 +332,7 @@ function TodayBoardEntries({
   isTranslationActive,
   translatedTexts,
   onSelectEntry,
+  onSelectFeed,
   onToggleFeed,
 }: {
   groups: ReturnType<typeof buildTodayBoardGroups>
@@ -338,6 +342,7 @@ function TodayBoardEntries({
   isTranslationActive: boolean
   translatedTexts: Record<string, { title?: string; summary?: string }>
   onSelectEntry: (entry: TodayBoardEntry) => void
+  onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
 }) {
   return isDetailOpen ? (
@@ -368,6 +373,7 @@ function TodayBoardEntries({
           isTranslationActive={isTranslationActive}
           translatedTexts={translatedTexts}
           onSelectEntry={onSelectEntry}
+          onSelectFeed={onSelectFeed}
           onToggleFeed={onToggleFeed}
         />
       ))}
@@ -381,6 +387,7 @@ function FeedCardGroup({
   isTranslationActive,
   translatedTexts,
   onSelectEntry,
+  onSelectFeed,
   onToggleFeed,
 }: {
   group: ReturnType<typeof buildTodayBoardGroups>[number]
@@ -388,13 +395,14 @@ function FeedCardGroup({
   isTranslationActive: boolean
   translatedTexts: Record<string, { title?: string; summary?: string }>
   onSelectEntry: (entry: TodayBoardEntry) => void
+  onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
 
   return (
     <section className="border-border/70 mb-3 inline-block w-full break-inside-avoid overflow-hidden rounded-lg border bg-white shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-      <FeedGroupHeader group={group} />
+      <FeedGroupHeader group={group} onSelectFeed={onSelectFeed} />
       <div className="space-y-2 p-2">
         {group.visibleEntries.map((entry) => (
           <TodayBoardEntryCard
@@ -477,9 +485,11 @@ function FeedListGroup({
 function FeedGroupHeader({
   group,
   compact = false,
+  onSelectFeed,
 }: {
   group: ReturnType<typeof buildTodayBoardGroups>[number]
   compact?: boolean
+  onSelectFeed?: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
   const statusText =
@@ -495,9 +505,22 @@ function FeedGroupHeader({
       )}
     >
       <div className="min-w-0">
-        <div className="truncate text-[13px] font-semibold text-stone-700">
-          {group.feedTitle || t('todayBoard.unknownFeed')}
-        </div>
+        {onSelectFeed && !compact ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onSelectFeed(group.feedId)
+            }}
+            className="hover:text-primary block max-w-full truncate text-left text-[13px] font-semibold text-stone-700 transition-colors"
+          >
+            {group.feedTitle || t('todayBoard.unknownFeed')}
+          </button>
+        ) : (
+          <div className="truncate text-[13px] font-semibold text-stone-700">
+            {group.feedTitle || t('todayBoard.unknownFeed')}
+          </div>
+        )}
         {group.feedDescription ? (
           <div className="mt-0.5 line-clamp-2 text-[11px] leading-4 text-stone-500">
             {group.feedDescription}

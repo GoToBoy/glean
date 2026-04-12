@@ -89,6 +89,8 @@ interface ArticleReaderProps {
   showFullscreenButton?: boolean
   /** Hide read/unread status actions (for bookmarks page) */
   hideReadStatus?: boolean
+  /** Enable mobile pull-down-to-close gesture. Defaults to true. */
+  enableMobileCloseGesture?: boolean
 }
 
 /**
@@ -181,6 +183,7 @@ export function ArticleReader({
   showCloseButton,
   showFullscreenButton,
   hideReadStatus = false,
+  enableMobileCloseGesture = true,
 }: ArticleReaderProps) {
   const { t } = useTranslation('reader')
   const { user } = useAuthStore()
@@ -236,7 +239,11 @@ export function ArticleReader({
   })
   const isMobile = useIsMobile()
   const barsVisible = useMobileBarsVisibility(scrollContainerRef, entry.id)
-  const closeGestureHandlers = useMobileCloseGestures(scrollContainerRef, isMobile, onClose)
+  const closeGestureHandlers = useMobileCloseGestures(
+    scrollContainerRef,
+    isMobile && enableMobileCloseGesture,
+    onClose
+  )
   const [translationLoadingPhase, setTranslationLoadingPhase] = useState<'idle' | 'start' | 'settled'>('idle')
   const { showPrompt, dismissPrompt } = useEndOfArticleFeedbackPrompt({
     entryId: entry.id,
