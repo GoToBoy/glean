@@ -358,6 +358,7 @@ class EntryService:
             content=entry.content,
             summary=entry.summary,
             published_at=entry.published_at,
+            ingested_at=entry.ingested_at,
             created_at=entry.created_at,
             is_read=bool(user_entry.is_read) if user_entry else False,
             is_liked=user_entry.is_liked if user_entry else None,

@@ -213,6 +213,7 @@ class TestGetEntry:
 
         assert data["id"] == str(entry_id)
         assert data["title"] == test_entries[0].title
+        assert data["ingested_at"] is not None
 
     @pytest.mark.asyncio
     async def test_get_nonexistent_entry(self, client: AsyncClient, auth_headers):
@@ -246,6 +247,7 @@ class TestUpdateEntryState:
 
         assert data["id"] == str(entry_id)
         assert data["is_read"] is True
+        assert data["ingested_at"] is not None
 
     @pytest.mark.asyncio
     async def test_mark_entry_as_liked(self, client: AsyncClient, auth_headers, test_entries):
