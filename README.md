@@ -20,7 +20,9 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 - RSSHub support with admin-configured conversion, auto-fallback, and manual RSSHub-path subscription.
 - Discover workflow for finding new sources and converting candidates into subscriptions.
 - Immersive bilingual reading with persisted translation cache and multiple translation providers.
+- **Today Board** for grouped per-feed daily ingestion views with one-click "Mark All Read" and smart collapsible sections.
 - Bookmarks, tags, read-later, folder organization, and responsive desktop/mobile reader flows.
+- Optimized reader experience with zero-jitter read status synchronization and automatic scroll reset on article switch.
 - Admin dashboard with feed operations, retry/reset actions, batch management, and user administration.
 - PostgreSQL + `pgvector` vector storage. This fork no longer depends on Milvus.
 - Playwright-enabled worker fallback for RSS sites that block plain HTTP article extraction.
@@ -30,14 +32,20 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 This fork is intentionally moving faster than upstream and is not waiting on upstream merge cadence.
 The intended primary branch is `personal-main`, which serves as this repo's release line.
 
-Compared with upstream `main`, this fork currently adds:
+### Core Additions Compared with Upstream `main`
 
-- `pgvector` as the default vector backend, removing the need for a separate Milvus deployment.
-- A full translation pipeline with persisted bilingual reading state and multiple providers.
-- Discover + RSSHub conversion flow for source discovery and fallback subscription.
-- Stronger feed ingestion behavior, including better retry/error handling and fetch observability.
-- Admin-side bulk operations and deployment/ops improvements.
-- A dedicated `glean-worker` image with Playwright-based browser fallback for summary-only or challenge-protected RSS sources.
+- **Vector Stack Migration**: Transitioned from Milvus to `pgvector` (PostgreSQL), simplifying the architecture and reducing operational overhead.
+- **Advanced Translation System**: End-to-end translation pipeline with multiple providers (including MTranServer), sentence-level bilingual rendering, and persistent caching.
+- **Discover + RSSHub Flow**: Integrated discovery service for finding new sources with automatic RSSHub fallback and conversion rules.
+- **Behavioral Signals & Ranking**: Implicit feedback event tracking to provide a data foundation for future personalized ranking and recommendation features.
+- **Today Board**: Grouped per-feed daily ingestion view with one-click "Mark All Read" and smart collapsible sections.
+
+### Systemic Optimizations
+
+- **Reader & List UX**: Refactored desktop/mobile shells, improved list virtualization with reliable anchor restoration, and eliminated UI jitter during read status synchronization.
+- **Feed Ingestion Robustness**: Enhanced failure handling (e.g., 429 rate limiting), improved idempotency, and added detailed fetch-attempt observability.
+- **Admin & Ops**: Batch operations in the admin dashboard, static asset precompression, Cloudflare Tunnel integration, and optimized Docker deployment configurations.
+- **Test Coverage**: Expanded multi-layer tests across API, workers, and frontend hooks to ensure long-term stability.
 
 ## Quick Start
 
