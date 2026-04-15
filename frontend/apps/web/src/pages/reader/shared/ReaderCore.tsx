@@ -142,9 +142,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   >('idle')
   const [listScrollTop, setListScrollTop] = useState(0)
   const [listViewportHeight, setListViewportHeight] = useState(0)
-  const [todayBoardAutoReadAtById, setTodayBoardAutoReadAtById] = useState<Record<string, string>>(
-    {}
-  )
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
@@ -218,16 +215,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     () => entriesData?.pages.flatMap((page) => page.items) ?? [],
     [entriesData?.pages]
   )
-  const todayBoardSourceEntries = useMemo(() => {
-    if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) {
-      return rawEntries
-    }
-
-    return rawEntries.map((entry) => {
-      const readAt = todayBoardAutoReadAtById[entry.id]
-      return readAt ? { ...entry, is_read: true, read_at: entry.read_at ?? readAt } : entry
-    })
-  }, [isTodayBoardView, rawEntries, todayBoardAutoReadAtById])
   const feedDescriptionById = useMemo(() => {
     const map = new Map<string, string | null>()
     for (const subscription of subscriptions) {
@@ -237,11 +224,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [subscriptions])
   const todayBoardEntries = useMemo(
     () =>
-      buildTodayBoardEntries(todayBoardSourceEntries, {
+      buildTodayBoardEntries(rawEntries, {
         selectedDate: todayBoardDate,
         getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
       }),
-    [todayBoardSourceEntries, feedDescriptionById, todayBoardDate]
+    [rawEntries, feedDescriptionById, todayBoardDate]
   )
   const todayBoardTranslationEntryIds = useMemo(
     () => todayBoardEntries.map((entry) => entry.id),
@@ -251,93 +238,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
 
-  // Merge selected entry into the list if it's not already there
-  // This ensures the currently viewed article doesn't disappear from the list
-  // when marked as read while viewing in the "unread" tab or Smart view
-  // However, for explicit filters like "read-later", we should show the real filtered results
-  const entries = (() => {
-    if (!selectedEntry || !selectedEntryId) return rawEntries
-    const isSelectedInList = rawEntries.some((e) => e.id === selectedEntryId)
-    if (isSelectedInList) return rawEntries
-
-    // Keep selected entry visible for flexible filters (all, unread, smart),
-    // not for strict filters (read-later) that must show exact matches
-    const isStrictFilter = filterType === 'read-later'
-    if (isStrictFilter) {
-      return rawEntries
-    }
-
-    // For Smart view, keep the selected entry visible even if marked as read
-    // This prevents the article from disappearing while the user is reading it
-    // (Only applies when there's an actively selected entry)
-
-    // Don't merge if the selected entry is from a different feed than the one being viewed
-    // (when viewing a specific feed, not all feeds or a folder)
-    if (selectedFeedId && selectedEntry.feed_id !== selectedFeedId) {
-      return rawEntries
-    }
-
-    // For folder views, we still want to keep the selected entry visible
-    // even if it's been marked as read and filtered out
-    // The backend has already filtered by folder, so we know this entry belongs to the folder
-    // if we have it in selectedEntry (it was in the list when user clicked it)
-
-    // Insert selected entry at its ORIGINAL position based on sorting rules
-    // Use the saved original data to ensure the position doesn't change after like/dislike/bookmark
-    // In Smart view, entries are sorted by preference score (descending)
-    // In timeline view, entries are sorted by published_at (descending)
-    const originalData = selectedEntryOriginalDataRef.current
-
-    // Merge the original preference_score back into the entry to ensure it displays correctly
-    // This is needed because the single entry API may not return preference_score
-    const entryWithOriginalScore =
-      originalData?.id === selectedEntryId
-        ? {
-            ...selectedEntry,
-            preference_score: originalData.preferenceScore ?? selectedEntry.preference_score,
-          }
-        : selectedEntry
-
-    if (usesSmartSorting) {
-      // For Smart view or Smart filter, insert based on ORIGINAL preference_score to maintain correct order
-      // Use the saved original score, not the current score (which may have changed after like/dislike)
-      const selectedScore =
-        originalData?.id === selectedEntryId
-          ? (originalData.preferenceScore ?? -1)
-          : (selectedEntry.preference_score ?? -1)
-      let insertIdx = rawEntries.findIndex((e) => {
-        const entryScore = e.preference_score ?? -1
-        return entryScore < selectedScore
-      })
-      if (insertIdx === -1) insertIdx = rawEntries.length
-      return [
-        ...rawEntries.slice(0, insertIdx),
-        entryWithOriginalScore,
-        ...rawEntries.slice(insertIdx),
-      ]
-    } else {
-      // For timeline view, insert based on ORIGINAL published_at to maintain chronological order
-      const publishedAt =
-        originalData?.id === selectedEntryId ? originalData.publishedAt : selectedEntry.published_at
-      const selectedDate = publishedAt ? new Date(publishedAt) : new Date(0)
-      let insertIdx = rawEntries.findIndex((e) => {
-        const entryDate = e.published_at ? new Date(e.published_at) : new Date(0)
-        return entryDate < selectedDate
-      })
-      if (insertIdx === -1) insertIdx = rawEntries.length
-      return [
-        ...rawEntries.slice(0, insertIdx),
-        entryWithOriginalScore,
-        ...rawEntries.slice(insertIdx),
-      ]
-    }
-  })()
   const visibleEntries = useMemo(() => {
     const isUnreadScoped = filterType === 'unread' || filterType === 'smart'
-    if (!isUnreadScoped) return entries
+    if (!isUnreadScoped) return rawEntries
 
-    return entries.filter((entry) => !entry.is_read || entry.id === selectedEntryId)
-  }, [entries, filterType, selectedEntryId])
+    return rawEntries.filter((entry) => !entry.is_read || entry.id === selectedEntryId)
+  }, [rawEntries, filterType, selectedEntryId])
 
   const entriesById = useMemo(() => {
     const map = new Map<string, EntryWithState>()
@@ -349,44 +255,15 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
   const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
 
-  const markEntryRead = useCallback(
-    (entryId: string) => {
-      if (autoMarkedEntryIdsRef.current.has(entryId)) return
-      autoMarkedEntryIdsRef.current.add(entryId)
+  const markEntryRead = useCallback((entryId: string) => {
+    if (autoMarkedEntryIdsRef.current.has(entryId)) return
+    autoMarkedEntryIdsRef.current.add(entryId)
 
-      if (isTodayBoardView) {
-        const optimisticReadAt = new Date().toISOString()
-        setTodayBoardAutoReadAtById((current) => ({
-          ...current,
-          [entryId]: current[entryId] ?? optimisticReadAt,
-        }))
-      }
-
-      void updateEntryStateRef
-        .current({
-          entryId,
-          data: { is_read: true },
-        })
-        .then((updatedEntry) => {
-          if (!isTodayBoardView) return
-          setTodayBoardAutoReadAtById((current) => ({
-            ...current,
-            [entryId]: updatedEntry?.read_at ?? current[entryId] ?? new Date().toISOString(),
-          }))
-        })
-        .catch(() => {
-          autoMarkedEntryIdsRef.current.delete(entryId)
-          if (!isTodayBoardView) return
-          setTodayBoardAutoReadAtById((current) => {
-            if (!current[entryId]) return current
-            const next = { ...current }
-            delete next[entryId]
-            return next
-          })
-        })
-    },
-    [isTodayBoardView]
-  )
+    void updateEntryStateRef.current({
+      entryId,
+      data: { is_read: true },
+    })
+  }, [])
 
   const resolvedSelectedEntryId = resolvedSelectedEntry?.id
   const resolvedSelectedEntryIsRead = resolvedSelectedEntry?.is_read ?? false
@@ -403,22 +280,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       window.clearTimeout(timer)
     }
   }, [markEntryRead, resolvedSelectedEntryId, resolvedSelectedEntryIsRead, selectedEntryId])
-
-  useEffect(() => {
-    if (!isTodayBoardView || Object.keys(todayBoardAutoReadAtById).length === 0) return
-
-    setTodayBoardAutoReadAtById((current) => {
-      let changed = false
-      const next = { ...current }
-      for (const entry of rawEntries) {
-        if (entry.is_read && next[entry.id]) {
-          delete next[entry.id]
-          changed = true
-        }
-      }
-      return changed ? next : current
-    })
-  }, [isTodayBoardView, rawEntries, todayBoardAutoReadAtById])
 
   const shouldVirtualize = visibleEntries.length >= VIRTUALIZATION_THRESHOLD
   const virtualizedList = useMemo(() => {
@@ -468,6 +329,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
     setSlideDirection(direction)
     setFilterType(newFilter)
+    void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
 
     // Reset slide direction after animation completes
     setTimeout(() => setSlideDirection(null), 250)
@@ -778,6 +640,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
         clearSelectedEntry(true)
       }
 
+      void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
+
       // Determine slide direction based on view change
       // Smart view slides from left, others slide from right
       if (currentViewMode === 'smart' && prev.view !== 'smart') {
@@ -806,6 +670,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     isTodayBoardView,
     entryIdFromUrl,
     clearSelectedEntry,
+    queryClient,
   ])
 
   // Keyboard navigation: arrow keys and j/k to switch between entries
@@ -908,7 +773,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   const handleTodayBoardDetailClose = useCallback(() => {
     clearSelectedEntry(true)
-  }, [clearSelectedEntry])
+    void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
+  }, [clearSelectedEntry, queryClient])
 
   useEffect(() => {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
@@ -981,6 +847,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                     ? undefined
                     : (entry) => (
                         <ArticleReader
+                          key={entry.id}
                           entry={
                             selectedEntryId === entry.id && resolvedSelectedEntry
                               ? resolvedSelectedEntry
@@ -1003,10 +870,12 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                   <ArticleReaderSkeleton />
                 ) : resolvedSelectedEntry ? (
                   <ArticleReader
+                    key={resolvedSelectedEntry.id}
                     entry={resolvedSelectedEntry}
                     onClose={() => {
                       window.dispatchEvent(new CustomEvent('hideArticleReader'))
                       clearSelectedEntry(true)
+                      void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
                     }}
                     isFullscreen={false}
                     onToggleFullscreen={() => undefined}
@@ -1296,6 +1165,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             <ArticleReaderSkeleton />
           ) : resolvedSelectedEntry || exitingEntryRef.current ? (
             <ArticleReader
+              key={(resolvedSelectedEntry || exitingEntryRef.current)!.id}
               entry={(resolvedSelectedEntry || exitingEntryRef.current)!}
               onClose={() => {
                 if (isMobile && selectedEntry) {
@@ -1306,8 +1176,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                   setIsExitingArticle(true)
                   setIsEnteringEntryList(true)
                   clearSelectedEntry(true)
+                  void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
                 } else {
                   clearSelectedEntry(true)
+                  void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
                 }
               }}
               isFullscreen={isFullscreen}

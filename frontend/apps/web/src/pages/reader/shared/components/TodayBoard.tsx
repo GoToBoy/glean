@@ -1,6 +1,7 @@
 import { format } from 'date-fns'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Inbox, Languages } from 'lucide-react'
+import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, Clock, Inbox, Languages, Loader2 } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
+import { useMarkAllRead } from '../../../../hooks/useEntries'
 import { cn } from '@glean/ui'
 import {
   useEffect,
@@ -18,6 +19,7 @@ import {
   truncateTodayBoardSummary,
   type TodayBoardCalendarDay,
   type TodayBoardEntry,
+  type TodayBoardFeedGroup,
 } from '../todayBoard'
 
 interface TodayBoardProps {
@@ -60,6 +62,9 @@ export function TodayBoard({
   renderDetail,
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
+  const markAllMutation = useMarkAllRead()
+  const [markingFeedId, setMarkingFeedId] = useState<string | null>(null)
+
   const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null
   const isDateSelectorEnabled = !!selectedDateKey && !!todayDateKey && !!onSelectDate
   const selectedCalendarDay =
@@ -123,6 +128,16 @@ export function TodayBoard({
       return next
     })
   }
+
+  const handleMarkAllRead = async (feedId: string) => {
+    setMarkingFeedId(feedId)
+    try {
+      await markAllMutation.mutateAsync({ feedId })
+    } finally {
+      setMarkingFeedId(null)
+    }
+  }
+
   const handleSelectEntry = (entry: TodayBoardEntry) => {
     if (!selectedEntryId) {
       cardBoardScrollTopRef.current = listPanelRef.current?.scrollTop ?? 0
@@ -238,6 +253,8 @@ export function TodayBoard({
             onSelectEntry={handleSelectEntry}
             onSelectFeed={onSelectFeed}
             onToggleFeed={toggleFeed}
+            markingFeedId={markingFeedId}
+            onMarkAllRead={handleMarkAllRead}
           />
         )}
       </div>
@@ -360,8 +377,10 @@ function TodayBoardEntries({
   onSelectEntry,
   onSelectFeed,
   onToggleFeed,
+  markingFeedId,
+  onMarkAllRead,
 }: {
-  groups: ReturnType<typeof buildTodayBoardGroups>
+  groups: TodayBoardFeedGroup[]
   selectedEntryId: string | null
   selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
   isDetailOpen: boolean
@@ -370,6 +389,8 @@ function TodayBoardEntries({
   onSelectEntry: (entry: TodayBoardEntry) => void
   onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
+  markingFeedId: string | null
+  onMarkAllRead: (feedId: string) => void
 }) {
   return isDetailOpen ? (
     <div data-testid="today-board-detail-list" className="space-y-3 p-3">
@@ -383,6 +404,8 @@ function TodayBoardEntries({
           translatedTexts={translatedTexts}
           onSelectEntry={onSelectEntry}
           onToggleFeed={onToggleFeed}
+          markingFeedId={markingFeedId}
+          onMarkAllRead={onMarkAllRead}
         />
       ))}
     </div>
@@ -401,6 +424,8 @@ function TodayBoardEntries({
           onSelectEntry={onSelectEntry}
           onSelectFeed={onSelectFeed}
           onToggleFeed={onToggleFeed}
+          markingFeedId={markingFeedId}
+          onMarkAllRead={onMarkAllRead}
         />
       ))}
     </div>
@@ -415,20 +440,30 @@ function FeedCardGroup({
   onSelectEntry,
   onSelectFeed,
   onToggleFeed,
+  markingFeedId,
+  onMarkAllRead,
 }: {
-  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  group: TodayBoardFeedGroup
   selectedEntryId: string | null
   isTranslationActive: boolean
   translatedTexts: Record<string, { title?: string; summary?: string }>
   onSelectEntry: (entry: TodayBoardEntry) => void
   onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
+  markingFeedId: string | null
+  onMarkAllRead: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
+  const hiddenCount = group.totalCount - group.visibleEntries.length
 
   return (
     <section className="border-border/70 mb-3 inline-block w-full break-inside-avoid overflow-hidden rounded-lg border bg-white shadow-[0_1px_0_rgba(15,23,42,0.03)]">
-      <FeedGroupHeader group={group} onSelectFeed={onSelectFeed} />
+      <FeedGroupHeader
+        group={group}
+        onSelectFeed={onSelectFeed}
+        markingFeedId={markingFeedId}
+        onMarkAllRead={onMarkAllRead}
+      />
       <div className="space-y-2 p-2">
         {group.visibleEntries.map((entry) => (
           <TodayBoardEntryCard
@@ -449,7 +484,9 @@ function FeedCardGroup({
             }}
             className="text-primary hover:text-primary/80 block w-full py-1 text-center text-[13px] font-medium transition-colors"
           >
-            {group.isExpanded ? t('todayBoard.collapse') : t('todayBoard.expand')}
+            {group.isExpanded
+              ? t('todayBoard.collapse')
+              : `${t('todayBoard.expand')}${hiddenCount > 0 ? ` (+${hiddenCount})` : ''}`}
           </button>
         ) : null}
       </div>
@@ -465,20 +502,30 @@ function FeedListGroup({
   translatedTexts,
   onSelectEntry,
   onToggleFeed,
+  markingFeedId,
+  onMarkAllRead,
 }: {
-  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  group: TodayBoardFeedGroup
   selectedEntryId: string | null
   selectedEntryRefs: MutableRefObject<Map<string, HTMLButtonElement>>
   isTranslationActive: boolean
   translatedTexts: Record<string, { title?: string; summary?: string }>
   onSelectEntry: (entry: TodayBoardEntry) => void
   onToggleFeed: (feedId: string) => void
+  markingFeedId: string | null
+  onMarkAllRead: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
+  const hiddenCount = group.totalCount - group.visibleEntries.length
 
   return (
     <section className="border-border/60 border-b pb-2 last:border-b-0">
-      <FeedGroupHeader group={group} compact />
+      <FeedGroupHeader
+        group={group}
+        compact
+        markingFeedId={markingFeedId}
+        onMarkAllRead={onMarkAllRead}
+      />
       <div className="divide-border/50 divide-y">
         {group.visibleEntries.map((entry) => (
           <TodayBoardEntryListItem
@@ -501,7 +548,9 @@ function FeedListGroup({
           }}
           className="text-primary hover:text-primary/80 block w-full py-2 text-center text-[13px] font-medium transition-colors"
         >
-          {group.isExpanded ? t('todayBoard.collapse') : t('todayBoard.expand')}
+          {group.isExpanded
+            ? t('todayBoard.collapse')
+            : `${t('todayBoard.expand')}${hiddenCount > 0 ? ` (+${hiddenCount})` : ''}`}
         </button>
       ) : null}
     </section>
@@ -512,16 +561,18 @@ function FeedGroupHeader({
   group,
   compact = false,
   onSelectFeed,
+  markingFeedId,
+  onMarkAllRead,
 }: {
-  group: ReturnType<typeof buildTodayBoardGroups>[number]
+  group: TodayBoardFeedGroup
   compact?: boolean
   onSelectFeed?: (feedId: string) => void
+  markingFeedId: string | null
+  onMarkAllRead: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
-  const statusText =
-    group.unreadCount === 0
-      ? t('todayBoard.readComplete')
-      : `${group.unreadCount} / ${group.totalCount}`
+  const isMarking = markingFeedId === group.feedId
+  const canMarkRead = group.unreadCount > 0
 
   return (
     <div
@@ -553,7 +604,27 @@ function FeedGroupHeader({
           </div>
         ) : null}
       </div>
-      <div className="shrink-0 text-xs font-normal text-stone-500 tabular-nums">{statusText}</div>
+      <div className="flex shrink-0 items-center gap-2">
+        <div className="text-xs font-normal text-stone-500 tabular-nums">{group.totalCount}</div>
+        {canMarkRead && (
+          <button
+            type="button"
+            disabled={isMarking}
+            onClick={(event) => {
+              event.stopPropagation()
+              onMarkAllRead(group.feedId)
+            }}
+            title={t('entries.markAll')}
+            className="text-stone-400 hover:text-primary flex h-5 w-5 items-center justify-center rounded transition-colors disabled:opacity-50"
+          >
+            {isMarking ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <CheckCheck className="h-3.5 w-3.5" />
+            )}
+          </button>
+        )}
+      </div>
     </div>
   )
 }
