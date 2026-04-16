@@ -13,14 +13,21 @@ from glean_core.services.translation_providers import (
 
 
 class _FakeResponse:
-    def __init__(self, payload: Any):
+    def __init__(self, payload: Any, status_code: int = 200):
         self._payload = payload
+        self.status_code = status_code
 
     def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise Exception(f"HTTP Error {self.status_code}")
         return None
 
     def json(self) -> Any:
         return self._payload
+
+    @property
+    def text(self) -> str:
+        return json.dumps(self._payload)
 
 
 class _FakeClient:
@@ -36,6 +43,17 @@ class _FakeClient:
 
     def post(self, url: str, **kwargs: Any) -> _FakeResponse:
         self.calls.append((url, kwargs))
+        if "texts" not in kwargs.get("json", {}) and "text" not in kwargs.get("json", {}):
+            return _FakeResponse(self.payload)
+
+        # For single translate fallback, _FakeClient usually expects result/translation key
+        if "text" in kwargs.get("json", {}):
+            text = kwargs["json"]["text"]
+            # If payload is a list (from batch expectation), this might fail.
+            # But _FakeClient is used with specific payload in tests.
+            if isinstance(self.payload, dict) and "results" in self.payload:
+                return _FakeResponse({"result": f"translated {text}"})
+
         return _FakeResponse(self.payload)
 
 
@@ -51,8 +69,14 @@ class _EchoBatchClient:
 
     def post(self, url: str, **kwargs: Any) -> _FakeResponse:
         self.calls.append((url, kwargs))
-        texts = kwargs["json"]["texts"]
-        return _FakeResponse({"translations": [f"translated {text}" for text in texts]})
+        json_data = kwargs.get("json", {})
+        if "texts" in json_data:
+            texts = json_data["texts"]
+            return _FakeResponse({"translations": [f"translated {text}" for text in texts]})
+        elif "text" in json_data:
+            text = json_data["text"]
+            return _FakeResponse({"translation": f"translated {text}"})
+        return _FakeResponse({})
 
 
 def test_create_provider_returns_mtran() -> None:
@@ -112,12 +136,13 @@ def test_mtran_translate_parses_standard_payload(monkeypatch) -> None:  # type: 
     )
 
     provider = MTranProvider(base_url="http://mtran.local")
+    # 'Hello world' is detected as 'en' by client-side detection
     result = provider.translate("Hello world", "auto", "zh-CN")
 
     assert result == "你好世界"
     assert fake_client.calls[0][0] == "http://mtran.local/translate"
     assert fake_client.calls[0][1]["json"] == {
-        "from": "auto",
+        "from": "en",
         "to": "zh",
         "text": "Hello world",
     }
@@ -135,15 +160,35 @@ def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-unt
     )
 
     provider = MTranProvider(base_url="http://mtran.local")
+    # 'hello' is detected as 'en'
     result = provider.translate_batch(["hello", "world"], "auto", "zh-CN")
 
     assert result == ["你好", "世界"]
     assert fake_client.calls[0][0] == "http://mtran.local/translate/batch"
     assert fake_client.calls[0][1]["json"] == {
-        "from": "auto",
+        "from": "en",
         "to": "zh",
         "texts": ["hello", "world"],
     }
+
+
+def test_mtran_batch_stays_auto_for_cjk(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake_client = _FakeClient({"results": ["translated", "translated"]})
+
+    def _client_factory(*args: Any, **kwargs: Any) -> _FakeClient:
+        return fake_client
+
+    monkeypatch.setattr(
+        "glean_core.services.translation_providers.httpx.Client",
+        _client_factory,
+    )
+
+    provider = MTranProvider(base_url="http://mtran.local")
+    # '你好' contains CJK, so it should stay 'auto'
+    result = provider.translate_batch(["你好", "world"], "auto", "en")
+
+    assert result == ["translated", "translated"]
+    assert fake_client.calls[0][1]["json"]["from"] == "auto"
 
 
 def test_mtran_batch_chunks_large_payloads(monkeypatch) -> None:  # type: ignore[no-untyped-def]

@@ -46,6 +46,7 @@ env/
 .cursor
 .cursorrules
 .ccb
+.superpowers/
 
 # Testing
 .coverage

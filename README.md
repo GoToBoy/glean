@@ -21,11 +21,13 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 - Discover workflow for finding new sources and converting candidates into subscriptions.
 - Immersive bilingual reading with persisted translation cache and multiple translation providers.
 - **Today Board** for grouped per-feed daily ingestion views with one-click "Mark All Read" and smart collapsible sections.
+- **Advanced Article Acquisition**: Layered pipeline using Playwright-enabled browser fallback for RSS sources that are summary-only or protected by anti-bot challenges (e.g., OpenAI News).
 - Bookmarks, tags, read-later, folder organization, and responsive desktop/mobile reader flows.
+- **Interactive Reading**: Support for keyboard navigation (j/k), inline original article view with iframe fallback, and cross-device list anchor persistence.
 - Optimized reader experience with zero-jitter read status synchronization and automatic scroll reset on article switch.
 - Admin dashboard with feed operations, retry/reset actions, batch management, and user administration.
+- **Local Harness CLI**: Integrated `python3 -m harness` toolkit for simplified local development, health checks, and service orchestration.
 - PostgreSQL + `pgvector` vector storage. This fork no longer depends on Milvus.
-- Playwright-enabled worker fallback for RSS sites that block plain HTTP article extraction.
 
 ## Why This Fork Uses Its Own Primary Branch
 

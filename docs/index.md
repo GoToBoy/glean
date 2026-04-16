@@ -16,14 +16,13 @@ This directory is the repository knowledge system of record.
   - branch deltas and external-reference style repository material
 - [Generated](./generated/index.md)
   - generated artifacts and repository-derived reference material
-- [Plans](./plans/active/index.md)
+- [ExecPlans](./exec-plans/active/index.md)
   - current and future plan catalog entrypoint
 
 ## Legacy Material
 
 Historical plan/spec artifacts created under earlier workflows still live in:
 
-- `docs/superpowers/specs/`
-- `docs/superpowers/plans/`
+- `docs/exec-plans/legacy/`
 
 These remain valid historical context until migrated.

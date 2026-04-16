@@ -1,0 +1,93 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - heading "Superpowers Brainstorming" [level=1] [ref=e3]:
+      - link "Superpowers Brainstorming" [ref=e4] [cursor=pointer]:
+        - /url: https://github.com/obra/superpowers
+    - generic [ref=e5]: Connected
+  - generic [ref=e7]:
+    - heading "今日收录：信息密度和忽略成本" [level=2] [ref=e8]
+    - paragraph [ref=e9]: 点选一个方向。重点看：同一个订阅当天很多篇时，是否容易扫一眼、跳过、再回到当前文章。
+    - generic [ref=e10]:
+      - generic [ref=e11] [cursor=pointer]:
+        - generic [ref=e12]:
+          - generic [ref=e13]:
+            - generic [ref=e14]:
+              - generic [ref=e15]:
+                - generic [ref=e16]: OpenAI News
+                - generic [ref=e17]: "12"
+              - generic [ref=e18]: GPT-5.4 routing notes
+              - generic [ref=e19]: Agent SDK release
+              - generic [ref=e20]: Research update
+              - generic [ref=e21]:
+                - generic [ref=e22]: 还有 9 篇
+                - strong [ref=e23]: 展开
+            - generic [ref=e24]:
+              - generic [ref=e25]:
+                - generic [ref=e26]: Hacker News
+                - generic [ref=e27]: "8"
+              - generic [ref=e28]:
+                - generic [ref=e29]: 3 篇高亮预览
+                - strong [ref=e30]: 展开
+            - generic [ref=e31]:
+              - generic [ref=e32]:
+                - generic [ref=e33]: 个人博客
+                - generic [ref=e34]: "2"
+              - generic [ref=e35]: A small design note
+          - generic [ref=e37]: 已定位：OpenAI News 第 1 篇
+        - generic [ref=e42]:
+          - heading "A. 推荐：订阅折叠包" [level=3] [ref=e43]
+          - paragraph [ref=e44]: 每个订阅是一组。默认只露出 2-3 篇和总数，点开组再看完整列表。
+          - list [ref=e45]:
+            - listitem [ref=e46]: 忽略一个订阅成本最低
+            - listitem [ref=e47]: 能保留文章级预览和已读状态
+            - listitem [ref=e48]: 需要处理组内展开、定位、读完重排
+      - generic [ref=e49] [cursor=pointer]:
+        - generic [ref=e50]:
+          - generic [ref=e51]:
+            - generic [ref=e52]:
+              - generic [ref=e53]:
+                - generic [ref=e54]: OpenAI News
+                - generic [ref=e55]: "12"
+              - generic [ref=e56]: GPT-5.4 routing notes
+              - generic [ref=e57]: Agent SDK release
+              - generic [ref=e58]: Realtime examples
+              - generic [ref=e59]: Research update
+            - generic [ref=e61]:
+              - generic [ref=e62]: Hacker News
+              - generic [ref=e63]: "8"
+          - generic [ref=e65]: 列表保持展开并滚动到当前卡片
+        - generic [ref=e70]:
+          - heading "B. 分组列表" [level=3] [ref=e71]
+          - paragraph [ref=e72]: 所有文章仍是列表，只加订阅分段标题；热门订阅不会完全收起。
+          - list [ref=e73]:
+            - listitem [ref=e74]: 实现和认知成本较低
+            - listitem [ref=e75]: 仍然会被 10 多篇同源文章占屏
+            - listitem [ref=e76]: 忽略整个订阅不如 A 干净
+      - generic [ref=e77] [cursor=pointer]:
+        - generic [ref=e78]:
+          - generic [ref=e79]:
+            - generic [ref=e80]:
+              - generic [ref=e81]:
+                - generic [ref=e82]: 优先看
+                - generic [ref=e83]: "9"
+              - generic [ref=e84]: High-signal launch note
+              - generic [ref=e85]: Breaking product update
+            - generic [ref=e86]:
+              - generic [ref=e87]:
+                - generic [ref=e88]: 同源补充
+                - generic [ref=e89]: "21"
+              - generic [ref=e90]:
+                - generic [ref=e91]: OpenAI News 还有 10 篇
+                - strong [ref=e92]: 展开
+              - generic [ref=e93]:
+                - generic [ref=e94]: HN 还有 7 篇
+                - strong [ref=e95]: 展开
+          - generic [ref=e97]: 先读高信号，其余按来源归档
+        - generic [ref=e102]:
+          - heading "C. 注意力预算" [level=3] [ref=e103]
+          - paragraph [ref=e104]: 每个订阅默认最多露出 N 篇，其余进入“同源补充”。
+          - list [ref=e105]:
+            - listitem [ref=e106]: 首页最清爽
+            - listitem [ref=e107]: 可能隐藏用户真正想扫的长订阅
+            - listitem [ref=e108]: 需要定义 N 和排序规则，产品假设更强
+  - generic [ref=e109]: Click an option above, then return to the terminal

@@ -23,6 +23,7 @@ _CHUNK_SIZE = 4500
 _SEPARATOR = " ||| "
 DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:8989"
 MTRAN_BATCH_SIZE = 24
+MTRAN_MAX_PAYLOAD_SIZE = 100 * 1024  # 100KB limit for MTranServer
 
 
 class TranslationProvider(ABC):
@@ -345,10 +346,33 @@ class MTranProvider(TranslationProvider):
             return "zh"
         return primary
 
+    def _detect_client_side(self, text: str) -> str:
+        """Simple client-side detection to avoid server-side mis-detection."""
+        # Check for CJK characters
+        cjk_pattern = re.compile(r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]")
+        if cjk_pattern.search(text):
+            # If it has Japanese chars, it might be Japanese, but MTran is often used for zh.
+            # For now, if it has any CJK, we'll let the server decide or just return 'zh'
+            # but usually 'auto' is safer for CJK. 
+            # The main problem is English being mis-detected as 'ha' or 'mr'.
+            return "auto"
+        
+        # If it's mostly Latin/English characters and no CJK, it's likely English.
+        # This prevents English from being detected as Marathi/Hausa.
+        latin_pattern = re.compile(r"^[a-zA-Z0-9\s\.,!?'\"-]*$")
+        if latin_pattern.match(text):
+            return "en"
+            
+        return "auto"
+
     def _payload(self, text: str, source: str, target: str) -> dict[str, Any]:
+        source_code = self._language_code(source)
+        if source_code == "auto":
+            source_code = self._detect_client_side(text)
+
         return {
             "text": text,
-            "from": self._language_code(source),
+            "from": source_code,
             "to": self._language_code(target),
         }
 
@@ -416,17 +440,53 @@ class MTranProvider(TranslationProvider):
         if not texts:
             return []
 
-        translated: list[str] = []
-        for start in range(0, len(texts), MTRAN_BATCH_SIZE):
-            translated.extend(
-                self._translate_batch_chunk(texts[start : start + MTRAN_BATCH_SIZE], source, target)
-            )
-        return translated
+        results: list[str] = []
+        batch_start = 0
+        while batch_start < len(texts):
+            current_batch: list[str] = []
+            current_size = 0
+
+            # Approximate JSON overhead: {"texts": [...], "from": "...", "to": "..."}
+            base_overhead = 100
+
+            for i in range(batch_start, len(texts)):
+                text = texts[i]
+                # Each string in JSON is escaped and quoted.
+                # We use a safe estimate: len(text) * 1.1 + 10
+                estimated_item_size = int(len(text) * 1.1) + 10
+
+                if len(current_batch) >= MTRAN_BATCH_SIZE:
+                    break
+                if current_batch and (
+                    base_overhead + current_size + estimated_item_size > MTRAN_MAX_PAYLOAD_SIZE
+                ):
+                    break
+
+                current_batch.append(text)
+                current_size += estimated_item_size
+
+            if not current_batch:
+                # Should not happen unless a single text is huge,
+                # but let's handle it by taking at least one item
+                current_batch = [texts[batch_start]]
+
+            results.extend(self._translate_batch_chunk(current_batch, source, target))
+            batch_start += len(current_batch)
+
+        return results
 
     def _translate_batch_chunk(self, texts: list[str], source: str, target: str) -> list[str]:
+        source_code = self._language_code(source)
+        if source_code == "auto" and texts:
+            # Detect based on the first non-empty text in the batch
+            for text in texts:
+                if text.strip():
+                    source_code = self._detect_client_side(text)
+                    break
+
         payload: dict[str, Any] = {
             "texts": texts,
-            "from": self._language_code(source),
+            "from": source_code,
             "to": self._language_code(target),
         }
 
@@ -437,12 +497,31 @@ class MTranProvider(TranslationProvider):
                     json=payload,
                     headers=self._headers(),
                 )
+
+                # Check for Payload Too Large specifically
+                if response.status_code == 413:
+                    raise ValueError("Payload too large for MTranServer")
+
                 response.raise_for_status()
                 parsed = self._extract_batch(response.json(), len(texts))
                 if parsed is not None:
                     return parsed
                 raise ValueError("MTranServer batch response is not parseable")
-        except Exception:
+        except Exception as exc:
+            # If it's a "No model found" error, don't bother with single requests
+            err_text = ""
+            try:
+                err_text = response.text if "response" in locals() else str(exc)
+            except Exception:
+                err_text = str(exc)
+
+            if "No model found" in err_text:
+                logger.warning(
+                    "MTranServer does not support this language pair; failing fast",
+                    extra={"source": source, "target": target},
+                )
+                raise
+
             logger.exception("MTranServer batch translation failed; fallback to single requests")
             return [self.translate(t, source, target) for t in texts]
 
