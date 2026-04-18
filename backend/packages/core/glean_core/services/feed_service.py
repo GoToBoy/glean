@@ -19,7 +19,14 @@ from glean_core.schemas import (
     SubscriptionSyncResponse,
 )
 from glean_core.services.typed_config_service import TypedConfigService
-from glean_database.models import Bookmark, Entry, Feed, Subscription, UserEntry, UserPreferenceStats
+from glean_database.models import (
+    Bookmark,
+    Entry,
+    Feed,
+    Subscription,
+    UserEntry,
+    UserPreferenceStats,
+)
 
 # Sentinel for unset values
 UNSET: object = object()

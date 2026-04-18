@@ -15,6 +15,7 @@ import {
 } from '@glean/ui'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
+import type { AIIntegrationConfigResponse, AIIntegrationConfigUpdateRequest } from '@glean/types'
 import api from '../lib/api'
 
 interface RSSHubSettings {
@@ -33,6 +34,7 @@ export default function RegistrationSettingsPage() {
   const [registrationEnabled, setRegistrationEnabled] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [savingRsshub, setSavingRsshub] = useState(false)
+  const [savingAIIntegration, setSavingAIIntegration] = useState(false)
   const [rsshubSettings, setRsshubSettings] = useState<RSSHubSettings>({
     enabled: false,
     base_url: '',
@@ -59,6 +61,12 @@ export default function RegistrationSettingsPage() {
     custom_rules: [],
   })
   const [rsshubCustomRulesText, setRsshubCustomRulesText] = useState('[]')
+  const [aiIntegrationSettings, setAIIntegrationSettings] = useState<AIIntegrationConfigResponse>({
+    enabled: false,
+    allow_today_entries_api: true,
+    allow_entry_detail_api: true,
+    allow_ai_writeback: true,
+  })
 
   useEffect(() => {
     fetchSettings()
@@ -67,14 +75,16 @@ export default function RegistrationSettingsPage() {
   const fetchSettings = async () => {
     try {
       setLoading(true)
-      const [registrationRes, rsshubRes] = await Promise.all([
+      const [registrationRes, rsshubRes, aiIntegrationRes] = await Promise.all([
         api.get('/settings/registration'),
         api.get('/settings/rsshub'),
+        api.get('/settings/ai-integration'),
       ])
       setRegistrationEnabled(registrationRes.data.enabled)
       const nextRsshub = rsshubRes.data as RSSHubSettings
       setRsshubSettings(nextRsshub)
       setRsshubCustomRulesText(JSON.stringify(nextRsshub.custom_rules ?? [], null, 2))
+      setAIIntegrationSettings(aiIntegrationRes.data as AIIntegrationConfigResponse)
       setError(null)
     } catch (err) {
       console.error('Failed to fetch settings:', err)
@@ -126,6 +136,21 @@ export default function RegistrationSettingsPage() {
       setError('Failed to update RSSHub settings')
     } finally {
       setSavingRsshub(false)
+    }
+  }
+
+  const handleSaveAIIntegrationSettings = async () => {
+    try {
+      setSavingAIIntegration(true)
+      const payload: AIIntegrationConfigUpdateRequest = aiIntegrationSettings
+      const response = await api.post('/settings/ai-integration', payload)
+      setAIIntegrationSettings(response.data as AIIntegrationConfigResponse)
+      setError(null)
+    } catch (err) {
+      console.error('Failed to update local AI settings:', err)
+      setError('Failed to update local AI settings')
+    } finally {
+      setSavingAIIntegration(false)
     }
   }
 
@@ -253,8 +278,9 @@ export default function RegistrationSettingsPage() {
               <div className="space-y-2">
                 <Label>Built-in auto-conversion rules</Label>
                 <p className="text-muted-foreground text-xs">
-                  These rules only control Glean&apos;s automatic URL mapping. For unsupported sites,
-                  add a custom rule here or subscribe directly with an RSSHub path in the reader UI.
+                  These rules only control Glean&apos;s automatic URL mapping. For unsupported
+                  sites, add a custom rule here or subscribe directly with an RSSHub path in the
+                  reader UI.
                 </p>
                 <div className="grid gap-2 md:grid-cols-2">
                   {Object.entries(rsshubSettings.builtin_rules || {}).map(([ruleName, enabled]) => (
@@ -313,6 +339,94 @@ export default function RegistrationSettingsPage() {
               <div className="flex justify-end">
                 <Button onClick={handleSaveRsshubSettings} disabled={savingRsshub}>
                   {savingRsshub ? 'Saving...' : 'Save RSSHub Settings'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Local AI Integration</CardTitle>
+              <CardDescription>
+                Expose today&apos;s collected articles to a local AI client and show AI writebacks
+                in Today&apos;s Intake.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="flex items-center justify-between space-x-2">
+                <Label
+                  htmlFor="ai-integration-enabled"
+                  className="flex flex-col items-start space-y-1"
+                >
+                  <span>Enable local AI access</span>
+                  <span className="text-muted-foreground font-normal">
+                    Allow API-token clients to read Today&apos;s Intake and write summaries back.
+                  </span>
+                </Label>
+                <Switch
+                  id="ai-integration-enabled"
+                  checked={aiIntegrationSettings.enabled}
+                  onCheckedChange={(checked) =>
+                    setAIIntegrationSettings((prev) => ({ ...prev, enabled: checked }))
+                  }
+                  disabled={savingAIIntegration}
+                />
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="flex items-center justify-between space-x-2 rounded-md border p-3">
+                  <Label htmlFor="ai-today-list-api" className="text-sm">
+                    Today list API
+                  </Label>
+                  <Switch
+                    id="ai-today-list-api"
+                    checked={aiIntegrationSettings.allow_today_entries_api}
+                    onCheckedChange={(checked) =>
+                      setAIIntegrationSettings((prev) => ({
+                        ...prev,
+                        allow_today_entries_api: checked,
+                      }))
+                    }
+                    disabled={savingAIIntegration}
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2 rounded-md border p-3">
+                  <Label htmlFor="ai-entry-detail-api" className="text-sm">
+                    Entry detail API
+                  </Label>
+                  <Switch
+                    id="ai-entry-detail-api"
+                    checked={aiIntegrationSettings.allow_entry_detail_api}
+                    onCheckedChange={(checked) =>
+                      setAIIntegrationSettings((prev) => ({
+                        ...prev,
+                        allow_entry_detail_api: checked,
+                      }))
+                    }
+                    disabled={savingAIIntegration}
+                  />
+                </div>
+                <div className="flex items-center justify-between space-x-2 rounded-md border p-3">
+                  <Label htmlFor="ai-writeback-api" className="text-sm">
+                    AI writeback
+                  </Label>
+                  <Switch
+                    id="ai-writeback-api"
+                    checked={aiIntegrationSettings.allow_ai_writeback}
+                    onCheckedChange={(checked) =>
+                      setAIIntegrationSettings((prev) => ({
+                        ...prev,
+                        allow_ai_writeback: checked,
+                      }))
+                    }
+                    disabled={savingAIIntegration}
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <Button onClick={handleSaveAIIntegrationSettings} disabled={savingAIIntegration}>
+                  {savingAIIntegration ? 'Saving...' : 'Save Local AI Settings'}
                 </Button>
               </div>
             </CardContent>

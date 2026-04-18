@@ -11,6 +11,7 @@ const {
   useInfiniteEntriesSpy,
   updateEntryStateSpy,
   readerControllerState,
+  aiIntegrationState,
 } = vi.hoisted(() => ({
   articleReaderSpy: vi.fn((props: { entry: EntryWithState }) => (
     <div data-testid="article-reader">{props.entry.id}</div>
@@ -40,6 +41,11 @@ const {
     isLoading: false,
     listTranslationAutoEnabled: false,
     entries: null as EntryWithState[] | null,
+  },
+  aiIntegrationState: {
+    enabled: false,
+    userEnabled: false,
+    defaultView: 'list' as 'list' | 'ai_summary',
   },
 }))
 
@@ -88,28 +94,27 @@ vi.mock('@tanstack/react-query', () => ({
   useQueryClient: () => ({
     setQueryData: vi.fn(),
     prefetchQuery: vi.fn().mockResolvedValue(undefined),
+    invalidateQueries: vi.fn(),
   }),
 }))
 
 vi.mock('@/hooks/useEntries', () => ({
   useInfiniteEntries: (filters: unknown) => {
     useInfiniteEntriesSpy(filters)
-    const items =
-      readerControllerState.entries ??
-      [
-        makeEntry({
-          id: 'today-entry',
-          published_at: '2026-04-09T12:30:00+08:00',
-          ingested_at: '2026-04-10T01:00:00+08:00',
-          created_at: '2026-04-10T01:00:00+08:00',
-        }),
-        makeEntry({
-          id: 'older-entry',
-          published_at: '2026-04-08T12:30:00+08:00',
-          ingested_at: '2026-04-08T12:30:00+08:00',
-          created_at: '2026-04-08T12:30:00+08:00',
-        }),
-      ]
+    const items = readerControllerState.entries ?? [
+      makeEntry({
+        id: 'today-entry',
+        published_at: '2026-04-09T12:30:00+08:00',
+        ingested_at: '2026-04-10T01:00:00+08:00',
+        created_at: '2026-04-10T01:00:00+08:00',
+      }),
+      makeEntry({
+        id: 'older-entry',
+        published_at: '2026-04-08T12:30:00+08:00',
+        ingested_at: '2026-04-08T12:30:00+08:00',
+        created_at: '2026-04-08T12:30:00+08:00',
+      }),
+    ]
     return {
       data: {
         pages: [
@@ -137,7 +142,9 @@ vi.mock('@/hooks/useEntries', () => ({
     isLoading: false,
   }),
   useUpdateEntryState: () => ({ mutateAsync: updateEntryStateSpy }),
+  useMarkAllRead: () => ({ mutateAsync: vi.fn() }),
   entryKeys: {
+    lists: () => ['entries', 'list'],
     detail: (id: string) => ['entries', 'detail', id],
   },
 }))
@@ -157,6 +164,11 @@ vi.mock('@/hooks/useVectorizationStatus', () => ({
   useVectorizationStatus: () => ({ data: { enabled: false, status: 'idle' } }),
 }))
 
+vi.mock('@/hooks/useAIIntegration', () => ({
+  useAIIntegrationStatus: () => ({ data: { enabled: aiIntegrationState.enabled } }),
+  useAITodaySummary: () => ({ data: null, isLoading: false, error: null }),
+}))
+
 vi.mock('@/components/ArticleReader', () => ({
   ArticleReader: articleReaderSpy,
   ArticleReaderSkeleton: () => <div>loading</div>,
@@ -167,6 +179,8 @@ vi.mock('@/stores/authStore', () => ({
     user: {
       settings: {
         list_translation_auto_enabled: readerControllerState.listTranslationAutoEnabled,
+        ai_integration_enabled: aiIntegrationState.userEnabled,
+        today_board_default_view: aiIntegrationState.defaultView,
       },
     },
   }),
@@ -232,6 +246,9 @@ describe('ReaderCore today-board route', () => {
     readerControllerState.isLoading = false
     readerControllerState.listTranslationAutoEnabled = false
     readerControllerState.entries = null
+    aiIntegrationState.enabled = false
+    aiIntegrationState.userEnabled = false
+    aiIntegrationState.defaultView = 'list'
   })
 
   it('uses the today-board component on mobile so narrow screens do not fall back to the normal entry list', () => {
@@ -413,6 +430,58 @@ describe('ReaderCore today-board route', () => {
     expect(navigateSpy).toHaveBeenCalledWith('/reader?feed=feed-target')
   })
 
+  it('uses the current user setting for today-board AI summary defaults', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    aiIntegrationState.enabled = true
+    aiIntegrationState.userEnabled = true
+    aiIntegrationState.defaultView = 'ai_summary'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiEnabled: true,
+        aiView: 'summary',
+      }),
+      expect.anything()
+    )
+  })
+
+  it('keeps AI summary disabled when only the system gate is enabled', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
+    aiIntegrationState.enabled = true
+    aiIntegrationState.userEnabled = false
+    aiIntegrationState.defaultView = 'ai_summary'
+
+    Object.defineProperty(window, 'ResizeObserver', {
+      writable: true,
+      value: class {
+        observe() {}
+        disconnect() {}
+      },
+    })
+
+    render(<ReaderCore isMobile={false} />)
+
+    expect(todayBoardSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aiEnabled: false,
+        aiView: 'list',
+      }),
+      expect.anything()
+    )
+  })
+
   it('chunks today-board list translation requests so large boards do not hit the provider at once', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
@@ -524,6 +593,7 @@ describe('ReaderCore today-board route', () => {
     expect(updateEntryStateSpy).toHaveBeenCalledWith({
       entryId: 'today-entry',
       data: { is_read: true },
+      updateListCache: false,
     })
   })
 
@@ -565,10 +635,11 @@ describe('ReaderCore today-board route', () => {
     expect(updateEntryStateSpy).toHaveBeenCalledWith({
       entryId: 'today-entry',
       data: { is_read: true },
+      updateListCache: false,
     })
   })
 
-  it('optimistically updates today-board entries when delayed auto-read starts', async () => {
+  it('does not optimistically update today-board entries when delayed auto-read starts', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
     let resolveUpdate: (entry: EntryWithState) => void = () => undefined
@@ -599,8 +670,9 @@ describe('ReaderCore today-board route', () => {
     expect(updateEntryStateSpy).toHaveBeenCalledWith({
       entryId: 'today-entry',
       data: { is_read: true },
+      updateListCache: false,
     })
-    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(true)
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(false)
 
     await act(async () => {
       resolveUpdate(
@@ -615,7 +687,7 @@ describe('ReaderCore today-board route', () => {
     })
   })
 
-  it('updates today-board entries after delayed auto-read resolves so returning to cards shows read state', async () => {
+  it('keeps today-board entries visually unread after delayed auto-read resolves while detail is open', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-04-10T12:00:00+08:00'))
     updateEntryStateSpy.mockResolvedValue(
@@ -646,6 +718,6 @@ describe('ReaderCore today-board route', () => {
       await Promise.resolve()
     })
 
-    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(true)
+    expect(getLastTodayBoardEntry('today-entry')?.is_read).toBe(false)
   })
 })

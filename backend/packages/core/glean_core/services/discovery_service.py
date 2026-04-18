@@ -5,11 +5,10 @@ Single-user source discovery pipeline backed by external web search.
 """
 
 import os
+import re
 from collections import Counter
 from datetime import UTC, datetime, timedelta
-import re
-from urllib.parse import urljoin
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import httpx
 from bs4 import BeautifulSoup

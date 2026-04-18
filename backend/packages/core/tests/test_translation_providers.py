@@ -1,5 +1,6 @@
 """Tests for translation providers."""
 
+import json
 from typing import Any
 
 from glean_core.services.translation_providers import (

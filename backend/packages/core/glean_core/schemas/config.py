@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 
 from .rsshub_ruleset import RSSHUB_BUILTIN_RULES_DEFAULTS, RSSHUB_RULESET_VERSION
 
+
 class VectorizationStatus(str, Enum):
     """Vectorization system status."""
 
@@ -128,6 +129,51 @@ class RSSHubConfigUpdateRequest(BaseModel):
     fallback_on_fetch: bool | None = None
     builtin_rules: dict[str, bool] | None = None
     custom_rules: list[dict[str, str | bool]] | None = None
+
+
+class AIIntegrationConfig(BaseModel):
+    """Local AI integration configuration."""
+
+    NAMESPACE: ClassVar[str] = "ai_integration"
+
+    enabled: bool = False
+    allow_today_entries_api: bool = True
+    allow_entry_detail_api: bool = True
+    allow_ai_writeback: bool = True
+
+
+class AIIntegrationConfigUpdateRequest(BaseModel):
+    """Partial update request for local AI integration configuration."""
+
+    enabled: bool | None = None
+    allow_today_entries_api: bool | None = None
+    allow_entry_detail_api: bool | None = None
+    allow_ai_writeback: bool | None = None
+
+
+class AIIntegrationConfigResponse(BaseModel):
+    """Admin response for local AI integration configuration."""
+
+    enabled: bool
+    allow_today_entries_api: bool
+    allow_entry_detail_api: bool
+    allow_ai_writeback: bool
+
+    @classmethod
+    def from_config(cls, config: AIIntegrationConfig) -> "AIIntegrationConfigResponse":
+        """Create response from stored config."""
+        return cls(
+            enabled=config.enabled,
+            allow_today_entries_api=config.allow_today_entries_api,
+            allow_entry_detail_api=config.allow_entry_detail_api,
+            allow_ai_writeback=config.allow_ai_writeback,
+        )
+
+
+class AIIntegrationStatusResponse(BaseModel):
+    """Non-sensitive web response for local AI integration status."""
+
+    enabled: bool
 
 
 class EmbeddingRebuildProgress(BaseModel):

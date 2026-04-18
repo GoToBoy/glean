@@ -201,23 +201,17 @@ async def fetch_bookmark_metadata_task(
                     extra={"bookmark_id": bookmark_id, "error": str(extract_err)},
                 )
 
-            # Update bookmark if we got better data
-            updated = False
-
             # Update title if current title is just the URL
             if title and bookmark.title == bookmark.url:
                 bookmark.title = title[:500]  # Respect max length
-                updated = True
 
             # Update excerpt if not set
             if description and not bookmark.excerpt:
                 bookmark.excerpt = description
-                updated = True
 
             # Store extracted content for in-app reading
             if content:
                 bookmark.content = content
-                updated = True
 
             return {
                 "status": "success",

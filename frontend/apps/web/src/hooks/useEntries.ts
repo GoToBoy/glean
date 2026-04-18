@@ -3,6 +3,12 @@ import { entryService } from '@glean/api-client'
 import type { UpdateEntryStateRequest, EntryWithState } from '@glean/types'
 import { subscriptionKeys } from './useSubscriptions'
 
+type UpdateEntryStateVariables = {
+  entryId: string
+  data: UpdateEntryStateRequest
+  updateListCache?: boolean
+}
+
 /**
  * Query key factory for entries.
  */
@@ -119,11 +125,16 @@ export function useUpdateEntryState() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ entryId, data }: { entryId: string; data: UpdateEntryStateRequest }) =>
+    mutationFn: ({ entryId, data }: UpdateEntryStateVariables) =>
       entryService.updateEntryState(entryId, data),
     onSuccess: (updatedEntry, variables) => {
       // Update the specific entry detail in cache
       queryClient.setQueryData(entryKeys.detail(variables.entryId), updatedEntry)
+
+      if (variables.updateListCache === false) {
+        queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
+        return
+      }
 
       // Update the entry in all cached lists directly (optimistic update)
       // This prevents the list from refreshing and the entry from disappearing

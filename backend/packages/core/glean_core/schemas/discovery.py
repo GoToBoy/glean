@@ -9,7 +9,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-
 DiscoveryFeedbackType = Literal[
     "dismiss_source",
     "reduce_topic",

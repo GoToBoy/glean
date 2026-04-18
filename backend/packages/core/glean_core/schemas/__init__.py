@@ -2,6 +2,15 @@
 Pydantic schemas for API requests and responses.
 """
 
+from .ai import (
+    AIDailySummaryPayload,
+    AIDailySummaryResponse,
+    AIEntryDetailResponse,
+    AIEntrySupplementPayload,
+    AIEntrySupplementResponse,
+    AITodayEntriesResponse,
+    AITodayEntryItem,
+)
 from .api_token import (
     APITokenCreate,
     APITokenCreateResponse,
@@ -17,14 +26,11 @@ from .bookmark import (
     BookmarkTagRequest,
     BookmarkUpdate,
 )
-from .discovery import (
-    DiscoveryActionResponse,
-    DiscoveryCandidateResponse,
-    DiscoveryFeedbackRequest,
-    DiscoveryListResponse,
-    DiscoveryTrialRequest,
-)
 from .config import (
+    AIIntegrationConfig,
+    AIIntegrationConfigResponse,
+    AIIntegrationConfigUpdateRequest,
+    AIIntegrationStatusResponse,
     EmbeddingConfig,
     EmbeddingConfigResponse,
     EmbeddingConfigUpdateRequest,
@@ -37,6 +43,13 @@ from .config import (
     ValidationResult,
     VectorizationStatus,
     VectorizationStatusResponse,
+)
+from .discovery import (
+    DiscoveryActionResponse,
+    DiscoveryCandidateResponse,
+    DiscoveryFeedbackRequest,
+    DiscoveryListResponse,
+    DiscoveryTrialRequest,
 )
 from .entry import (
     EntryListResponse,
@@ -75,7 +88,7 @@ from .tag import (
     TagUpdate,
     TagWithCountsResponse,
 )
-from .user import UserResponse, UserUpdate
+from .user import UserResponse, UserSettings, UserUpdate
 
 __all__ = [
     # API Token
@@ -88,8 +101,17 @@ __all__ = [
     "RefreshTokenRequest",
     "RegisterRequest",
     "TokenResponse",
+    # AI
+    "AIDailySummaryPayload",
+    "AIDailySummaryResponse",
+    "AIEntryDetailResponse",
+    "AIEntrySupplementPayload",
+    "AIEntrySupplementResponse",
+    "AITodayEntriesResponse",
+    "AITodayEntryItem",
     # User
     "UserResponse",
+    "UserSettings",
     "UserUpdate",
     # Feed
     "FeedResponse",
@@ -138,6 +160,10 @@ __all__ = [
     "TagListResponse",
     "TagBatchRequest",
     # Config
+    "AIIntegrationConfig",
+    "AIIntegrationConfigResponse",
+    "AIIntegrationConfigUpdateRequest",
+    "AIIntegrationStatusResponse",
     "EmbeddingConfig",
     "EmbeddingConfigResponse",
     "EmbeddingConfigUpdateRequest",

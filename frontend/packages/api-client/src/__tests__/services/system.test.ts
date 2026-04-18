@@ -27,4 +27,16 @@ describe('SystemService', () => {
     expect(mockClient.get).toHaveBeenCalledWith('/system/vectorization-status')
     expect(result).toEqual(status)
   })
+
+  it('should get AI integration status', async () => {
+    const status = {
+      enabled: true,
+    }
+    vi.mocked(mockClient.get).mockResolvedValue(status)
+
+    const result = await service.getAIIntegrationStatus()
+
+    expect(mockClient.get).toHaveBeenCalledWith('/system/ai-integration')
+    expect(result).toEqual(status)
+  })
 })

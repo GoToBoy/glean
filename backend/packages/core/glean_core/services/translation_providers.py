@@ -353,16 +353,16 @@ class MTranProvider(TranslationProvider):
         if cjk_pattern.search(text):
             # If it has Japanese chars, it might be Japanese, but MTran is often used for zh.
             # For now, if it has any CJK, we'll let the server decide or just return 'zh'
-            # but usually 'auto' is safer for CJK. 
+            # but usually 'auto' is safer for CJK.
             # The main problem is English being mis-detected as 'ha' or 'mr'.
             return "auto"
-        
+
         # If it's mostly Latin/English characters and no CJK, it's likely English.
         # This prevents English from being detected as Marathi/Hausa.
         latin_pattern = re.compile(r"^[a-zA-Z0-9\s\.,!?'\"-]*$")
         if latin_pattern.match(text):
             return "en"
-            
+
         return "auto"
 
     def _payload(self, text: str, source: str, target: str) -> dict[str, Any]:

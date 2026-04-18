@@ -38,6 +38,7 @@ import { SubscriptionsTab } from '../components/tabs/SubscriptionsTab'
 import { PreferenceTab } from '../components/tabs/PreferenceTab'
 import { APITokensTab } from '../components/tabs/APITokensTab'
 import { TranslationTab } from '../components/tabs/TranslationTab'
+import { AIIntegrationTab } from '../components/tabs/AIIntegrationTab'
 import { useTranslation } from '@glean/i18n'
 
 /**
@@ -585,6 +586,10 @@ export default function SettingsPage() {
                     <Key className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.apiTokens')}</span>
                   </TabsTab>
+                  <TabsTab value="ai-integration" className={tabsTabClass}>
+                    <Sparkles className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
+                    <span className="text-[10px] md:text-sm">{t('tabs.aiIntegration')}</span>
+                  </TabsTab>
                 </TabsList>
               </div>
 
@@ -719,6 +724,25 @@ export default function SettingsPage() {
                     </div>
                   </div>
                   <APITokensTab />
+                </TabsPanel>
+
+                <TabsPanel value="ai-integration" className={panelClass}>
+                  <div className={panelHeaderClass}>
+                    <div className="mb-2 flex items-center gap-3">
+                      <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
+                        <Sparkles className="text-primary h-5 w-5" />
+                      </div>
+                      <div>
+                        <h2 className="font-display text-foreground text-2xl font-semibold">
+                          {t('aiIntegration.title')}
+                        </h2>
+                        <p className="text-muted-foreground text-sm">
+                          {t('aiIntegration.desc')}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <AIIntegrationTab />
                 </TabsPanel>
               </div>
             </div>

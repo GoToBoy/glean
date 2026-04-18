@@ -43,12 +43,9 @@ def content_is_summary_like(content: str | None, summary: str | None) -> bool:
     if len(content_text) < _MIN_MEANINGFUL_CONTENT_LENGTH:
         return True
 
-    if content_text.startswith(summary_text) and len(content_text) <= int(
+    return content_text.startswith(summary_text) and len(content_text) <= int(
         len(summary_text) * _SUMMARY_ONLY_MULTIPLIER
-    ):
-        return True
-
-    return False
+    )
 
 
 def should_backfill_entry(

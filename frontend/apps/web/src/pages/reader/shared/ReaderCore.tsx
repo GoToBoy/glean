@@ -5,11 +5,13 @@ import {
   useInfiniteEntries,
   useEntry,
   useUpdateEntryState,
+  useMarkAllRead,
   entryKeys,
 } from '../../../hooks/useEntries'
 import { useAllSubscriptions } from '../../../hooks/useSubscriptions'
 import { entryService } from '@glean/api-client'
 import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
+import { useAIIntegrationStatus, useAITodaySummary } from '../../../hooks/useAIIntegration'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
 import { useAuthStore } from '../../../stores/authStore'
 import { useUIStore } from '../../../stores/uiStore'
@@ -91,8 +93,20 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { data: vectorizationStatus } = useVectorizationStatus()
   const isVectorizationEnabled =
     vectorizationStatus?.enabled && vectorizationStatus?.status === 'idle'
+  const { data: aiIntegrationStatus } = useAIIntegrationStatus()
+  const userAIIntegrationEnabled = user?.settings?.ai_integration_enabled ?? false
+  const aiIntegrationEnabled = (aiIntegrationStatus?.enabled ?? false) && userAIIntegrationEnabled
+  const aiSummaryTimezone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    } catch {
+      return 'UTC'
+    }
+  }, [])
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
+  const [todayBoardAIView, setTodayBoardAIView] = useState<'list' | 'summary'>('list')
+  const todayBoardAIViewDefaultKeyRef = useRef<string | null>(null)
 
   // Store the original position data of the selected entry when it was first clicked
   // This ensures the entry stays in its original position even after like/dislike/bookmark actions
@@ -145,6 +159,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const prefetchingEntryIdsRef = useRef<Set<string>>(new Set())
 
   const updateMutation = useUpdateEntryState()
+  const { mutateAsync: markAllReadAsync } = useMarkAllRead()
   const updateEntryStateRef = useRef(updateMutation.mutateAsync)
   useEffect(() => {
     updateEntryStateRef.current = updateMutation.mutateAsync
@@ -234,6 +249,43 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     () => todayBoardEntries.map((entry) => entry.id),
     [todayBoardEntries]
   )
+  const todayBoardDefaultAIView =
+    aiIntegrationEnabled && user?.settings?.today_board_default_view === 'ai_summary'
+      ? 'summary'
+      : 'list'
+  const shouldFetchAISummary =
+    isTodayBoardView && aiIntegrationEnabled && todayBoardAIView === 'summary'
+  const {
+    data: aiTodaySummary = null,
+    isLoading: isAITodaySummaryLoading,
+    error: aiTodaySummaryError,
+  } = useAITodaySummary({
+    date: todayBoardDate,
+    timezone: aiSummaryTimezone,
+    enabled: shouldFetchAISummary,
+  })
+
+  useEffect(() => {
+    if (!isTodayBoardView) {
+      todayBoardAIViewDefaultKeyRef.current = null
+      return
+    }
+
+    const nextKey = `${todayBoardDate}:${todayBoardDefaultAIView}:${aiIntegrationEnabled}`
+    if (todayBoardAIViewDefaultKeyRef.current === nextKey) return
+
+    todayBoardAIViewDefaultKeyRef.current = nextKey
+    setTodayBoardAIView(todayBoardDefaultAIView)
+    if (todayBoardDefaultAIView === 'summary') {
+      clearSelectedEntry(true)
+    }
+  }, [
+    aiIntegrationEnabled,
+    clearSelectedEntry,
+    isTodayBoardView,
+    todayBoardDate,
+    todayBoardDefaultAIView,
+  ])
 
   // Fetch selected entry separately to keep it visible even when filtered out of list
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
@@ -255,15 +307,19 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const selectedEntryPreview = selectedEntryId ? entriesById.get(selectedEntryId) : undefined
   const resolvedSelectedEntry = selectedEntry ?? selectedEntryPreview
 
-  const markEntryRead = useCallback((entryId: string) => {
-    if (autoMarkedEntryIdsRef.current.has(entryId)) return
-    autoMarkedEntryIdsRef.current.add(entryId)
+  const markEntryRead = useCallback(
+    (entryId: string) => {
+      if (autoMarkedEntryIdsRef.current.has(entryId)) return
+      autoMarkedEntryIdsRef.current.add(entryId)
 
-    void updateEntryStateRef.current({
-      entryId,
-      data: { is_read: true },
-    })
-  }, [])
+      void updateEntryStateRef.current({
+        entryId,
+        data: { is_read: true },
+        updateListCache: !isTodayBoardView,
+      })
+    },
+    [isTodayBoardView]
+  )
 
   const resolvedSelectedEntryId = resolvedSelectedEntry?.id
   const resolvedSelectedEntryIsRead = resolvedSelectedEntry?.is_read ?? false
@@ -776,6 +832,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
   }, [clearSelectedEntry, queryClient])
 
+  const handleTodayBoardMarkAllRead = useCallback(
+    async (feedId: string) => {
+      await markAllReadAsync({ feedId })
+    },
+    [markAllReadAsync]
+  )
+
   useEffect(() => {
     localStorage.setItem('glean:entriesWidth', String(entriesWidth))
   }, [entriesWidth])
@@ -827,7 +890,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             >
               <TodayBoard
                 entries={todayBoardEntries}
-                selectedEntryId={isMobile ? null : selectedEntryId}
+                selectedEntryId={
+                  isMobile || todayBoardAIView === 'summary' ? null : selectedEntryId
+                }
                 selectedDateKey={todayBoardDate}
                 todayDateKey={todayBoardTodayDate}
                 recentDates={recentTodayBoardDates}
@@ -836,14 +901,26 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                 isLoading={isLoading}
                 onSelectEntry={handleSelectEntry}
                 onCloseDetail={handleTodayBoardDetailClose}
+                onMarkAllReadFeed={handleTodayBoardMarkAllRead}
                 listWidthPx={entriesWidth}
                 isTranslationActive={isListTranslationActive}
                 isTranslationLoading={isListTranslationLoading}
                 translationLoadingPhase={listTranslationLoadingPhase}
                 translatedTexts={translatedEntryTexts}
                 onToggleTranslation={() => setIsListTranslationActive((value) => !value)}
+                aiEnabled={aiIntegrationEnabled}
+                aiView={todayBoardAIView}
+                aiSummary={aiTodaySummary}
+                isAISummaryLoading={isAITodaySummaryLoading}
+                aiSummaryError={aiTodaySummaryError}
+                onAIViewChange={(view) => {
+                  setTodayBoardAIView(view)
+                  if (view === 'summary') {
+                    clearSelectedEntry(true)
+                  }
+                }}
                 renderDetail={
-                  isMobile
+                  isMobile || todayBoardAIView === 'summary'
                     ? undefined
                     : (entry) => (
                         <ArticleReader

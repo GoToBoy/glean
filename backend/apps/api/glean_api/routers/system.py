@@ -11,6 +11,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core.schemas.config import (
+    AIIntegrationConfig,
+    AIIntegrationStatusResponse,
     EmbeddingConfig,
     EmbeddingRebuildProgress,
     VectorizationStatus,
@@ -97,6 +99,17 @@ async def get_vectorization_status(
         has_error=current_status == VectorizationStatus.ERROR,
         error_message=config.last_error if current_status == VectorizationStatus.ERROR else None,
         rebuild_progress=progress,
+    )
+
+
+@router.get("/ai-integration", response_model=AIIntegrationStatusResponse)
+async def get_ai_integration_status(
+    config_service: Annotated[TypedConfigService, Depends(get_config_service)],
+) -> AIIntegrationStatusResponse:
+    """Get non-sensitive local AI integration status for the web UI."""
+    config = await config_service.get(AIIntegrationConfig)
+    return AIIntegrationStatusResponse(
+        enabled=config.enabled,
     )
 
 

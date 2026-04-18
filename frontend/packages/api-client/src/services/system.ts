@@ -3,6 +3,7 @@
  */
 
 import type { ApiClient } from '../client'
+import type { AIIntegrationStatusResponse } from '@glean/types'
 
 export interface VectorizationStatus {
   enabled: boolean
@@ -26,5 +27,12 @@ export class SystemService {
    */
   async getVectorizationStatus(): Promise<VectorizationStatus> {
     return this.client.get<VectorizationStatus>('/system/vectorization-status')
+  }
+
+  /**
+   * Get non-sensitive local AI integration status.
+   */
+  async getAIIntegrationStatus(): Promise<AIIntegrationStatusResponse> {
+    return this.client.get<AIIntegrationStatusResponse>('/system/ai-integration')
   }
 }

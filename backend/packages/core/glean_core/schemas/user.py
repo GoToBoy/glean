@@ -5,9 +5,33 @@ Request and response models for user-related operations.
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr
+
+
+class UserSettings(BaseModel):
+    """Known user settings with forward-compatible extra keys."""
+
+    model_config = ConfigDict(extra="allow")
+
+    read_later_days: int | None = None
+    show_read_later_remaining: bool | None = None
+    reader_mode: Literal["legacy", "new"] | None = None
+    ranking_mode: Literal["time", "value", "mixed"] | None = None
+    recommendation_strength: Literal["off", "weak"] | None = None
+    explore_ratio: float | None = None
+    manual_only: bool | None = None
+    translation_provider: Literal["google", "deepl", "openai", "mtran"] | None = None
+    translation_target_language: Literal["zh-CN", "en"] | None = None
+    list_translation_auto_enabled: bool | None = None
+    list_translation_english_only: bool | None = None
+    ai_integration_enabled: bool | None = None
+    today_board_default_view: Literal["list", "ai_summary"] | None = None
+    translation_api_key: str | None = None
+    translation_model: str | None = None
+    translation_base_url: str | None = None
+    discovery_tavily_api_key: str | None = None
 
 
 class UserBase(BaseModel):
@@ -28,7 +52,7 @@ class UserResponse(UserBase):
     avatar_url: str | None = None
     is_active: bool
     is_verified: bool
-    settings: dict[str, Any] | None = None
+    settings: UserSettings | None = None
     created_at: datetime
     last_login_at: datetime | None = None
 
@@ -48,4 +72,4 @@ class UserUpdate(BaseModel):
     username: str | None = None
     phone: str | None = None
     avatar_url: str | None = None
-    settings: dict[str, Any] | None = None
+    settings: UserSettings | None = None

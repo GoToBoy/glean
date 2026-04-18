@@ -1,8 +1,19 @@
 import { format } from 'date-fns'
-import { CalendarDays, CheckCheck, ChevronLeft, ChevronRight, Clock, Inbox, Languages, Loader2 } from 'lucide-react'
+import {
+  CalendarDays,
+  CheckCheck,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Inbox,
+  Languages,
+  List,
+  Loader2,
+  Sparkles,
+} from 'lucide-react'
 import { useTranslation } from '@glean/i18n'
-import { useMarkAllRead } from '../../../../hooks/useEntries'
 import { cn } from '@glean/ui'
+import type { AIDailySummaryResponse } from '@glean/types'
 import {
   useEffect,
   useLayoutEffect,
@@ -14,6 +25,7 @@ import {
   type ReactNode,
 } from 'react'
 import { stripHtmlTags } from '../../../../lib/html'
+import { TodayBoardAISummary } from './TodayBoardAISummary'
 import {
   buildTodayBoardGroups,
   truncateTodayBoardSummary,
@@ -32,6 +44,7 @@ interface TodayBoardProps {
   onSelectFeed?: (feedId: string) => void
   onSelectEntry: (entry: TodayBoardEntry) => void
   onCloseDetail: () => void
+  onMarkAllReadFeed?: (feedId: string) => Promise<void> | void
   listWidthPx?: number
   isLoading?: boolean
   isTranslationActive?: boolean
@@ -40,6 +53,12 @@ interface TodayBoardProps {
   translatedTexts?: Record<string, { title?: string; summary?: string }>
   onToggleTranslation?: () => void
   renderDetail?: (entry: TodayBoardEntry) => ReactNode
+  aiEnabled?: boolean
+  aiView?: 'list' | 'summary'
+  aiSummary?: AIDailySummaryResponse | null
+  isAISummaryLoading?: boolean
+  aiSummaryError?: unknown
+  onAIViewChange?: (view: 'list' | 'summary') => void
 }
 
 export function TodayBoard({
@@ -52,6 +71,7 @@ export function TodayBoard({
   onSelectFeed,
   onSelectEntry,
   onCloseDetail,
+  onMarkAllReadFeed,
   listWidthPx = 360,
   isLoading = false,
   isTranslationActive = false,
@@ -60,12 +80,20 @@ export function TodayBoard({
   translatedTexts = {},
   onToggleTranslation,
   renderDetail,
+  aiEnabled = false,
+  aiView = 'list',
+  aiSummary = null,
+  isAISummaryLoading = false,
+  aiSummaryError = null,
+  onAIViewChange,
 }: TodayBoardProps) {
   const { t } = useTranslation('reader')
-  const markAllMutation = useMarkAllRead()
   const [markingFeedId, setMarkingFeedId] = useState<string | null>(null)
 
-  const selectedEntry = entries.find((entry) => entry.id === selectedEntryId) ?? null
+  const isAISummaryView = aiEnabled && aiView === 'summary'
+  const selectedEntry = isAISummaryView
+    ? null
+    : (entries.find((entry) => entry.id === selectedEntryId) ?? null)
   const isDateSelectorEnabled = !!selectedDateKey && !!todayDateKey && !!onSelectDate
   const selectedCalendarDay =
     recentDates.find((day) => day.key === selectedDateKey) ?? recentDates[0] ?? null
@@ -84,6 +112,7 @@ export function TodayBoard({
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(() => new Set())
   const selectedEntryRefs = useRef(new Map<string, HTMLButtonElement>())
   const listPanelRef = useRef<HTMLDivElement>(null)
+  const calendarRootRef = useRef<HTMLDivElement>(null)
   const cardBoardScrollTopRef = useRef(0)
   const previousSelectedEntryIdRef = useRef<string | null>(null)
   const lastScrolledEntryIdRef = useRef<string | null>(null)
@@ -117,6 +146,29 @@ export function TodayBoard({
     previousSelectedEntryIdRef.current = selectedEntryId
   }, [selectedEntryId])
 
+  useEffect(() => {
+    if (!isCalendarOpen) return
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && calendarRootRef.current?.contains(target)) return
+      setIsCalendarOpen(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsCalendarOpen(false)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown, true)
+    document.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown, true)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isCalendarOpen])
+
   const toggleFeed = (feedId: string) => {
     setExpandedFeedIds((current) => {
       const next = new Set(current)
@@ -130,9 +182,10 @@ export function TodayBoard({
   }
 
   const handleMarkAllRead = async (feedId: string) => {
+    if (!onMarkAllReadFeed) return
     setMarkingFeedId(feedId)
     try {
-      await markAllMutation.mutateAsync({ feedId })
+      await onMarkAllReadFeed(feedId)
     } finally {
       setMarkingFeedId(null)
     }
@@ -143,6 +196,14 @@ export function TodayBoard({
       cardBoardScrollTopRef.current = listPanelRef.current?.scrollTop ?? 0
     }
     onSelectEntry(entry)
+  }
+  const handleSelectDate = (dateKey: string) => {
+    setIsCalendarOpen(false)
+    onSelectDate?.(dateKey)
+  }
+  const handleSelectSummaryEntry = (entry: TodayBoardEntry) => {
+    onAIViewChange?.('list')
+    handleSelectEntry(entry)
   }
   const listPanelStyle: CSSProperties = selectedEntry
     ? { width: `${listWidthPx}px`, minWidth: 280, maxWidth: 500, scrollbarGutter: 'stable' }
@@ -161,7 +222,10 @@ export function TodayBoard({
         )}
         style={listPanelStyle}
         data-testid="today-board-blank-space"
-        onClick={() => onCloseDetail()}
+        onClick={() => {
+          setIsCalendarOpen(false)
+          onCloseDetail()
+        }}
       >
         <div className="border-border/60 sticky top-0 z-10 flex items-start justify-between gap-3 border-b bg-[linear-gradient(180deg,rgba(255,251,245,0.96),rgba(255,255,255,0.92))] px-4 py-3 backdrop-blur">
           <div className="min-w-0">
@@ -171,7 +235,7 @@ export function TodayBoard({
           </div>
           <div className="relative flex shrink-0 items-center gap-1">
             {isDateSelectorEnabled ? (
-              <div onClick={(event) => event.stopPropagation()}>
+              <div ref={calendarRootRef} onClick={(event) => event.stopPropagation()}>
                 <button
                   type="button"
                   onClick={() => setIsCalendarOpen((value) => !value)}
@@ -190,7 +254,7 @@ export function TodayBoard({
                     selectedDateKey={selectedDateKey}
                     recentDates={recentDates}
                     selectedDateLabel={selectedDateLabel}
-                    onSelectDate={onSelectDate}
+                    onSelectDate={handleSelectDate}
                   />
                 ) : null}
               </div>
@@ -230,10 +294,40 @@ export function TodayBoard({
                 </span>
               </button>
             ) : null}
+            {aiEnabled ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  onAIViewChange?.(isAISummaryView ? 'list' : 'summary')
+                }}
+                title={
+                  isAISummaryView ? t('todayBoard.ai.showList') : t('todayBoard.ai.showSummary')
+                }
+                aria-label={
+                  isAISummaryView ? t('todayBoard.ai.showList') : t('todayBoard.ai.showSummary')
+                }
+                aria-pressed={isAISummaryView}
+                className={cn(
+                  'hover:bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors',
+                  isAISummaryView ? 'text-primary' : 'text-muted-foreground'
+                )}
+              >
+                {isAISummaryView ? <List className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              </button>
+            ) : null}
           </div>
         </div>
 
-        {isLoading ? (
+        {isAISummaryView ? (
+          <TodayBoardAISummary
+            summary={aiSummary}
+            entries={entries}
+            isLoading={isAISummaryLoading}
+            error={aiSummaryError}
+            onSelectEntry={handleSelectSummaryEntry}
+          />
+        ) : isLoading ? (
           <TodayBoardLoadingState />
         ) : entries.length === 0 ? (
           <div className="flex min-h-[320px] flex-col items-center justify-center px-6 py-10 text-center">
@@ -254,7 +348,7 @@ export function TodayBoard({
             onSelectFeed={onSelectFeed}
             onToggleFeed={toggleFeed}
             markingFeedId={markingFeedId}
-            onMarkAllRead={handleMarkAllRead}
+            onMarkAllRead={onMarkAllReadFeed ? handleMarkAllRead : undefined}
           />
         )}
       </div>
@@ -390,7 +484,7 @@ function TodayBoardEntries({
   onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
   markingFeedId: string | null
-  onMarkAllRead: (feedId: string) => void
+  onMarkAllRead?: (feedId: string) => void
 }) {
   return isDetailOpen ? (
     <div data-testid="today-board-detail-list" className="space-y-3 p-3">
@@ -451,7 +545,7 @@ function FeedCardGroup({
   onSelectFeed?: (feedId: string) => void
   onToggleFeed: (feedId: string) => void
   markingFeedId: string | null
-  onMarkAllRead: (feedId: string) => void
+  onMarkAllRead?: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
   const hiddenCount = group.totalCount - group.visibleEntries.length
@@ -513,7 +607,7 @@ function FeedListGroup({
   onSelectEntry: (entry: TodayBoardEntry) => void
   onToggleFeed: (feedId: string) => void
   markingFeedId: string | null
-  onMarkAllRead: (feedId: string) => void
+  onMarkAllRead?: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
   const hiddenCount = group.totalCount - group.visibleEntries.length
@@ -568,11 +662,11 @@ function FeedGroupHeader({
   compact?: boolean
   onSelectFeed?: (feedId: string) => void
   markingFeedId: string | null
-  onMarkAllRead: (feedId: string) => void
+  onMarkAllRead?: (feedId: string) => void
 }) {
   const { t } = useTranslation('reader')
   const isMarking = markingFeedId === group.feedId
-  const canMarkRead = group.unreadCount > 0
+  const canMarkRead = group.unreadCount > 0 && !!onMarkAllRead
 
   return (
     <div
@@ -615,7 +709,7 @@ function FeedGroupHeader({
               onMarkAllRead(group.feedId)
             }}
             title={t('entries.markAll')}
-            className="text-stone-400 hover:text-primary flex h-5 w-5 items-center justify-center rounded transition-colors disabled:opacity-50"
+            className="hover:text-primary flex h-5 w-5 items-center justify-center rounded text-stone-400 transition-colors disabled:opacity-50"
           >
             {isMarking ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />

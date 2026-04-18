@@ -42,7 +42,7 @@ async def list_discovery_sources(
         candidates = await discovery_service.list_candidates(current_user.id, limit=limit)
 
     return DiscoveryListResponse(
-        items=[candidate for candidate in candidates],
+        items=list(candidates),
         total=len(candidates),
     )
 

@@ -96,7 +96,7 @@ class UserService:
         if update.avatar_url is not None:
             user.avatar_url = update.avatar_url
         if update.settings is not None:
-            user.settings = update.settings
+            user.settings = update.settings.model_dump(mode="json", exclude_none=True)
 
         await self.session.commit()
         await self.session.refresh(user)

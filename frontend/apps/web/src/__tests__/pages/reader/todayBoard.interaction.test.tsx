@@ -102,12 +102,71 @@ describe('TodayBoard interaction', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Apr 9' }))
     expect(onSelectDate).toHaveBeenCalledWith('2026-04-09')
+    expect(screen.queryByRole('button', { name: 'Apr 9' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select intake date' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous day' }))
     expect(onSelectDate).toHaveBeenCalledWith('2026-04-06')
+    expect(screen.queryByRole('button', { name: 'Previous day' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select intake date' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Next day' }))
     expect(onSelectDate).toHaveBeenCalledWith('2026-04-08')
+    expect(screen.queryByRole('button', { name: 'Next day' })).not.toBeInTheDocument()
+  })
+
+  it('closes the calendar popover when blank board space is clicked', () => {
+    render(
+      <TodayBoard
+        entries={[]}
+        selectedEntryId={null}
+        selectedDateKey="2026-04-07"
+        todayDateKey="2026-04-10"
+        recentDates={[
+          { key: '2026-04-10', date: new Date(2026, 3, 10), isToday: true },
+          { key: '2026-04-09', date: new Date(2026, 3, 9), isToday: false },
+          { key: '2026-04-08', date: new Date(2026, 3, 8), isToday: false },
+          { key: '2026-04-07', date: new Date(2026, 3, 7), isToday: false },
+        ]}
+        onSelectDate={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onCloseDetail={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select intake date' }))
+    expect(screen.getByRole('button', { name: 'Apr 9' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('today-board-blank-space'))
+    expect(screen.queryByRole('button', { name: 'Apr 9' })).not.toBeInTheDocument()
+  })
+
+  it('closes the calendar popover on outside page pointer down', () => {
+    render(
+      <TodayBoard
+        entries={[]}
+        selectedEntryId={null}
+        selectedDateKey="2026-04-07"
+        todayDateKey="2026-04-10"
+        recentDates={[
+          { key: '2026-04-10', date: new Date(2026, 3, 10), isToday: true },
+          { key: '2026-04-09', date: new Date(2026, 3, 9), isToday: false },
+          { key: '2026-04-08', date: new Date(2026, 3, 8), isToday: false },
+          { key: '2026-04-07', date: new Date(2026, 3, 7), isToday: false },
+        ]}
+        onSelectDate={vi.fn()}
+        onSelectEntry={vi.fn()}
+        onCloseDetail={vi.fn()}
+      />
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select intake date' }))
+    expect(screen.getByRole('button', { name: 'Apr 9' })).toBeInTheDocument()
+
+    fireEvent.pointerDown(document.body)
+    expect(screen.queryByRole('button', { name: 'Apr 9' })).not.toBeInTheDocument()
   })
 
   it('groups card-mode entries by feed, shows counts, and keeps read entries collapsed by default', () => {
@@ -130,13 +189,13 @@ describe('TodayBoard interaction', () => {
 
     TodayBoardHarness({ entries })
 
-    expect(screen.getByText('4 / 5')).toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /unread one/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /unread two/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /unread three/i })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /unread four/i })).not.toBeInTheDocument()
     expect(screen.queryByText('Read one')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Expand' })).toHaveClass('text-center')
+    expect(screen.getByRole('button', { name: /Expand/ })).toHaveClass('text-center')
   })
 
   it('emits feed selection when a card-mode feed header title is clicked', () => {
@@ -190,7 +249,7 @@ describe('TodayBoard interaction', () => {
 
     TodayBoardHarness({ entries })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Expand' }))
+    fireEvent.click(screen.getByRole('button', { name: /Expand/ }))
 
     expect(screen.getByRole('button', { name: /unread four/i })).toBeInTheDocument()
     expect(screen.getByText('Read one')).toBeInTheDocument()
@@ -226,9 +285,8 @@ describe('TodayBoard interaction', () => {
 
     TodayBoardHarness({ entries })
 
-    expect(screen.getByText('1 / 1')).toBeInTheDocument()
-    expect(screen.getByText('Read')).toBeInTheDocument()
-    expect(screen.queryByText('2 · Read')).not.toBeInTheDocument()
+    expect(screen.getByText('1')).toBeInTheDocument()
+    expect(screen.getByText('2')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /completed read one/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /completed read two/i })).toBeInTheDocument()
     expect(

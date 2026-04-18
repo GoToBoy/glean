@@ -172,6 +172,28 @@ describe('useUpdateEntryState', () => {
     // Should invalidate subscriptions for unread counts
     expect(queryClient.invalidateQueries).toHaveBeenCalled()
   })
+
+  it('can update entry detail without updating cached entry lists', async () => {
+    const updatedEntry = createMockEntry({ id: 'e1', is_read: true })
+    vi.mocked(entryService.updateEntryState).mockResolvedValue(updatedEntry)
+    const { wrapper, queryClient } = createQueryWrapper()
+    vi.spyOn(queryClient, 'setQueryData')
+    vi.spyOn(queryClient, 'setQueriesData')
+    vi.spyOn(queryClient, 'invalidateQueries')
+
+    const { result } = renderHook(() => useUpdateEntryState(), { wrapper })
+
+    await result.current.mutateAsync({
+      entryId: 'e1',
+      data: { is_read: true },
+      updateListCache: false,
+    })
+
+    expect(entryService.updateEntryState).toHaveBeenCalledWith('e1', { is_read: true })
+    expect(queryClient.setQueryData).toHaveBeenCalled()
+    expect(queryClient.setQueriesData).not.toHaveBeenCalled()
+    expect(queryClient.invalidateQueries).toHaveBeenCalled()
+  })
 })
 
 describe('useMarkAllRead', () => {

@@ -26,6 +26,7 @@ from .mcp import create_mcp_server
 from .middleware import LoggingMiddleware
 from .routers import (
     admin,
+    ai,
     api_tokens,
     auth,
     bookmarks,
@@ -72,6 +73,7 @@ def get_oss_routers() -> list[RouterConfig]:
         (feeds.router, "/api/feeds", ["Feeds"]),
         (entries.router, "/api/entries", ["Entries"]),
         (admin.router, "/api/admin", ["Admin"]),
+        (ai.router, "/api/ai", ["AI Integration"]),
         (bookmarks.router, "/api/bookmarks", ["Bookmarks"]),
         (discover.router, "/api/discover", ["Discover"]),
         (folders.router, "/api/folders", ["Folders"]),

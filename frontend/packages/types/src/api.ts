@@ -91,6 +91,35 @@ export interface FeedbackSummaryResponse {
   recent_explicit_feedback_count: number
 }
 
+export interface AIIntegrationStatusResponse {
+  enabled: boolean
+}
+
+export interface AIIntegrationConfigResponse {
+  enabled: boolean
+  allow_today_entries_api: boolean
+  allow_entry_detail_api: boolean
+  allow_ai_writeback: boolean
+}
+
+export type AIIntegrationConfigUpdateRequest = Partial<AIIntegrationConfigResponse>
+
+export interface AIDailySummaryResponse {
+  id: string
+  user_id: string
+  date: string
+  timezone: string
+  model: string | null
+  title: string | null
+  summary: string | null
+  highlights: Array<Record<string, unknown>>
+  topics: Array<Record<string, unknown>>
+  recommended_entry_ids: string[]
+  metadata: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
 /** Entry list response */
 export type EntryListResponse = PaginatedResponse<EntryWithState>
 

@@ -98,21 +98,29 @@ class RSSHubService:
         segments = [seg for seg in path.split("/") if seg]
         candidates: list[str] = []
 
-        if toggles.get("bilibili_space", True) and "space.bilibili.com" in host:
-            if segments and segments[0].isdigit():
-                uid = segments[0]
-                candidates.extend(
-                    [
-                        f"/bilibili/user/dynamic/{uid}",
-                        f"/bilibili/user/video/{uid}",
-                    ]
-                )
+        if (
+            toggles.get("bilibili_space", True)
+            and "space.bilibili.com" in host
+            and segments
+            and segments[0].isdigit()
+        ):
+            uid = segments[0]
+            candidates.extend(
+                [
+                    f"/bilibili/user/dynamic/{uid}",
+                    f"/bilibili/user/video/{uid}",
+                ]
+            )
 
-        if toggles.get("bilibili_video", True) and host.endswith("bilibili.com"):
-            if len(segments) >= 2 and segments[0] == "video":
-                bvid = segments[1]
-                if bvid:
-                    candidates.append(f"/bilibili/video/{bvid}")
+        if (
+            toggles.get("bilibili_video", True)
+            and host.endswith("bilibili.com")
+            and len(segments) >= 2
+            and segments[0] == "video"
+        ):
+            bvid = segments[1]
+            if bvid:
+                candidates.append(f"/bilibili/video/{bvid}")
 
         if toggles.get("youtube_channel", True) and host in {
             "youtube.com",
@@ -142,23 +150,30 @@ class RSSHubService:
             if match:
                 candidates.append(f"/youtube/playlist/{match.group(1)}")
 
-        if toggles.get("zhihu_column", True) and "zhuanlan.zhihu.com" in host:
-            if segments:
-                candidates.append(f"/zhihu/zhuanlan/{segments[0]}")
+        if toggles.get("zhihu_column", True) and "zhuanlan.zhihu.com" in host and segments:
+            candidates.append(f"/zhihu/zhuanlan/{segments[0]}")
 
-        if toggles.get("zhihu_people", True) and host.endswith("zhihu.com"):
-            if len(segments) >= 2 and segments[0] == "people":
-                uid = segments[1]
-                candidates.extend(
-                    [
-                        f"/zhihu/people/{uid}/answers",
-                        f"/zhihu/people/{uid}/articles",
-                    ]
-                )
+        if (
+            toggles.get("zhihu_people", True)
+            and host.endswith("zhihu.com")
+            and len(segments) >= 2
+            and segments[0] == "people"
+        ):
+            uid = segments[1]
+            candidates.extend(
+                [
+                    f"/zhihu/people/{uid}/answers",
+                    f"/zhihu/people/{uid}/articles",
+                ]
+            )
 
-        if toggles.get("zhihu_question", True) and host.endswith("zhihu.com"):
-            if len(segments) >= 2 and segments[0] == "question":
-                candidates.append(f"/zhihu/question/{segments[1]}")
+        if (
+            toggles.get("zhihu_question", True)
+            and host.endswith("zhihu.com")
+            and len(segments) >= 2
+            and segments[0] == "question"
+        ):
+            candidates.append(f"/zhihu/question/{segments[1]}")
 
         if toggles.get("x_user", True) and host in {"x.com", "twitter.com", "www.twitter.com"}:
             blocked = {
@@ -174,49 +189,68 @@ class RSSHubService:
                 user = segments[0]
                 candidates.extend([f"/x/user/{user}", f"/twitter/user/{user}"])
 
-        if toggles.get("github_repo", True) and host in {"github.com", "www.github.com"}:
-            if len(segments) >= 2:
-                owner = segments[0]
-                repo = segments[1].removesuffix(".git")
-                blocked = {"orgs", "topics", "marketplace", "features", "about", "login", "explore"}
-                if owner not in blocked and repo:
-                    candidates.extend(
-                        [
-                            f"/github/release/{owner}/{repo}",
-                            f"/github/commit/{owner}/{repo}",
-                            f"/github/issue/{owner}/{repo}",
-                        ]
-                    )
+        if (
+            toggles.get("github_repo", True)
+            and host in {"github.com", "www.github.com"}
+            and len(segments) >= 2
+        ):
+            owner = segments[0]
+            repo = segments[1].removesuffix(".git")
+            blocked = {"orgs", "topics", "marketplace", "features", "about", "login", "explore"}
+            if owner not in blocked and repo:
+                candidates.extend(
+                    [
+                        f"/github/release/{owner}/{repo}",
+                        f"/github/commit/{owner}/{repo}",
+                        f"/github/issue/{owner}/{repo}",
+                    ]
+                )
 
-        if toggles.get("reddit_subreddit", True) and host in {
+        if (
+            toggles.get("reddit_subreddit", True)
+            and host in {
             "reddit.com",
             "www.reddit.com",
             "old.reddit.com",
-        }:
-            if len(segments) >= 2 and segments[0] == "r":
-                candidates.append(f"/reddit/subreddit/{segments[1]}")
+            }
+            and len(segments) >= 2
+            and segments[0] == "r"
+        ):
+            candidates.append(f"/reddit/subreddit/{segments[1]}")
 
-        if toggles.get("reddit_user", True) and host in {
+        if (
+            toggles.get("reddit_user", True)
+            and host in {
             "reddit.com",
             "www.reddit.com",
             "old.reddit.com",
-        }:
-            if len(segments) >= 2 and segments[0] in {"user", "u"}:
-                candidates.append(f"/reddit/user/{segments[1]}")
+            }
+            and len(segments) >= 2
+            and segments[0] in {"user", "u"}
+        ):
+            candidates.append(f"/reddit/user/{segments[1]}")
 
-        if toggles.get("telegram_channel", True) and host in {"t.me", "telegram.me"}:
-            if segments:
-                channel = segments[0]
-                if channel and not channel.startswith("+"):
-                    candidates.append(f"/telegram/channel/{channel}")
+        if toggles.get("telegram_channel", True) and host in {"t.me", "telegram.me"} and segments:
+            channel = segments[0]
+            if channel and not channel.startswith("+"):
+                candidates.append(f"/telegram/channel/{channel}")
 
-        if toggles.get("weibo_user", True) and host in {"weibo.com", "www.weibo.com", "m.weibo.cn"}:
-            if len(segments) >= 2 and segments[0] == "u" and segments[1].isdigit():
-                candidates.append(f"/weibo/user/{segments[1]}")
+        if (
+            toggles.get("weibo_user", True)
+            and host in {"weibo.com", "www.weibo.com", "m.weibo.cn"}
+            and len(segments) >= 2
+            and segments[0] == "u"
+            and segments[1].isdigit()
+        ):
+            candidates.append(f"/weibo/user/{segments[1]}")
 
-        if toggles.get("medium_user", True):
-            if host in {"medium.com", "www.medium.com"} and segments and segments[0].startswith("@"):
-                candidates.append(f"/medium/user/{segments[0].lstrip('@')}")
+        if (
+            toggles.get("medium_user", True)
+            and host in {"medium.com", "www.medium.com"}
+            and segments
+            and segments[0].startswith("@")
+        ):
+            candidates.append(f"/medium/user/{segments[0].lstrip('@')}")
 
         if toggles.get("medium_publication", True):
             if host in {"medium.com", "www.medium.com"} and segments and not segments[0].startswith("@"):
@@ -229,17 +263,20 @@ class RSSHubService:
                 if publication and publication not in {"www"}:
                     candidates.append(f"/medium/publication/{publication}")
 
-        if toggles.get("pixiv_user", True) and host in {"www.pixiv.net", "pixiv.net"}:
-            # https://www.pixiv.net/users/{id}
-            if len(segments) >= 2 and segments[0] == "users" and segments[1].isdigit():
-                candidates.append(f"/pixiv/user/{segments[1]}")
+        if (
+            toggles.get("pixiv_user", True)
+            and host in {"www.pixiv.net", "pixiv.net"}
+            and len(segments) >= 2
+            and segments[0] == "users"
+            and segments[1].isdigit()
+        ):
+            candidates.append(f"/pixiv/user/{segments[1]}")
 
         if toggles.get("xiaoyuzhou_podcast", True) and (
             host.endswith("xiaoyuzhoufm.com") or host.endswith("xiaoyuzhou.fm")
-        ):
-            if len(segments) >= 2 and segments[0] in {"podcast", "episode"}:
-                podcast_id = segments[1]
-                if podcast_id:
-                    candidates.append(f"/xiaoyuzhou/podcast/{podcast_id}")
+        ) and len(segments) >= 2 and segments[0] in {"podcast", "episode"}:
+            podcast_id = segments[1]
+            if podcast_id:
+                candidates.append(f"/xiaoyuzhou/podcast/{podcast_id}")
 
         return candidates
