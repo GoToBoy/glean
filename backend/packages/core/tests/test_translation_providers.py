@@ -144,9 +144,55 @@ def test_mtran_translate_parses_standard_payload(monkeypatch) -> None:  # type: 
     assert fake_client.calls[0][0] == "http://mtran.local/translate"
     assert fake_client.calls[0][1]["json"] == {
         "from": "en",
-        "to": "zh",
+        "to": "zh-Hans",
         "text": "Hello world",
     }
+
+
+def test_mtran_translate_detects_english_with_article_punctuation(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake_client = _FakeClient({"result": "任天堂的秘密帝国"})
+
+    def _client_factory(*args: Any, **kwargs: Any) -> _FakeClient:
+        return fake_client
+
+    monkeypatch.setattr(
+        "glean_core.services.translation_providers.httpx.Client",
+        _client_factory,
+    )
+
+    provider = MTranProvider(base_url="http://mtran.local")
+    result = provider.translate(
+        "Nintendo's Empire of Secrets with Keza MacDonald – Factually with Adam Conover",
+        "auto",
+        "zh-CN",
+    )
+
+    assert result == "任天堂的秘密帝国"
+    assert fake_client.calls[0][1]["json"]["from"] == "en"
+    assert fake_client.calls[0][1]["json"]["to"] == "zh-Hans"
+
+
+def test_mtran_translate_detects_mostly_english_mixed_title(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    fake_client = _FakeClient({"result": "中文读写速通 II：字符回旋加速器"})
+
+    def _client_factory(*args: Any, **kwargs: Any) -> _FakeClient:
+        return fake_client
+
+    monkeypatch.setattr(
+        "glean_core.services.translation_providers.httpx.Client",
+        _client_factory,
+    )
+
+    provider = MTranProvider(base_url="http://mtran.local")
+    result = provider.translate(
+        "中文 Literacy Speedrun II: Character Cyclotron",
+        "auto",
+        "zh-CN",
+    )
+
+    assert result == "中文读写速通 II：字符回旋加速器"
+    assert fake_client.calls[0][1]["json"]["from"] == "en"
+    assert fake_client.calls[0][1]["json"]["to"] == "zh-Hans"
 
 
 def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-untyped-def]
@@ -168,7 +214,7 @@ def test_mtran_batch_parses_payload(monkeypatch) -> None:  # type: ignore[no-unt
     assert fake_client.calls[0][0] == "http://mtran.local/translate/batch"
     assert fake_client.calls[0][1]["json"] == {
         "from": "en",
-        "to": "zh",
+        "to": "zh-Hans",
         "texts": ["hello", "world"],
     }
 

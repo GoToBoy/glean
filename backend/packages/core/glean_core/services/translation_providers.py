@@ -9,6 +9,7 @@ API key via user settings; no key falls back to Google free.
 import json
 import os
 import re
+import unicodedata
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -343,27 +344,53 @@ class MTranProvider(TranslationProvider):
             return "auto"
         primary = re.split(r"[-_]", normalized, maxsplit=1)[0].lower()
         if primary in {"zh", "cmn", "yue"}:
-            return "zh"
+            return "zh-Hans"
         return primary
 
     def _detect_client_side(self, text: str) -> str:
         """Simple client-side detection to avoid server-side mis-detection."""
         # Check for CJK characters
         cjk_pattern = re.compile(r"[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff]")
-        if cjk_pattern.search(text):
+        cjk_count = len(cjk_pattern.findall(text))
+        if cjk_count > 0:
+            if self._latin_word_count(text) > cjk_count:
+                return "en"
             # If it has Japanese chars, it might be Japanese, but MTran is often used for zh.
             # For now, if it has any CJK, we'll let the server decide or just return 'zh'
             # but usually 'auto' is safer for CJK.
             # The main problem is English being mis-detected as 'ha' or 'mr'.
             return "auto"
 
-        # If it's mostly Latin/English characters and no CJK, it's likely English.
-        # This prevents English from being detected as Marathi/Hausa.
-        latin_pattern = re.compile(r"^[a-zA-Z0-9\s\.,!?'\"-]*$")
-        if latin_pattern.match(text):
+        if self._looks_like_latin_text(text):
             return "en"
 
         return "auto"
+
+    def _looks_like_latin_text(self, text: str) -> bool:
+        """Return true for Latin-script article text with normal punctuation."""
+        has_latin_letter = False
+
+        for char in text:
+            if char.isspace() or char.isdigit():
+                continue
+
+            category = unicodedata.category(char)
+            if category[0] in {"P", "S"}:
+                continue
+
+            if char.isalpha():
+                name = unicodedata.name(char, "")
+                if "LATIN" not in name:
+                    return False
+                has_latin_letter = True
+                continue
+
+            return False
+
+        return has_latin_letter
+
+    def _latin_word_count(self, text: str) -> int:
+        return len(re.findall(r"[A-Za-z][A-Za-z'-]*", text))
 
     def _payload(self, text: str, source: str, target: str) -> dict[str, Any]:
         source_code = self._language_code(source)
