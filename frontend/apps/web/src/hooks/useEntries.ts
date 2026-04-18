@@ -30,6 +30,7 @@ export interface EntryFilters {
   read_later?: boolean
   collected_after?: string
   collected_before?: string
+  collected_date?: string
   page?: number
   per_page?: number
   view?: 'timeline' | 'smart' | 'today-board'
@@ -55,8 +56,7 @@ export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
       if (isTodayBoard) {
         return entryService.getTodayEntries(
           {
-            collected_after: filters.collected_after ?? '',
-            collected_before: filters.collected_before ?? '',
+            date: filters.collected_date,
             feed_id: filters.feed_id,
             folder_id: filters.folder_id,
             limit: perPage,

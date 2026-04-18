@@ -6,7 +6,7 @@ Provides endpoints for reading and managing feed entries.
 
 import asyncio
 from contextlib import suppress
-from datetime import datetime
+from datetime import date, datetime
 from typing import Annotated
 
 from arq.connections import ArqRedis
@@ -25,6 +25,7 @@ from glean_core.schemas import (
     UpdateEntryStateRequest,
     UserResponse,
 )
+from glean_core.server_time import get_server_date, get_server_day_range
 from glean_core.services import EntryService, TranslationService
 from glean_core.services.translation_providers import create_translation_provider
 
@@ -100,16 +101,24 @@ async def list_today_entries(
     entry_service: Annotated[EntryService, Depends(get_entry_service)],
     feed_id: str | None = None,
     folder_id: str | None = None,
-    collected_after: datetime = Query(...),
-    collected_before: datetime = Query(...),
+    date_: date | None = Query(default=None, alias="date"),
     limit: int = Query(500, ge=1, le=500),
 ) -> EntryListResponse:
     """
-    Get entries collected during the client-selected local day.
+    Get entries collected during a server-local day.
 
     This endpoint returns a bounded aggregate for 今日收录 / Today's Intake
-    instead of timeline pages.
+    instead of timeline pages. The date window is derived from the server
+    configured timezone so browser-local timezone settings cannot shift the
+    data boundary.
     """
+    try:
+        collected_after, collected_before, _timezone = get_server_day_range(
+            date_ or get_server_date()
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
     return await entry_service.get_entries(
         user_id=current_user.id,
         feed_id=feed_id,

@@ -44,7 +44,7 @@ class AIDailySummaryPayload(BaseModel):
     """Day-level AI summary payload."""
 
     date: date
-    timezone: str = Field(min_length=1, max_length=100)
+    timezone: str | None = Field(default=None, min_length=1, max_length=100)
     model: str | None = None
     title: str | None = None
     summary: str | None = None
@@ -59,6 +59,7 @@ class AIDailySummaryResponse(AIDailySummaryPayload):
 
     id: str
     user_id: str
+    timezone: str
     created_at: datetime
     updated_at: datetime
 

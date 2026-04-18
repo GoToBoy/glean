@@ -3,6 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { useReaderController } from '@/pages/reader/shared/useReaderController'
 
+vi.mock('@/hooks/useSystemTime', () => ({
+  useSystemTime: () => ({
+    data: {
+      timezone: 'UTC',
+      current_time: '2026-04-10T04:00:00Z',
+      current_date: '2026-04-10',
+    },
+  }),
+}))
+
 function ControllerProbe() {
   const controller = useReaderController()
   const location = useLocation()

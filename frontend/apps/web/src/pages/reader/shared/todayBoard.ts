@@ -77,10 +77,10 @@ function resolveDateInput(date: Date | string): Date {
 }
 
 export function buildRecentTodayBoardDates(
-  now: Date = new Date(),
+  now: Date | string = new Date(),
   count: number = TODAY_BOARD_RECENT_DAY_COUNT
 ): TodayBoardCalendarDay[] {
-  const today = new Date(now)
+  const today = resolveDateInput(now)
   today.setHours(0, 0, 0, 0)
   const todayKey = getTodayBoardDateKey(today)
 
@@ -99,12 +99,13 @@ export function buildRecentTodayBoardDates(
 
 export function resolveTodayBoardDateParam(
   dateParam: string | null | undefined,
-  now: Date = new Date()
+  now: Date | string = new Date()
 ) {
-  const todayKey = getTodayBoardDateKey(now)
+  const today = resolveDateInput(now)
+  const todayKey = getTodayBoardDateKey(today)
   if (!dateParam) return todayKey
 
-  const recentDateKeys = new Set(buildRecentTodayBoardDates(now).map((day) => day.key))
+  const recentDateKeys = new Set(buildRecentTodayBoardDates(today).map((day) => day.key))
   const parsedDate = parseTodayBoardDateKey(dateParam)
   if (!parsedDate) return todayKey
 
@@ -164,18 +165,23 @@ export function buildTodayBoardEntries(
   options: {
     now?: Date
     selectedDate?: string | Date
+    filterBySelectedDate?: boolean
     getFeedDescription?: (feedId: string) => string | null | undefined
   } = {}
 ): TodayBoardEntry[] {
   const selectedDate = options.selectedDate
     ? resolveDateInput(options.selectedDate)
     : options.now ?? new Date()
+  const filterBySelectedDate = options.filterBySelectedDate ?? true
   const getFeedDescription = options.getFeedDescription ?? (() => null)
 
   return entries
     .map((entry) => {
       const collectionTimestamp = getCollectionTimestamp(entry)
-      if (!collectionTimestamp || !isSameLocalDay(collectionTimestamp, selectedDate)) {
+      if (
+        !collectionTimestamp ||
+        (filterBySelectedDate && !isSameLocalDay(collectionTimestamp, selectedDate))
+      ) {
         return null
       }
 

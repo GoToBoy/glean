@@ -70,7 +70,7 @@ async def list_today_entries_for_ai(
     ai_service: Annotated[AIIntegrationService, Depends(get_ai_integration_service)],
     config: Annotated[AIIntegrationConfig, Depends(get_enabled_ai_config)],
     date_: date = Query(alias="date"),
-    timezone: str = Query(..., min_length=1, max_length=100),
+    timezone: str | None = Query(default=None, min_length=1, max_length=100),
     include_content: bool = False,
     limit: int = Query(500, ge=1, le=500),
 ) -> AITodayEntriesResponse:
@@ -136,7 +136,7 @@ async def get_today_summary(
     ai_service: Annotated[AIIntegrationService, Depends(get_ai_integration_service)],
     config: Annotated[AIIntegrationConfig, Depends(get_enabled_ai_config)],
     date_: date = Query(alias="date"),
-    timezone: str = Query(..., min_length=1, max_length=100),
+    timezone: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> AIDailySummaryResponse:
     """Get a day-level AI summary for the current user."""
     try:

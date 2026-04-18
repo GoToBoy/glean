@@ -5,7 +5,7 @@ Defines Pydantic models for system configuration with built-in namespace constan
 Each config class carries its NAMESPACE as a class constant for database storage.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from typing import Any, ClassVar
 
@@ -174,6 +174,14 @@ class AIIntegrationStatusResponse(BaseModel):
     """Non-sensitive web response for local AI integration status."""
 
     enabled: bool
+
+
+class SystemTimeResponse(BaseModel):
+    """Server time response."""
+
+    timezone: str
+    current_time: datetime
+    current_date: date
 
 
 class EmbeddingRebuildProgress(BaseModel):

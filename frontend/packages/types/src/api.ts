@@ -95,6 +95,12 @@ export interface AIIntegrationStatusResponse {
   enabled: boolean
 }
 
+export interface SystemTimeResponse {
+  timezone: string
+  current_time: string
+  current_date: string
+}
+
 export interface AIIntegrationConfigResponse {
   enabled: boolean
   allow_today_entries_api: boolean

@@ -3,7 +3,7 @@
  */
 
 import type { ApiClient } from '../client'
-import type { AIIntegrationStatusResponse } from '@glean/types'
+import type { AIIntegrationStatusResponse, SystemTimeResponse } from '@glean/types'
 
 export interface VectorizationStatus {
   enabled: boolean
@@ -34,5 +34,12 @@ export class SystemService {
    */
   async getAIIntegrationStatus(): Promise<AIIntegrationStatusResponse> {
     return this.client.get<AIIntegrationStatusResponse>('/system/ai-integration')
+  }
+
+  /**
+   * Get server-configured time metadata.
+   */
+  async getSystemTime(): Promise<SystemTimeResponse> {
+    return this.client.get<SystemTimeResponse>('/system/time')
   }
 }

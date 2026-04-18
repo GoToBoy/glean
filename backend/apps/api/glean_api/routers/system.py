@@ -15,9 +15,11 @@ from glean_core.schemas.config import (
     AIIntegrationStatusResponse,
     EmbeddingConfig,
     EmbeddingRebuildProgress,
+    SystemTimeResponse,
     VectorizationStatus,
     VectorizationStatusResponse,
 )
+from glean_core.server_time import get_server_now, get_server_timezone_name
 from glean_core.services import TypedConfigService
 from glean_database.models import Entry
 from glean_database.session import get_session
@@ -110,6 +112,17 @@ async def get_ai_integration_status(
     config = await config_service.get(AIIntegrationConfig)
     return AIIntegrationStatusResponse(
         enabled=config.enabled,
+    )
+
+
+@router.get("/time", response_model=SystemTimeResponse)
+async def get_system_time() -> SystemTimeResponse:
+    """Get server-configured time metadata for browser clients."""
+    current_time = get_server_now()
+    return SystemTimeResponse(
+        timezone=get_server_timezone_name(),
+        current_time=current_time,
+        current_date=current_time.date(),
     )
 
 

@@ -38,13 +38,12 @@ export class EntryService {
   }
 
   /**
-   * Get entries collected during the current client-selected day.
+   * Get entries collected during a server-local day.
    *
    * This endpoint intentionally returns a bounded aggregate instead of timeline pages.
    */
   async getTodayEntries(params: {
-    collected_after: string
-    collected_before: string
+    date?: string
     feed_id?: string
     folder_id?: string
     limit?: number

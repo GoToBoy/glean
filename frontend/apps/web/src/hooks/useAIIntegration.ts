@@ -6,8 +6,7 @@ export const AI_INTEGRATION_STATUS_KEY = ['ai-integration-status']
 
 export const aiSummaryKeys = {
   all: ['ai-summary'] as const,
-  today: (date: string, timezone: string) =>
-    [...aiSummaryKeys.all, 'today', date, timezone] as const,
+  today: (date: string) => [...aiSummaryKeys.all, 'today', date] as const,
 }
 
 export function useAIIntegrationStatus() {
@@ -20,10 +19,10 @@ export function useAIIntegrationStatus() {
   })
 }
 
-export function useAITodaySummary(params: { date: string; timezone: string; enabled: boolean }) {
+export function useAITodaySummary(params: { date: string; enabled: boolean }) {
   return useQuery<AIDailySummaryResponse>({
-    queryKey: aiSummaryKeys.today(params.date, params.timezone),
-    queryFn: () => aiService.getTodaySummary({ date: params.date, timezone: params.timezone }),
+    queryKey: aiSummaryKeys.today(params.date),
+    queryFn: () => aiService.getTodaySummary({ date: params.date }),
     enabled: params.enabled,
     staleTime: 60 * 1000,
     retry: false,

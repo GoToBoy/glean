@@ -57,8 +57,7 @@ describe('getInfiniteEntriesQueryOptions', () => {
     })
     const options = getInfiniteEntriesQueryOptions({
       view: 'today-board',
-      collected_after: '2026-04-10T00:00:00.000Z',
-      collected_before: '2026-04-11T00:00:00.000Z',
+      collected_date: '2026-04-10',
       per_page: 500,
     })
     const signal = new AbortController().signal
@@ -67,8 +66,7 @@ describe('getInfiniteEntriesQueryOptions', () => {
 
     expect(entryService.getTodayEntries).toHaveBeenCalledWith(
       {
-        collected_after: '2026-04-10T00:00:00.000Z',
-        collected_before: '2026-04-11T00:00:00.000Z',
+        date: '2026-04-10',
         limit: 500,
       },
       { signal }

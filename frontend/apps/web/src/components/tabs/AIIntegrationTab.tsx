@@ -106,9 +106,11 @@ export function AIIntegrationTab() {
             <pre className="bg-muted/50 overflow-x-auto rounded-lg p-3 text-xs">
               {`Authorization: Bearer YOUR_GLEAN_API_TOKEN
 
+GET /api/system/time
 GET /api/ai/today-entries
 GET /api/ai/entries/{entry_id}
 PUT /api/ai/today-summary
+GET /api/ai/today-summary
 PUT /api/ai/entries/{entry_id}/supplement`}
             </pre>
           </div>

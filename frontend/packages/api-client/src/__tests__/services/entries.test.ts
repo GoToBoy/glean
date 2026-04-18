@@ -44,6 +44,19 @@ describe('EntryService', () => {
     })
   })
 
+  it('should get today entries with a server date key', async () => {
+    const response = { items: [], total: 0, page: 1, total_pages: 1, per_page: 500 }
+    vi.mocked(mockClient.get).mockResolvedValue(response)
+
+    const result = await service.getTodayEntries({ date: '2026-04-10', limit: 500 })
+
+    expect(mockClient.get).toHaveBeenCalledWith('/entries/today', {
+      params: { date: '2026-04-10', limit: 500 },
+      signal: undefined,
+    })
+    expect(result).toEqual(response)
+  })
+
   it('should get a single entry', async () => {
     const entry = { id: 'e1', title: 'Test Entry' }
     vi.mocked(mockClient.get).mockResolvedValue(entry)

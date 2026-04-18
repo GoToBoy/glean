@@ -105,14 +105,8 @@ vi.mock('@/hooks/useEntries', () => ({
       makeEntry({
         id: 'today-entry',
         published_at: '2026-04-09T12:30:00+08:00',
-        ingested_at: '2026-04-10T01:00:00+08:00',
-        created_at: '2026-04-10T01:00:00+08:00',
-      }),
-      makeEntry({
-        id: 'older-entry',
-        published_at: '2026-04-08T12:30:00+08:00',
-        ingested_at: '2026-04-08T12:30:00+08:00',
-        created_at: '2026-04-08T12:30:00+08:00',
+        ingested_at: '2026-04-10T10:00:00.000Z',
+        created_at: '2026-04-10T10:00:00.000Z',
       }),
     ]
     return {
@@ -293,8 +287,7 @@ describe('ReaderCore today-board route', () => {
     expect(useInfiniteEntriesSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         view: 'today-board',
-        collected_after: '2026-04-06T16:00:00.000Z',
-        collected_before: '2026-04-07T16:00:00.000Z',
+        collected_date: '2026-04-07',
       })
     )
     expect(todayBoardSpy).toHaveBeenCalledWith(
@@ -491,8 +484,8 @@ describe('ReaderCore today-board route', () => {
         id: `entry-${index}`,
         title: `English headline ${index}`,
         summary: `English summary ${index}`,
-        ingested_at: '2026-04-10T01:00:00+08:00',
-        created_at: '2026-04-10T01:00:00+08:00',
+        ingested_at: '2026-04-10T10:00:00.000Z',
+        created_at: '2026-04-10T10:00:00.000Z',
       })
     )
     vi.mocked(entryService.translateTexts).mockImplementation(async (texts: string[]) => ({
@@ -604,8 +597,8 @@ describe('ReaderCore today-board route', () => {
       makeEntry({
         id: 'today-entry',
         is_read: true,
-        ingested_at: '2026-04-10T01:00:00+08:00',
-        created_at: '2026-04-10T01:00:00+08:00',
+        ingested_at: '2026-04-10T10:00:00.000Z',
+        created_at: '2026-04-10T10:00:00.000Z',
       })
     )
     readerControllerState.entryIdFromUrl = 'today-entry'
@@ -679,8 +672,8 @@ describe('ReaderCore today-board route', () => {
         makeEntry({
           id: 'today-entry',
           is_read: true,
-          ingested_at: '2026-04-10T01:00:00+08:00',
-          created_at: '2026-04-10T01:00:00+08:00',
+          ingested_at: '2026-04-10T10:00:00.000Z',
+          created_at: '2026-04-10T10:00:00.000Z',
         })
       )
       await Promise.resolve()
@@ -694,8 +687,8 @@ describe('ReaderCore today-board route', () => {
       makeEntry({
         id: 'today-entry',
         is_read: true,
-        ingested_at: '2026-04-10T01:00:00+08:00',
-        created_at: '2026-04-10T01:00:00+08:00',
+        ingested_at: '2026-04-10T10:00:00.000Z',
+        created_at: '2026-04-10T10:00:00.000Z',
       })
     )
     readerControllerState.entryIdFromUrl = 'today-entry'

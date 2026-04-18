@@ -134,9 +134,12 @@ class TestListEntries:
         db_session: AsyncSession,
         test_feed,
         test_subscription,
+        monkeypatch: pytest.MonkeyPatch,
     ):
         """Today endpoint should return the full collection-time aggregate."""
         from glean_database.models.entry import Entry
+
+        monkeypatch.setenv("TZ", "UTC")
 
         entries = [
             Entry(
@@ -174,8 +177,7 @@ class TestListEntries:
             "/api/entries/today",
             headers=auth_headers,
             params={
-                "collected_after": "2026-04-10T00:00:00Z",
-                "collected_before": "2026-04-11T00:00:00Z",
+                "date": "2026-04-10",
                 "limit": 500,
             },
         )

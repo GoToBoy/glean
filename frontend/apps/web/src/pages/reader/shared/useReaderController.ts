@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useSystemTime } from '@/hooks/useSystemTime'
 import {
   buildRecentTodayBoardDates,
-  getTodayBoardDateKey,
   resolveTodayBoardDateParam,
 } from './todayBoard'
 
@@ -15,6 +15,7 @@ const VALID_FILTERS: FilterType[] = ['all', 'unread', 'smart', 'read-later']
  */
 export function useReaderController() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const { data: systemTime } = useSystemTime()
 
   const selectedFeedId = searchParams.get('feed') || undefined
   const selectedFolderId = searchParams.get('folder') || undefined
@@ -24,12 +25,14 @@ export function useReaderController() {
   const isSmartView = viewParam === 'smart'
   const isTodayBoardView = viewParam === 'today-board'
   const todayBoardDateParam = isTodayBoardView ? searchParams.get('date') : null
-  const todayBoardNow = new Date()
-  const todayBoardTodayDate = getTodayBoardDateKey(todayBoardNow)
-  const todayBoardDate = isTodayBoardView
-    ? resolveTodayBoardDateParam(todayBoardDateParam, todayBoardNow)
-    : todayBoardTodayDate
-  const recentTodayBoardDates = buildRecentTodayBoardDates(todayBoardNow)
+  const todayBoardTodayDate = systemTime?.current_date ?? ''
+  const todayBoardDate =
+    isTodayBoardView && todayBoardTodayDate
+      ? resolveTodayBoardDateParam(todayBoardDateParam, todayBoardTodayDate)
+      : todayBoardTodayDate
+  const recentTodayBoardDates = todayBoardTodayDate
+    ? buildRecentTodayBoardDates(todayBoardTodayDate)
+    : []
 
   const [filterType, setFilterType] = useState<FilterType>(() => {
     if (isTodayBoardView) {
@@ -81,9 +84,10 @@ export function useReaderController() {
 
   const setTodayBoardDate = useCallback(
     (dateKey: string) => {
-      const now = new Date()
-      const todayKey = getTodayBoardDateKey(now)
-      const resolvedDateKey = resolveTodayBoardDateParam(dateKey, now)
+      if (!todayBoardTodayDate) return
+
+      const todayKey = todayBoardTodayDate
+      const resolvedDateKey = resolveTodayBoardDateParam(dateKey, todayKey)
 
       setSelectedEntryId(null)
       setSearchParams(
@@ -104,7 +108,7 @@ export function useReaderController() {
         { replace: false }
       )
     },
-    [setSearchParams]
+    [setSearchParams, todayBoardTodayDate]
   )
 
   useEffect(() => {

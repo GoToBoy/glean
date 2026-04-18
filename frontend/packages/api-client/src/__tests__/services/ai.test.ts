@@ -30,10 +30,10 @@ describe('AIService', () => {
     }
     vi.mocked(mockClient.get).mockResolvedValue(summary)
 
-    const result = await service.getTodaySummary({ date: '2026-04-17', timezone: 'UTC' })
+    const result = await service.getTodaySummary({ date: '2026-04-17' })
 
     expect(mockClient.get).toHaveBeenCalledWith('/ai/today-summary', {
-      params: { date: '2026-04-17', timezone: 'UTC' },
+      params: { date: '2026-04-17' },
     })
     expect(result).toEqual(summary)
   })

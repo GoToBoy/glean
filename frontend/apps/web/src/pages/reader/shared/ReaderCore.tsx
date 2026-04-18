@@ -32,7 +32,7 @@ import {
 import { TodayBoard } from './components/TodayBoard'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
-import { buildTodayBoardEntries, getTodayBoardCollectionRange } from './todayBoard'
+import { buildTodayBoardEntries } from './todayBoard'
 
 const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
@@ -96,13 +96,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { data: aiIntegrationStatus } = useAIIntegrationStatus()
   const userAIIntegrationEnabled = user?.settings?.ai_integration_enabled ?? false
   const aiIntegrationEnabled = (aiIntegrationStatus?.enabled ?? false) && userAIIntegrationEnabled
-  const aiSummaryTimezone = useMemo(() => {
-    try {
-      return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    } catch {
-      return 'UTC'
-    }
-  }, [])
 
   const [slideDirection, setSlideDirection] = useState<'left' | 'right' | null>(null)
   const [todayBoardAIView, setTodayBoardAIView] = useState<'list' | 'summary'>('list')
@@ -185,13 +178,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   // Computed value: whether we're using smart sorting (by preference score vs timeline)
   const usesSmartSorting = isSmartView || filterType === 'smart'
-  const todayCollectionRange = isTodayBoardView
-    ? getTodayBoardCollectionRange(todayBoardDate)
-    : undefined
-
   const getFilterParams = () => {
     if (isTodayBoardView) {
-      return { ...(todayCollectionRange ?? {}), per_page: 500 }
+      return { collected_date: todayBoardDate || undefined, per_page: 500 }
     }
 
     switch (filterType) {
@@ -241,6 +230,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     () =>
       buildTodayBoardEntries(rawEntries, {
         selectedDate: todayBoardDate,
+        filterBySelectedDate: false,
         getFeedDescription: (feedId) => feedDescriptionById.get(feedId) ?? null,
       }),
     [rawEntries, feedDescriptionById, todayBoardDate]
@@ -254,14 +244,13 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       ? 'summary'
       : 'list'
   const shouldFetchAISummary =
-    isTodayBoardView && aiIntegrationEnabled && todayBoardAIView === 'summary'
+    isTodayBoardView && aiIntegrationEnabled && todayBoardAIView === 'summary' && !!todayBoardDate
   const {
     data: aiTodaySummary = null,
     isLoading: isAITodaySummaryLoading,
     error: aiTodaySummaryError,
   } = useAITodaySummary({
     date: todayBoardDate,
-    timezone: aiSummaryTimezone,
     enabled: shouldFetchAISummary,
   })
 

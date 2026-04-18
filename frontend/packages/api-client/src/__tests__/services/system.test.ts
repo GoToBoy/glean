@@ -39,4 +39,18 @@ describe('SystemService', () => {
     expect(mockClient.get).toHaveBeenCalledWith('/system/ai-integration')
     expect(result).toEqual(status)
   })
+
+  it('should get server time metadata', async () => {
+    const time = {
+      timezone: 'UTC',
+      current_time: '2026-04-10T04:00:00Z',
+      current_date: '2026-04-10',
+    }
+    vi.mocked(mockClient.get).mockResolvedValue(time)
+
+    const result = await service.getSystemTime()
+
+    expect(mockClient.get).toHaveBeenCalledWith('/system/time')
+    expect(result).toEqual(time)
+  })
 })

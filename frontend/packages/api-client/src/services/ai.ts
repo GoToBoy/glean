@@ -4,10 +4,7 @@ import type { ApiClient } from '../client'
 export class AIService {
   constructor(private readonly client: ApiClient) {}
 
-  async getTodaySummary(params: {
-    date: string
-    timezone: string
-  }): Promise<AIDailySummaryResponse> {
+  async getTodaySummary(params: { date: string }): Promise<AIDailySummaryResponse> {
     return this.client.get<AIDailySummaryResponse>('/ai/today-summary', { params })
   }
 }
