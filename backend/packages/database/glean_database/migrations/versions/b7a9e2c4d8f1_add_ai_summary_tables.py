@@ -1,7 +1,7 @@
 """add ai summary tables
 
 Revision ID: b7a9e2c4d8f1
-Revises: f2c3d4e5a6b7
+Revises: 91b7c2e4aa11
 Create Date: 2026-04-17 04:45:00.000000
 """
 
@@ -12,7 +12,7 @@ from alembic import op
 from sqlalchemy.dialects import postgresql
 
 revision: str = "b7a9e2c4d8f1"
-down_revision: str | Sequence[str] | None = "f2c3d4e5a6b7"
+down_revision: str | Sequence[str] | None = "91b7c2e4aa11"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
