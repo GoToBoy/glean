@@ -6,8 +6,6 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_core.server_time import get_server_timezone_name
-
 
 async def create_api_token(db_session: AsyncSession, user_id: str) -> str:
     """Create and return a plain API token for tests."""
@@ -83,7 +81,7 @@ async def test_today_entries_requires_api_token(
     """AI list endpoint should reject missing tokens and browser JWTs."""
     await set_ai_config(db_session, enabled=True)
 
-    params = {"date": "2026-04-17", "timezone": "UTC"}
+    params = {"date": "2026-04-17"}
 
     missing_response = await client.get("/api/ai/today-entries", params=params)
     assert missing_response.status_code == 401
@@ -105,7 +103,7 @@ async def test_today_entries_respects_disabled_config(
 
     response = await client.get(
         "/api/ai/today-entries",
-        params={"date": "2026-04-17", "timezone": "UTC"},
+        params={"date": "2026-04-17"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -124,7 +122,7 @@ async def test_today_entries_respects_user_ai_setting(
 
     response = await client.get(
         "/api/ai/today-entries",
-        params={"date": "2026-04-17", "timezone": "UTC"},
+        params={"date": "2026-04-17"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
@@ -176,18 +174,18 @@ async def test_today_entries_filters_by_collection_day_and_subscription(
 
     response = await client.get(
         "/api/ai/today-entries",
-        params={"date": "2026-04-17", "timezone": "UTC", "include_content": "false"},
+        params={"date": "2026-04-17", "include_content": "false"},
         headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 200
     data = response.json()
     assert data["date"] == "2026-04-17"
-    assert data["timezone"] == get_server_timezone_name()
     assert data["total"] == 1
     assert [item["id"] for item in data["items"]] == [included.id]
     assert data["items"][0]["content"] is None
     assert data["items"][0]["content_available"] is True
+    assert data["items"][0]["ai_summary_available"] is False
     assert data["items"][0]["feed_title"] == "Test Feed"
 
 
@@ -273,7 +271,6 @@ async def test_day_summary_and_entry_supplement_writeback(
 
     summary_payload = {
         "date": "2026-04-17",
-        "timezone": "UTC",
         "model": "local-qwen",
         "title": "Morning Brief",
         "summary": "Read this first.",
@@ -302,21 +299,11 @@ async def test_day_summary_and_entry_supplement_writeback(
 
     get_summary = await client.get(
         "/api/ai/today-summary",
-        params={"date": "2026-04-17", "timezone": "UTC"},
+        params={"date": "2026-04-17"},
         headers=auth_headers,
     )
     assert get_summary.status_code == 200
     assert get_summary.json()["title"] == "Updated Brief"
-    assert get_summary.json()["timezone"] == get_server_timezone_name()
-
-    browser_timezone_summary = await client.get(
-        "/api/ai/today-summary",
-        params={"date": "2026-04-17", "timezone": "America/Los_Angeles"},
-        headers=auth_headers,
-    )
-    assert browser_timezone_summary.status_code == 200
-    assert browser_timezone_summary.json()["title"] == "Updated Brief"
-    assert browser_timezone_summary.json()["timezone"] == get_server_timezone_name()
 
     supplement_payload = {
         "model": "local-qwen",
@@ -335,6 +322,14 @@ async def test_day_summary_and_entry_supplement_writeback(
     )
     assert put_supplement.status_code == 200
     assert put_supplement.json()["summary"] == "Single entry summary"
+
+    today_entries_after_supplement = await client.get(
+        "/api/ai/today-entries",
+        params={"date": "2026-04-17", "include_content": "false"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert today_entries_after_supplement.status_code == 200
+    assert today_entries_after_supplement.json()["items"][0]["ai_summary_available"] is True
 
     get_supplement = await client.get(
         f"/api/ai/entries/{entry.id}/supplement",
@@ -374,7 +369,6 @@ async def test_ai_writeback_rejects_unsubscribed_references(
         "/api/ai/today-summary",
         json={
             "date": date(2026, 4, 17).isoformat(),
-            "timezone": "UTC",
             "title": "Bad Brief",
             "summary": "Should fail",
             "recommended_entry_ids": [hidden_entry.id],

@@ -5,10 +5,9 @@ This document is written for local AI agents that read Today's Intake and write 
 ## Core Rules
 
 - Use `Authorization: Bearer <GLEAN_API_TOKEN>` for all `/api/ai/*` calls.
-- Do not send browser timezone as identity. Daily summary and Today entries are keyed by the server-configured timezone.
+- Do not send timezone to `/api/ai/*`. Daily summary and Today entries use the server-configured timezone internally.
 - Use the server date from `GET /api/system/time` when deciding the default day to process.
 - Send dates as `YYYY-MM-DD`.
-- Treat the `timezone` field in AI summary write payloads and old query examples as deprecated. The server ignores client timezone for lookup/write identity and returns the server timezone in responses.
 - Entry IDs referenced in summary writeback must belong to feeds subscribed by the token owner.
 
 ## Get Server Date
@@ -44,7 +43,6 @@ Query parameters:
 - `date`: required server-local date, `YYYY-MM-DD`.
 - `include_content`: optional boolean. Default `false`. Use `true` only when the local model needs full entry content.
 - `limit`: optional integer, `1..500`. Default `500`.
-- `timezone`: deprecated and ignored for date-window identity.
 
 The server converts `date` into a UTC half-open collection window using the server timezone, then returns entries collected in that window.
 
@@ -53,7 +51,6 @@ Response shape:
 ```json
 {
   "date": "2026-04-18",
-  "timezone": "America/Los_Angeles",
   "total": 2,
   "items": [
     {
@@ -70,11 +67,14 @@ Response shape:
       "content_available": true,
       "is_read": false,
       "is_bookmarked": false,
+      "ai_summary_available": false,
       "ai_supplement_available": false
     }
   ]
 }
 ```
+
+Use `items[].ai_summary_available` to decide whether each article already has AI-generated summary data. This is article-level because new articles can continue arriving throughout the same day. `ai_supplement_available` is kept as the broader entry supplement flag and currently tracks the same persisted entry-level supplement.
 
 ## Get Entry Detail
 
@@ -142,18 +142,16 @@ Request body:
 
 Notes:
 
-- Do not include `timezone`; if included by an older client, the server ignores it and stores under the server timezone.
 - The call is an upsert for `(user_id, date, server_timezone)`.
 - `highlights[*].entry_id`, `topics[*].entry_ids`, and `recommended_entry_ids` are validated against subscribed entries.
 
-Response includes the server timezone:
+Response:
 
 ```json
 {
   "id": "summary-id",
   "user_id": "user-id",
   "date": "2026-04-18",
-  "timezone": "America/Los_Angeles",
   "model": "local-qwen",
   "title": "Daily Brief",
   "summary": "One concise overview of today's intake.",
@@ -176,7 +174,6 @@ Authorization: Bearer <GLEAN_API_TOKEN>
 Query parameters:
 
 - `date`: required server-local date, `YYYY-MM-DD`.
-- `timezone`: deprecated and ignored.
 
 Returns `404` when no summary exists for `(user_id, date, server_timezone)`.
 

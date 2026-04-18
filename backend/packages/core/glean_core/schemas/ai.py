@@ -44,7 +44,6 @@ class AIDailySummaryPayload(BaseModel):
     """Day-level AI summary payload."""
 
     date: date
-    timezone: str | None = Field(default=None, min_length=1, max_length=100)
     model: str | None = None
     title: str | None = None
     summary: str | None = None
@@ -59,7 +58,6 @@ class AIDailySummaryResponse(AIDailySummaryPayload):
 
     id: str
     user_id: str
-    timezone: str
     created_at: datetime
     updated_at: datetime
 
@@ -80,6 +78,7 @@ class AITodayEntryItem(BaseModel):
     content_available: bool
     is_read: bool
     is_bookmarked: bool
+    ai_summary_available: bool
     ai_supplement_available: bool
 
 
@@ -87,7 +86,6 @@ class AITodayEntriesResponse(BaseModel):
     """AI-facing today entries response."""
 
     date: date
-    timezone: str
     total: int
     items: list[AITodayEntryItem]
 

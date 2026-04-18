@@ -102,7 +102,6 @@ class AIIntegrationService:
             id=summary.id,
             user_id=summary.user_id,
             date=summary.summary_date,
-            timezone=summary.timezone,
             model=summary.model,
             title=summary.title,
             summary=summary.summary,
@@ -118,15 +117,18 @@ class AIIntegrationService:
         self,
         user_id: str,
         summary_date: date,
-        _timezone: str | None,
         include_content: bool,
         limit: int,
     ) -> AITodayEntriesResponse:
         """List AI-facing entries collected on a local day."""
-        start_utc, end_utc, server_timezone = self.get_server_day_range(summary_date)
+        start_utc, end_utc, _server_timezone = self.get_server_day_range(summary_date)
         feed_ids = await self.get_subscribed_feed_ids(user_id)
         if not feed_ids:
-            return AITodayEntriesResponse(date=summary_date, timezone=server_timezone, total=0, items=[])
+            return AITodayEntriesResponse(
+                date=summary_date,
+                total=0,
+                items=[],
+            )
 
         collection_timestamp = func.coalesce(Entry.ingested_at, Entry.created_at, Entry.published_at)
         bookmark_id_subq = (
@@ -184,6 +186,7 @@ class AIIntegrationService:
                 content_available=bool(entry.content),
                 is_read=bool(user_entry.is_read) if user_entry else False,
                 is_bookmarked=bookmark_id is not None,
+                ai_summary_available=str(entry.id) in supplement_ids,
                 ai_supplement_available=str(entry.id) in supplement_ids,
             )
             for entry, user_entry, bookmark_id, feed_title in rows
@@ -191,7 +194,6 @@ class AIIntegrationService:
 
         return AITodayEntriesResponse(
             date=summary_date,
-            timezone=server_timezone,
             total=len(items),
             items=items,
         )
@@ -265,7 +267,7 @@ class AIIntegrationService:
         return self.serialize_daily_summary(existing)
 
     async def get_daily_summary(
-        self, user_id: str, summary_date: date, _timezone: str | None
+        self, user_id: str, summary_date: date
     ) -> AIDailySummaryResponse | None:
         """Return day-level AI summary."""
         _, _, server_timezone = self.get_server_day_range(summary_date)

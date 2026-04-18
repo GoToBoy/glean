@@ -70,7 +70,6 @@ async def list_today_entries_for_ai(
     ai_service: Annotated[AIIntegrationService, Depends(get_ai_integration_service)],
     config: Annotated[AIIntegrationConfig, Depends(get_enabled_ai_config)],
     date_: date = Query(alias="date"),
-    timezone: str | None = Query(default=None, min_length=1, max_length=100),
     include_content: bool = False,
     limit: int = Query(500, ge=1, le=500),
 ) -> AITodayEntriesResponse:
@@ -84,7 +83,6 @@ async def list_today_entries_for_ai(
         return await ai_service.list_today_entries(
             current_user.id,
             date_,
-            timezone,
             include_content,
             limit,
         )
@@ -136,11 +134,10 @@ async def get_today_summary(
     ai_service: Annotated[AIIntegrationService, Depends(get_ai_integration_service)],
     config: Annotated[AIIntegrationConfig, Depends(get_enabled_ai_config)],
     date_: date = Query(alias="date"),
-    timezone: str | None = Query(default=None, min_length=1, max_length=100),
 ) -> AIDailySummaryResponse:
     """Get a day-level AI summary for the current user."""
     try:
-        summary = await ai_service.get_daily_summary(current_user.id, date_, timezone)
+        summary = await ai_service.get_daily_summary(current_user.id, date_)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     if summary is None:

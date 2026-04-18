@@ -17,7 +17,6 @@ describe('AIService', () => {
       id: 'summary-1',
       user_id: 'user-1',
       date: '2026-04-17',
-      timezone: 'UTC',
       model: 'local-qwen',
       title: 'Daily Brief',
       summary: 'Read this first.',

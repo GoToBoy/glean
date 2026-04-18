@@ -114,7 +114,6 @@ export interface AIDailySummaryResponse {
   id: string
   user_id: string
   date: string
-  timezone: string
   model: string | null
   title: string | null
   summary: string | null
