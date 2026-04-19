@@ -65,6 +65,7 @@ export interface Feed {
   description: string | null
   icon_url: string | null
   language: string | null
+  source_type: 'feed' | 'rsshub'
   status: FeedStatus
   error_count: number
   fetch_error_message: string | null
@@ -98,6 +99,11 @@ export interface Entry {
   author: string | null
   content: string | null
   summary: string | null
+  content_backfill_status?: 'pending' | 'processing' | 'done' | 'failed' | 'skipped' | null
+  content_backfill_attempts?: number
+  content_backfill_at?: string | null
+  content_backfill_error?: string | null
+  content_source?: string | null
   published_at: string | null
   created_at: string
 }

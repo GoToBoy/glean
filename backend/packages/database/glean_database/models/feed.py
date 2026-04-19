@@ -21,6 +21,13 @@ class FeedStatus(str, Enum):
     DISABLED = "disabled"
 
 
+class FeedSourceType(str, Enum):
+    """Feed source type enumeration."""
+
+    FEED = "feed"
+    RSSHUB = "rsshub"
+
+
 class Feed(Base, TimestampMixin):
     """
     RSS feed model.
@@ -36,6 +43,7 @@ class Feed(Base, TimestampMixin):
         description: Feed description.
         icon_url: Favicon or feed icon URL.
         language: Feed language code (e.g., 'en', 'zh').
+        source_type: Source category used to create the feed.
         status: Current feed status.
         error_count: Consecutive fetch error count.
         fetch_error_message: Last error message if any.
@@ -62,6 +70,11 @@ class Feed(Base, TimestampMixin):
 
     # Language
     language: Mapped[str | None] = mapped_column(String(10))
+
+    # Source type
+    source_type: Mapped[FeedSourceType] = mapped_column(
+        String(20), default=FeedSourceType.FEED, nullable=False, index=True
+    )
 
     # Fetch status
     status: Mapped[FeedStatus] = mapped_column(

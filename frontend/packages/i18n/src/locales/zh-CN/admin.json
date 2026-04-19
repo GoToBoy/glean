@@ -136,7 +136,17 @@
     "deleting": "删除中...",
     "loading": "加载中...",
     "noContent": "暂无内容",
-    "viewOriginal": "查看原文"
+    "viewOriginal": "查看原文",
+    "contentBackfill": {
+      "pending": "待回填正文",
+      "processing": "正在回填正文",
+      "done": "正文已回填",
+      "failed": "正文回填失败",
+      "skipped": "已跳过正文回填",
+      "attempts": "尝试次数：{{count}}",
+      "source": "来源：{{source}}",
+      "errorLog": "错误日志：{{message}}"
+    }
   },
   "feeds": {
     "feedErrorTitle": "订阅错误",

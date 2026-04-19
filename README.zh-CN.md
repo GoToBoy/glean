@@ -26,7 +26,6 @@ Glean 是一个面向高密度阅读场景的自托管 RSS 阅读器与个人知
 - **交互式阅读**: 支持键盘快捷键导航 (j/k)、内联原网页视图（支持 iframe 兜底）以及跨设备列表位置自动同步。
 - 极致的阅读器交互体验：零抖动的已读状态同步、切换文章自动回顶。
 - 管理后台支持订阅批量操作、错误重试、状态轮询和用户管理。
-- **本地 Harness 工具**: 集成 `python3 -m harness` 工具集，简化本地开发、健康检查与服务编排。
 - 向量存储已迁移到 PostgreSQL + `pgvector`，当前 fork 不再依赖 Milvus。
 
 ## 为什么此 Fork 使用独立主分支
@@ -60,11 +59,11 @@ curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/docker-
 # 可选：下载当前分支的示例环境变量文件
 curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/.env.example -o .env
 
+# 可选：把 Docker 中的 backend/worker 指向外部 MTranServer
+# 例如：MTRAN_SERVER_URL=http://192.168.31.19:8989
+
 # 启动 Glean
 docker compose up -d
-
-# 可选：启用本地 MTranServer 翻译服务
-docker compose --profile mtran up -d
 ```
 
 访问地址：
@@ -94,7 +93,6 @@ docker compose --profile mtran up -d
 - `worker` - 负责抓取、浏览器正文回退、清理、翻译、向量任务的后台 worker
 - `web` - 主阅读器前端
 - `admin` - 管理后台
-- `mtranserver` - 可选翻译服务，通过 `--profile mtran` 启用
 
 预构建镜像位于 GHCR：
 
@@ -118,7 +116,7 @@ docker compose --profile mtran up -d
 | `WEB_PORT` | Web 端口 | `80` |
 | `ADMIN_PORT` | 管理后台端口 | `3001` |
 | `IMAGE_TAG` | Docker 镜像标签 | `latest` |
-| `MTRAN_SERVER_URL` | backend/worker 使用的翻译服务地址 | `http://mtranserver:8989` |
+| `MTRAN_SERVER_URL` | backend/worker 可访问到的外部翻译服务地址 | 未设置 |
 | `WORKER_JOB_TIMEOUT_SECONDS` | 长任务 worker 超时 | `1800` |
 | `WORKER_MAX_JOBS` | worker 的最大并发 job 数 | `4` |
 | `FEED_REFRESH_INTERVAL_MINUTES` | 定时抓取间隔，以及默认的 `next_fetch_at` 推进延迟 | `720` |
@@ -141,7 +139,7 @@ Docker 部署性能说明：
 
 - 自动将非中文内容翻译成中文。
 - 基于句级/段级规则的双语渲染，并带持久化缓存。
-- 支持多翻译提供方，包括 MTranServer 以及远端翻译服务配置。
+- 支持多翻译提供方，包括外部 MTranServer 与远端翻译服务配置。
 - 改进了移动端阅读器导航、列表恢复和重复翻译控制。
 
 ### 订阅与发现
@@ -156,7 +154,7 @@ Docker 部署性能说明：
 - 管理后台支持单条刷新、全部刷新、错误重试等操作。
 - 订阅源列表支持批量管理。
 - 包含用户管理、密码重置、订阅导入等后台能力。
-- 面向 Docker 部署，提供当前分支 compose 文件和可选 MTran profile。
+- 面向 Docker 部署，提供当前分支 compose 文件，并支持接入外部翻译服务。
 
 ## 技术栈
 
@@ -174,6 +172,13 @@ Docker 部署性能说明：
 ## 开发
 
 完整说明见 [DEVELOPMENT.md](./DEVELOPMENT.md)。
+关于 Docker 与本机进程的分工，见 [docs/operations/local-runtime-modes.md](./docs/operations/local-runtime-modes.md)。
+
+推荐的本地运行模式：
+
+- 模式 A：日常开发。Docker 只跑 `postgres` 和 `redis`，宿主机运行 `api`、`worker`、`web`、`admin`。
+- 模式 B：干净的本地联调验证。Docker 跑本地构建出的全栈服务。
+- 模式 C：类部署运行。Docker 直接跑 `docker-compose.yml` 里的打包镜像。
 
 快速开始：
 
@@ -191,8 +196,17 @@ make db-upgrade
 # 启动全部开发服务
 make dev-all
 
-# 推荐的一体化本地启动入口
-python3 -m harness up
+# 或分别在多个终端启动服务
+make api
+make worker
+make web
+make admin
+```
+
+使用 Docker 做一次干净的全栈本地验证：
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 开发环境地址：
@@ -207,7 +221,7 @@ python3 -m harness up
 - [docs/references/branch-delta.zh-CN.md](./docs/references/branch-delta.zh-CN.md) - `personal-main` 相对上游 `main` 的能力差异概览
 - [docs/product/feature-change-log.md](./docs/product/feature-change-log.md) - 功能级变更记录
 - [docs/product/rss-browser-extraction-plan.md](./docs/product/rss-browser-extraction-plan.md) - RSS 正文浏览器回退抓取方案
-- [docs/operations/local-harness.md](./docs/operations/local-harness.md) - 本地 harness 启动与诊断入口
+- [docs/operations/local-runtime-modes.md](./docs/operations/local-runtime-modes.md) - 本地 Docker / 宿主机运行分工说明
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 本地开发指南
 
 ## 参与贡献

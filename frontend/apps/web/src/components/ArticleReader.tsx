@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useContentRenderer } from '../hooks/useContentRenderer'
 import { useUpdateEntryState, entryKeys } from '../hooks/useEntries'
-import { bookmarkService } from '@glean/api-client'
+import { bookmarkService, entryService } from '@glean/api-client'
 import { useTranslation } from '@glean/i18n'
 import type { EntryWithState } from '@glean/types'
 import {
@@ -209,35 +209,44 @@ export function ArticleReader({
   const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [needsPreChoice, setNeedsPreChoice] = useState(false)
   const [translatePreUnknown, setTranslatePreUnknown] = useState(false)
+  const [translatedTitle, setTranslatedTitle] = useState<string | null>(null)
+  const [isTitleTranslating, setIsTitleTranslating] = useState(false)
+  const [titleTranslationError, setTitleTranslationError] = useState<string | null>(null)
   const preferredTargetLanguage = (user?.settings?.translation_target_language ??
     'zh-CN') as TranslationTargetLanguage
 
-  // Viewport-based sentence-level translation.
-  // If the title is Chinese the article is Chinese — skip translation entirely,
-  // even if the body contains substantial English (code, terms, quotes).
-  const targetLanguage = useMemo(() => {
+  const autoTargetLanguage = useMemo(() => {
     if (detectTranslationLanguageCategory(entry.title) === 'chinese') return null
     return resolveAutoTranslationTargetLanguage(
       entry.title + ' ' + (entry.content || entry.summary || ''),
       preferredTargetLanguage
     )
   }, [entry.title, entry.content, entry.summary, preferredTargetLanguage])
-  const canTranslate = targetLanguage !== null
+
+  const manualTargetLanguage = useMemo(() => {
+    return resolveAutoTranslationTargetLanguage(
+      entry.title + ' ' + (entry.content || entry.summary || ''),
+      preferredTargetLanguage
+    )
+  }, [entry.title, entry.content, entry.summary, preferredTargetLanguage])
+  const canTranslate = manualTargetLanguage !== null
   const {
     isActive: showTranslation,
     isTranslating,
-    error: translationError,
+    error: viewportTranslationError,
     toggle: toggleTranslation,
     activate: activateTranslation,
     ensureCompleteTranslation,
   } = useViewportTranslation({
     contentRef,
     scrollContainerRef,
-    targetLanguage,
+    targetLanguage: manualTargetLanguage,
     entryId: entry.id,
     translatePreUnknown,
   })
   const isMobile = useIsMobile()
+  const translationError = titleTranslationError ?? viewportTranslationError
+  const isTranslationBusy = isTranslating || isTitleTranslating
   const barsVisible = useMobileBarsVisibility(scrollContainerRef, entry.id)
   const closeGestureHandlers = useMobileCloseGestures(
     scrollContainerRef,
@@ -259,7 +268,7 @@ export function ArticleReader({
   const shouldShowFullscreenButton = showFullscreenButton ?? !isMobile
 
   useEffect(() => {
-    if (!canTranslate) return
+    if (!autoTargetLanguage) return
     let timeoutId: number | null = null
     let idleId: number | null = null
     const win = window as Window & {
@@ -286,10 +295,10 @@ export function ArticleReader({
         win.cancelIdleCallback(idleId)
       }
     }
-  }, [canTranslate, activateTranslation, entry.id])
+  }, [autoTargetLanguage, activateTranslation, entry.id])
 
   useEffect(() => {
-    if (!isTranslating) {
+    if (!isTranslationBusy) {
       setTranslationLoadingPhase('idle')
       return
     }
@@ -302,7 +311,54 @@ export function ArticleReader({
     return () => {
       window.clearTimeout(timer)
     }
-  }, [isTranslating])
+  }, [isTranslationBusy])
+
+  useEffect(() => {
+    setTranslatedTitle(null)
+    setIsTitleTranslating(false)
+    setTitleTranslationError(null)
+  }, [entry.id, manualTargetLanguage])
+
+  useEffect(() => {
+    if (!showTranslation || !manualTargetLanguage) return
+    if (!entry.title.trim()) return
+    if (translatedTitle) return
+
+    let cancelled = false
+
+    const translateTitle = async () => {
+      setIsTitleTranslating(true)
+      setTitleTranslationError(null)
+
+      try {
+        const response = await entryService.translateTexts(
+          [entry.title],
+          manualTargetLanguage,
+          'auto',
+          entry.id,
+        )
+        if (cancelled) return
+
+        const translated = response.translations[0]?.trim()
+        if (translated) {
+          setTranslatedTitle(translated)
+        }
+      } catch (err) {
+        if (cancelled) return
+        setTitleTranslationError(err instanceof Error ? err.message : t('translation.failed'))
+      } finally {
+        if (!cancelled) {
+          setIsTitleTranslating(false)
+        }
+      }
+    }
+
+    void translateTitle()
+
+    return () => {
+      cancelled = true
+    }
+  }, [entry.id, entry.title, showTranslation, t, manualTargetLanguage, translatedTitle])
 
   // Reset outline state when entry changes
   useEffect(() => {
@@ -357,7 +413,7 @@ export function ArticleReader({
         await bookmarkService.deleteBookmark(entry.bookmark_id)
       } else {
         setArchiveFlowState('archiving')
-        if (showTranslation && targetLanguage) {
+        if (showTranslation && manualTargetLanguage) {
           const translationSnapshot = await ensureCompleteTranslation()
           if (!translationSnapshot?.isComplete) {
             throw new Error(t('actions.translationIncomplete'))
@@ -405,7 +461,7 @@ export function ArticleReader({
   const translationButtonClassName = [
     'action-btn translate-action-btn',
     showTranslation ? 'text-primary' : 'text-muted-foreground',
-    isTranslating ? 'translate-action-btn-loading' : '',
+    isTranslationBusy ? 'translate-action-btn-loading' : '',
     translationLoadingPhase === 'start' ? 'translate-action-btn-loading-start' : '',
     translationLoadingPhase === 'settled' ? 'translate-action-btn-loading-settled' : '',
   ]
@@ -457,6 +513,11 @@ export function ArticleReader({
               {entry.title}
             </h1>
           </div>
+          {showTranslation && translatedTitle && (
+            <div className="px-4 pb-3">
+              <p className="text-primary/85 line-clamp-3 text-sm font-medium">{translatedTitle}</p>
+            </div>
+          )}
         </div>
       )}
 
@@ -496,6 +557,12 @@ export function ArticleReader({
               )}
             </div>
           </div>
+
+          {showTranslation && translatedTitle && (
+            <p className="text-primary/85 mb-3 text-base leading-relaxed font-medium">
+              {translatedTitle}
+            </p>
+          )}
 
           <div className="text-muted-foreground mb-4 flex items-center gap-3 text-sm">
             {entry.author && <span className="font-medium">{entry.author}</span>}
@@ -544,7 +611,7 @@ export function ArticleReader({
                   <Languages className="translate-action-btn__icon h-4 w-4" />
                 </span>
                 <span>
-                  {isTranslating ? t('translation.translating') : t('translation.translate')}
+                  {isTranslationBusy ? t('translation.translating') : t('translation.translate')}
                 </span>
               </Button>
             ) : null}
@@ -626,7 +693,7 @@ export function ArticleReader({
                 {canTranslate && showTranslation && (
                   <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
                     <span className="text-muted-foreground text-xs">
-                      {isTranslating
+                      {isTranslationBusy
                         ? t('translation.translatingVisible')
                         : t('translation.sentenceMode')}
                     </span>
@@ -787,7 +854,9 @@ export function ArticleReader({
                 onClick={showTranslation ? toggleTranslation : activateTranslation}
                 className={`action-btn action-btn-mobile translate-action-btn flex flex-col items-center gap-0.5 px-3 py-1.5 transition-colors ${
                   showTranslation ? 'text-primary' : 'text-muted-foreground'
-                } ${isTranslating ? 'translate-action-btn-loading' : ''} ${
+                } ${
+                  isTranslationBusy ? 'translate-action-btn-loading' : ''
+                } ${
                   translationLoadingPhase === 'start' ? 'translate-action-btn-loading-start' : ''
                 } ${
                   translationLoadingPhase === 'settled'
@@ -803,7 +872,7 @@ export function ArticleReader({
                 <span className="text-[10px]">
                   {showTranslation
                     ? t('translation.hideTranslation')
-                    : isTranslating
+                    : isTranslationBusy
                       ? t('translation.translating')
                       : t('translation.translate')}
                 </span>

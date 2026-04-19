@@ -1,7 +1,11 @@
 .PHONY: help setup up down api worker web admin electron db-migrate db-upgrade db-downgrade \
         test test-db-up test-db-down test-cov lint format clean logs install-backend install-frontend install-root verify dev-all \
-        harness-up harness-down harness-status harness-health harness-logs harness-doctor harness-snapshot harness-instances docs-validate \
+        docs-validate \
         pre-commit-install pre-commit-uninstall pre-commit-run
+
+DEV_DATABASE_URL ?= postgresql+asyncpg://glean:devpassword@localhost:5432/glean
+DEV_REDIS_URL ?= redis://localhost:6379/0
+UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
 
 # Default target
 help:
@@ -25,14 +29,6 @@ help:
 	@echo "  make admin          - Start admin dashboard"
 	@echo "  make electron       - Start Electron desktop app"
 	@echo "  make dev-all        - Start all services concurrently (api + worker + web)"
-	@echo "  make harness-up     - Start local dev harness"
-	@echo "  make harness-down   - Stop local dev harness"
-	@echo "  make harness-status - Show harness status"
-	@echo "  make harness-health - Run harness health checks"
-	@echo "  make harness-logs SERVICE=api - Show service logs from harness"
-	@echo "  make harness-doctor - Summarize harness diagnostics and recent errors"
-	@echo "  make harness-snapshot - Emit machine-readable harness diagnostics JSON"
-	@echo "  make harness-instances - List harness instances across worktrees"
 	@echo ""
 	@echo "Database:"
 	@echo "  make db-migrate MSG=\"description\"  - Create new migration"
@@ -102,11 +98,11 @@ logs:
 api:
 	@echo "🚀 Starting API server on http://localhost:8000"
 	@echo "📚 API docs: http://localhost:8000/api/docs"
-	@cd backend && uv run uvicorn glean_api.main:app --reload --port 8000
+	@cd backend && DATABASE_URL="$(DEV_DATABASE_URL)" REDIS_URL="$(DEV_REDIS_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run uvicorn glean_api.main:app --reload --port 8000
 
 worker:
 	@echo "⚙️  Starting background worker..."
-	@cd backend && uv run python scripts/run-arq-worker.py glean_worker.main.WorkerSettings
+	@cd backend && DATABASE_URL="$(DEV_DATABASE_URL)" REDIS_URL="$(DEV_REDIS_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run python scripts/run-arq-worker.py glean_worker.main.WorkerSettings
 
 web:
 	@echo "🌐 Starting web app on http://localhost:3000"
@@ -129,22 +125,22 @@ ifndef MSG
 	$(error MSG is required. Usage: make db-migrate MSG="migration description")
 endif
 	@echo "📝 Creating migration: $(MSG)"
-	@cd backend/packages/database && uv run alembic revision --autogenerate -m "$(MSG)"
+	@cd backend/packages/database && DATABASE_URL="$(DEV_DATABASE_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run alembic revision --autogenerate -m "$(MSG)"
 
 db-upgrade:
 	@echo "⬆️  Applying database migrations..."
-	@cd backend/packages/database && uv run alembic upgrade head
+	@cd backend/packages/database && DATABASE_URL="$(DEV_DATABASE_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run alembic upgrade head
 
 db-downgrade:
 	@echo "⬇️  Reverting last migration..."
-	@cd backend/packages/database && uv run alembic downgrade -1
+	@cd backend/packages/database && DATABASE_URL="$(DEV_DATABASE_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run alembic downgrade -1
 
 db-reset:
 	@echo "🗑️  Resetting database..."
 	@docker compose -f docker-compose.dev.yml down -v
 	@docker compose -f docker-compose.dev.yml up -d
 	@sleep 5
-	@cd backend/packages/database && uv run alembic upgrade head
+	@cd backend/packages/database && DATABASE_URL="$(DEV_DATABASE_URL)" UV_CACHE_DIR="$(UV_CACHE_DIR)" uv run alembic upgrade head
 	@echo "✅ Database reset complete"
 
 # =============================================================================
@@ -236,33 +232,6 @@ dev:
 	@echo "    Terminal 1: make api"
 	@echo "    Terminal 2: make worker"
 	@echo "    Terminal 3: make web"
-
-harness-up:
-	@python3 -m harness up $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-down:
-	@python3 -m harness down $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-status:
-	@python3 -m harness status $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-health:
-	@python3 -m harness health $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-logs:
-ifndef SERVICE
-	$(error SERVICE is required. Usage: make harness-logs SERVICE=api)
-endif
-	@python3 -m harness logs $(SERVICE) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-doctor:
-	@python3 -m harness doctor $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-snapshot:
-	@python3 -m harness snapshot $(if $(SERVICES),--services $(SERVICES),) $(if $(INSTANCE),--instance $(INSTANCE),)
-
-harness-instances:
-	@python3 -m harness instances
 
 docs-validate:
 	@python3 scripts/validate-docs.py

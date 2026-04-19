@@ -665,4 +665,93 @@ class TestBrowserFallback:
 
             result = await fetch_and_extract_fulltext("https://openai.com/index/post")
 
-        assert result is None
+        assert isinstance(result, ExtractionResult)
+        assert result.content is None
+        assert result.error_reason == "browser_client_error_page"
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_reports_http_readability_failure(self) -> None:
+        """A normal HTTP page with no extractable article should report a readability failure."""
+        http_result = FetchResult(
+            html=f"<html><body><article><p>{'normal article body ' * 12}</p></article></body></html>",
+            fetched_url="https://example.com/short-article",
+            status_code=200,
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor.extract_fulltext",
+                AsyncMock(return_value=None),
+            )
+
+            result = await fetch_and_extract_fulltext("https://example.com/short-article")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.content is None
+        assert result.error_reason == "http_readability_empty"
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_reports_browser_fetch_failure(self) -> None:
+        """Browser fallback should distinguish fetch failure from empty extraction."""
+        http_result = FetchResult(
+            html="<html><body>Enable JavaScript and cookies to continue</body></html>",
+            fetched_url="https://example.com/protected",
+            status_code=403,
+            challenge_detected=True,
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=None),
+            )
+
+            result = await fetch_and_extract_fulltext("https://example.com/protected")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.content is None
+        assert result.error_reason == "browser_fetch_failed"
+
+    @pytest.mark.asyncio
+    async def test_fetch_and_extract_reports_browser_readability_failure(self) -> None:
+        """Rendered pages that still produce no article content should report browser readability failure."""
+        http_result = FetchResult(
+            html="<html><body>Enable JavaScript and cookies to continue</body></html>",
+            fetched_url="https://example.com/protected",
+            status_code=403,
+            challenge_detected=True,
+        )
+        browser_result = FetchResult(
+            html="<html><body><article><p>short</p></article></body></html>",
+            fetched_url="https://example.com/protected",
+            status_code=200,
+            used_browser=True,
+        )
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_http",
+                AsyncMock(return_value=http_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor._fetch_html_browser",
+                AsyncMock(return_value=browser_result),
+            )
+            monkeypatch.setattr(
+                "glean_rss.extractor.extract_fulltext",
+                AsyncMock(return_value=None),
+            )
+
+            result = await fetch_and_extract_fulltext("https://example.com/protected")
+
+        assert isinstance(result, ExtractionResult)
+        assert result.content is None
+        assert result.error_reason == "browser_readability_empty"

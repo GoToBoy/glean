@@ -115,11 +115,13 @@ async def test_fetch_all_feeds_defers_only_rsshub_feeds_while_circuit_is_open():
     rsshub_feed = MagicMock()
     rsshub_feed.id = "feed-rsshub"
     rsshub_feed.url = "http://rsshub:1200/x/user/karpathy"
+    rsshub_feed.source_type = "rsshub"
     rsshub_feed.next_fetch_at = None
 
     direct_feed = MagicMock()
     direct_feed.id = "feed-direct"
     direct_feed.url = "https://example.com/feed.xml"
+    direct_feed.source_type = "feed"
     direct_feed.next_fetch_at = None
 
     due_feeds_result = MagicMock()

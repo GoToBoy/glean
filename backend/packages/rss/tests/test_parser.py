@@ -3,10 +3,12 @@
 from glean_rss.parser import (
     MIN_FULL_CONTENT_TEXT_LENGTH,
     ParsedEntry,
+    parse_feed,
     _extract_text_content,
     _get_favicon_url,
     _looks_like_full_content,
 )
+import pytest
 
 
 class TestFaviconURL:
@@ -97,3 +99,42 @@ class TestContentDetection:
         """Duplicated summary/content pairs are teasers, not article bodies."""
         teaser = "A concise introduction to the announcement."
         assert _looks_like_full_content(f"<p>{teaser}</p>", teaser) is False
+
+    def test_relative_entry_url_resolves_against_feed_site(self) -> None:
+        """Relative entry links should be normalized before downstream storage."""
+        entry = ParsedEntry(
+            {
+                "link": "/blog/iccv-2021/",
+                "title": "ICCV 2021",
+            },
+            base_url="http://ai.stanford.edu/blog/",
+        )
+
+        assert entry.url == "http://ai.stanford.edu/blog/iccv-2021/"
+        assert entry.guid == "http://ai.stanford.edu/blog/iccv-2021/"
+
+
+class TestParseFeed:
+    """Feed parsing should normalize relative entry URLs."""
+
+    @pytest.mark.asyncio
+    async def test_parse_feed_resolves_relative_links(self) -> None:
+        xml = """<?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0">
+          <channel>
+            <title>Stanford AI Lab Blog</title>
+            <link>http://ai.stanford.edu/blog/</link>
+            <description>Test feed</description>
+            <item>
+              <title>ICCV 2021</title>
+              <link>/blog/iccv-2021/</link>
+              <description>Summary only</description>
+            </item>
+          </channel>
+        </rss>
+        """
+
+        parsed = await parse_feed(xml, "http://ai.stanford.edu/blog/feed.xml")
+
+        assert parsed.entries[0].url == "http://ai.stanford.edu/blog/iccv-2021/"
+        assert parsed.entries[0].guid == "http://ai.stanford.edu/blog/iccv-2021/"

@@ -28,6 +28,11 @@ class EntryResponse(BaseModel):
     author: str | None
     content: str | None
     summary: str | None
+    content_backfill_status: str | None = None
+    content_backfill_attempts: int = 0
+    content_backfill_at: datetime | None = None
+    content_backfill_error: str | None = None
+    content_source: str | None = None
     published_at: datetime | None
     ingested_at: datetime | None
     created_at: datetime

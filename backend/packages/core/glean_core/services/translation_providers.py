@@ -11,6 +11,7 @@ import os
 import re
 import unicodedata
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from typing import Any
 
 import httpx
@@ -22,7 +23,7 @@ logger = get_logger(__name__)
 # Google Translate has a ~5000 character limit per request
 _CHUNK_SIZE = 4500
 _SEPARATOR = " ||| "
-DEFAULT_MTRAN_SERVER_URL = "http://mtranserver:8989"
+DEFAULT_MTRAN_SERVER_URL = "http://127.0.0.1:8989"
 MTRAN_BATCH_SIZE = 24
 MTRAN_MAX_PAYLOAD_SIZE = 100 * 1024  # 100KB limit for MTranServer
 
@@ -37,6 +38,29 @@ class TranslationProvider(ABC):
     def translate_batch(self, texts: list[str], source: str, target: str) -> list[str]:
         """Translate a list of texts. Default: translate one by one."""
         return [self.translate(t, source, target) for t in texts]
+
+
+def _normalize_translation_settings(settings: Any | None) -> dict[str, Any]:
+    """Accept dict-like settings and Pydantic models."""
+    if not settings:
+        return {}
+
+    if isinstance(settings, Mapping):
+        return dict(settings)
+
+    model_dump = getattr(settings, "model_dump", None)
+    if callable(model_dump):
+        dumped = model_dump(exclude_none=True)
+        if isinstance(dumped, dict):
+            return dumped
+
+    return {}
+
+
+def _resolve_mtran_base_url(base_url: str | None = None) -> str:
+    configured = base_url.strip() if isinstance(base_url, str) else ""
+    env_value = os.getenv("MTRAN_SERVER_URL", "").strip()
+    return configured or env_value or DEFAULT_MTRAN_SERVER_URL
 
 
 def _parse_openai_batch_response(raw: str, expected_count: int) -> list[str] | None:
@@ -323,9 +347,7 @@ class MTranProvider(TranslationProvider):
         model: str = "",
         timeout: float = 20.0,
     ) -> None:
-        self.base_url = (base_url or os.getenv("MTRAN_SERVER_URL", DEFAULT_MTRAN_SERVER_URL)).rstrip(
-            "/"
-        )
+        self.base_url = _resolve_mtran_base_url(base_url).rstrip("/")
         self.api_key = api_key
         self.model = model
         self.timeout = timeout
@@ -568,7 +590,7 @@ def _is_mtran_available(base_url: str, timeout: float = 0.8) -> bool:
     return False
 
 
-def create_translation_provider(settings: dict[str, Any] | None) -> TranslationProvider:
+def create_translation_provider(settings: Any | None) -> TranslationProvider:
     """
     Create a translation provider from user settings.
 
@@ -581,14 +603,16 @@ def create_translation_provider(settings: dict[str, Any] | None) -> TranslationP
     Falls back to GoogleFreeProvider when provider is google, no key is
     provided for non-google providers, or settings are empty.
     """
-    if not settings:
+    normalized_settings = _normalize_translation_settings(settings)
+    if not normalized_settings:
         return GoogleFreeProvider()
 
-    provider = settings.get("translation_provider", "google")
-    api_key = settings.get("translation_api_key", "")
-    raw_model = settings.get("translation_model")
+    provider = normalized_settings.get("translation_provider", "google")
+    api_key = normalized_settings.get("translation_api_key", "")
+    raw_model = normalized_settings.get("translation_model")
     model = raw_model if isinstance(raw_model, str) else None
-    base_url = settings.get("translation_base_url", "")
+    raw_base_url = normalized_settings.get("translation_base_url")
+    base_url = raw_base_url if isinstance(raw_base_url, str) else ""
 
     if provider == "deepl" and api_key:
         logger.info("Using DeepL translation provider")
@@ -603,7 +627,7 @@ def create_translation_provider(settings: dict[str, Any] | None) -> TranslationP
         return OpenAIProvider(api_key, openai_model)
 
     if provider == "mtran":
-        resolved_base_url = base_url or os.getenv("MTRAN_SERVER_URL", DEFAULT_MTRAN_SERVER_URL)
+        resolved_base_url = _resolve_mtran_base_url(base_url)
         logger.info(
             "Using MTran translation provider",
             extra={"base_url": resolved_base_url},

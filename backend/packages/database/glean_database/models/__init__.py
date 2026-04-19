@@ -13,7 +13,7 @@ from .discovery_candidate import DiscoveryCandidate
 from .discovery_feedback import DiscoveryFeedback
 from .entry import Entry
 from .entry_translation import EntryTranslation
-from .feed import Feed, FeedStatus
+from .feed import Feed, FeedSourceType, FeedStatus
 from .feed_fetch_run import FeedFetchRun
 from .feed_fetch_stage_event import FeedFetchStageEvent
 from .folder import Folder, FolderType
@@ -31,6 +31,7 @@ __all__ = [
     "User",
     "UserAuthProvider",
     "Feed",
+    "FeedSourceType",
     "FeedStatus",
     "FeedFetchRun",
     "FeedFetchStageEvent",

@@ -79,12 +79,13 @@ class FetchResult:
 class ExtractionResult:
     """Structured extraction result for downstream logging and storage decisions."""
 
-    content: str
+    content: str | None
     method: str
     fetched_url: str
     status_code: int | None = None
     challenge_detected: bool = False
     used_browser: bool = False
+    error_reason: str | None = None
 
 
 def _is_relative_url(url: str) -> bool:
@@ -465,12 +466,24 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
         Structured extraction result or None if all strategies fail.
     """
     http_result = await _fetch_html_http(url)
+    if http_result is None:
+        if not _is_browser_extraction_enabled():
+            return ExtractionResult(
+                content=None,
+                method="http",
+                fetched_url=url,
+                used_browser=False,
+                error_reason="http_fetch_failed",
+            )
+    else:
+        http_is_client_error = _looks_like_client_error_page(http_result.html)
+        http_looks_like_shell = _looks_like_shell_page(http_result.html)
+
     if (
         http_result is not None
         and not http_result.challenge_detected
-        and not _looks_like_client_error_page(http_result.html)
+        and not http_is_client_error
     ):
-        http_looks_like_shell = _looks_like_shell_page(http_result.html)
         extracted = await extract_fulltext(http_result.html, url=http_result.fetched_url)
         if extracted and not http_looks_like_shell:
             return ExtractionResult(
@@ -481,32 +494,129 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
                 challenge_detected=False,
                 used_browser=False,
             )
+        if not http_looks_like_shell:
+            return ExtractionResult(
+                content=None,
+                method="http",
+                fetched_url=http_result.fetched_url,
+                status_code=http_result.status_code,
+                challenge_detected=False,
+                used_browser=False,
+                error_reason="http_readability_empty",
+            )
 
     should_try_browser = _is_browser_extraction_enabled()
     if should_try_browser and (
         http_result is None
         or http_result.challenge_detected
         or http_result.status_code in BLOCKED_STATUS_CODES
-        or _looks_like_client_error_page(http_result.html)
-        or _looks_like_shell_page(http_result.html)
+        or http_is_client_error
+        or http_looks_like_shell
     ):
         browser_result = await _fetch_html_browser(url)
-        if (
-            browser_result is not None
-            and not browser_result.challenge_detected
-            and not _looks_like_client_error_page(browser_result.html)
-        ):
-            extracted = await extract_fulltext(browser_result.html, url=browser_result.fetched_url)
-            if extracted:
-                return ExtractionResult(
-                    content=extracted,
-                    method="browser",
-                    fetched_url=browser_result.fetched_url,
-                    status_code=browser_result.status_code,
-                    challenge_detected=False,
-                    used_browser=True,
-                )
+        if browser_result is None:
+            logger.debug(f"Browser extraction failed for article_url={url}")
+            return ExtractionResult(
+                content=None,
+                method="browser",
+                fetched_url=http_result.fetched_url if http_result is not None else url,
+                status_code=http_result.status_code if http_result is not None else None,
+                challenge_detected=False,
+                used_browser=True,
+                error_reason="browser_fetch_failed",
+            )
+
+        browser_is_client_error = _looks_like_client_error_page(browser_result.html)
+        if browser_result.challenge_detected:
+            logger.debug(f"Browser extraction failed for article_url={url}")
+            return ExtractionResult(
+                content=None,
+                method="browser",
+                fetched_url=browser_result.fetched_url,
+                status_code=browser_result.status_code,
+                challenge_detected=True,
+                used_browser=True,
+                error_reason="browser_challenge_page",
+            )
+        if browser_is_client_error:
+            logger.debug(f"Browser extraction failed for article_url={url}")
+            return ExtractionResult(
+                content=None,
+                method="browser",
+                fetched_url=browser_result.fetched_url,
+                status_code=browser_result.status_code,
+                challenge_detected=False,
+                used_browser=True,
+                error_reason="browser_client_error_page",
+            )
+
+        extracted = await extract_fulltext(browser_result.html, url=browser_result.fetched_url)
+        if extracted:
+            return ExtractionResult(
+                content=extracted,
+                method="browser",
+                fetched_url=browser_result.fetched_url,
+                status_code=browser_result.status_code,
+                challenge_detected=False,
+                used_browser=True,
+            )
 
         logger.debug(f"Browser extraction failed for article_url={url}")
+        return ExtractionResult(
+            content=None,
+            method="browser",
+            fetched_url=browser_result.fetched_url,
+            status_code=browser_result.status_code,
+            challenge_detected=False,
+            used_browser=True,
+            error_reason="browser_readability_empty",
+        )
 
-    return None
+    if http_result is None:
+        return ExtractionResult(
+            content=None,
+            method="http",
+            fetched_url=url,
+            used_browser=False,
+            error_reason="http_fetch_failed",
+        )
+    if http_result.challenge_detected:
+        return ExtractionResult(
+            content=None,
+            method="http",
+            fetched_url=http_result.fetched_url,
+            status_code=http_result.status_code,
+            challenge_detected=True,
+            used_browser=False,
+            error_reason="http_challenge_page",
+        )
+    if http_is_client_error:
+        return ExtractionResult(
+            content=None,
+            method="http",
+            fetched_url=http_result.fetched_url,
+            status_code=http_result.status_code,
+            challenge_detected=False,
+            used_browser=False,
+            error_reason="http_client_error_page",
+        )
+    if http_looks_like_shell:
+        return ExtractionResult(
+            content=None,
+            method="http",
+            fetched_url=http_result.fetched_url,
+            status_code=http_result.status_code,
+            challenge_detected=False,
+            used_browser=False,
+            error_reason="http_shell_page",
+        )
+
+    return ExtractionResult(
+        content=None,
+        method="http",
+        fetched_url=http_result.fetched_url,
+        status_code=http_result.status_code,
+        challenge_detected=False,
+        used_browser=False,
+        error_reason="empty_extraction",
+    )

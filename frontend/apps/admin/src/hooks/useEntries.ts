@@ -8,6 +8,10 @@ interface Entry {
   url: string
   title: string
   author: string | null
+  content_backfill_status: 'pending' | 'processing' | 'done' | 'failed' | 'skipped' | null
+  content_backfill_attempts: number
+  content_backfill_error: string | null
+  content_source: string | null
   published_at: string | null
   created_at: string
 }

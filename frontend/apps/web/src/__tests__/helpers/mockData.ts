@@ -138,6 +138,7 @@ export const createMockSubscription = (
     description: null,
     icon_url: null,
     language: null,
+    source_type: 'feed',
     status: FeedStatus.ACTIVE,
     error_count: 0,
     fetch_error_message: null,

@@ -14,6 +14,7 @@ interface Feed {
   id: string
   url: string
   title: string
+  source_type: 'feed' | 'rsshub'
   status: 'active' | 'error' | 'disabled'
   subscriber_count: number
   last_fetch_attempt_at: string | null

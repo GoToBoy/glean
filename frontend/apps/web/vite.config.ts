@@ -33,7 +33,7 @@ const appVersion = getAppVersion()
 
 export default defineConfig(({ mode }) => {
   const isElectron = mode === 'electron'
-  const devApiTarget = process.env.VITE_DEV_API_TARGET || 'http://192.168.31.19:8800'
+  const devApiTarget = process.env.VITE_DEV_API_TARGET || 'http://localhost:8000'
 
   return {
     define: {

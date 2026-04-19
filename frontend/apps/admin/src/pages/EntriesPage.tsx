@@ -33,6 +33,8 @@ import {
   Calendar,
   User,
   FileText,
+  Wand2,
+  AlertCircle,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { useTranslation } from '@glean/i18n'
@@ -382,6 +384,10 @@ interface Entry {
   url: string
   title: string
   author: string | null
+  content_backfill_status: 'pending' | 'processing' | 'done' | 'failed' | 'skipped' | null
+  content_backfill_attempts: number
+  content_backfill_error: string | null
+  content_source: string | null
   published_at: string | null
   created_at: string
 }
@@ -399,6 +405,9 @@ function EntryCard({
   onDeleteEntry: (id: string) => void
   isDeleting: boolean
 }) {
+  const { t } = useTranslation(['admin'])
+  const backfillMeta = getAdminBackfillMeta(entry.content_backfill_status, t)
+
   return (
     <div
       className="group animate-fadeIn border-border bg-card hover:border-border/80 hover:bg-card/80 rounded-xl border p-4 transition-all duration-200"
@@ -449,6 +458,32 @@ function EntryCard({
               </span>
             )}
           </div>
+
+          {backfillMeta && (
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+              <Badge variant={backfillMeta.variant} className="gap-1">
+                {backfillMeta.icon}
+                {backfillMeta.label}
+              </Badge>
+              <span className="text-muted-foreground">
+                {t('admin:entries.contentBackfill.attempts', {
+                  count: entry.content_backfill_attempts,
+                })}
+              </span>
+              {entry.content_source && (
+                <span className="text-muted-foreground">
+                  {t('admin:entries.contentBackfill.source', { source: entry.content_source })}
+                </span>
+              )}
+              {entry.content_backfill_error && entry.content_backfill_status === 'failed' && (
+                <span className="text-destructive max-w-full break-words">
+                  {t('admin:entries.contentBackfill.errorLog', {
+                    message: entry.content_backfill_error,
+                  })}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Actions */}
@@ -482,6 +517,46 @@ function EntryCard({
       </div>
     </div>
   )
+}
+
+function getAdminBackfillMeta(
+  status: Entry['content_backfill_status'],
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  switch (status) {
+    case 'pending':
+      return {
+        label: t('admin:entries.contentBackfill.pending'),
+        icon: <Wand2 className="h-3 w-3" />,
+        variant: 'secondary' as const,
+      }
+    case 'processing':
+      return {
+        label: t('admin:entries.contentBackfill.processing'),
+        icon: <Wand2 className="h-3 w-3" />,
+        variant: 'default' as const,
+      }
+    case 'done':
+      return {
+        label: t('admin:entries.contentBackfill.done'),
+        icon: <Wand2 className="h-3 w-3" />,
+        variant: 'secondary' as const,
+      }
+    case 'failed':
+      return {
+        label: t('admin:entries.contentBackfill.failed'),
+        icon: <AlertCircle className="h-3 w-3" />,
+        variant: 'destructive' as const,
+      }
+    case 'skipped':
+      return {
+        label: t('admin:entries.contentBackfill.skipped'),
+        icon: <AlertCircle className="h-3 w-3" />,
+        variant: 'outline' as const,
+      }
+    default:
+      return null
+  }
 }
 
 function EntryCardSkeleton({ index }: { index: number }) {

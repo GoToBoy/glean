@@ -17,9 +17,8 @@ REQUIRED_FILES = [
     "docs/product/index.md",
     "docs/references/index.md",
     "docs/generated/index.md",
-    "docs/plans/active/index.md",
-    "docs/plans/completed/index.md",
-    "docs/operations/local-harness.md",
+    "docs/exec-plans/active/index.md",
+    "docs/exec-plans/completed/index.md",
 ]
 
 FILES_TO_SCAN = [
@@ -37,7 +36,7 @@ FILES_TO_SCAN = [
 ]
 
 MARKDOWN_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)")
-CODE_PATH_RE = re.compile(r"`((?:docs|backend|frontend|harness|scripts)/[^`\s]+\.md)`")
+CODE_PATH_RE = re.compile(r"`((?:docs|backend|frontend|scripts)/[^`\s]+\.md)`")
 
 
 def path_exists(path: Path) -> bool:

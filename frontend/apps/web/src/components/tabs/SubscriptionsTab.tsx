@@ -75,6 +75,7 @@ import {
   Square,
   ChevronRight,
   Activity,
+  Wand2,
 } from 'lucide-react'
 import {
   buildFeedFetchQueueSummary,
@@ -1565,54 +1566,88 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
 
       {!isLoading && !error && items.length > 0 && (
         <div className="space-y-2">
-          {items.map((entry: EntryWithState) => (
-            <div
-              key={entry.id}
-              className="flex items-start justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-background/80"
-            >
-              <div className="min-w-0 flex-1">
-                <p className="line-clamp-2 text-sm font-medium">
-                  {translatedTitles[entry.id] || entry.title}
-                </p>
-                {getEntryPreviewText(entry.summary) && (
-                  <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
-                    {getEntryPreviewText(entry.summary)}
+          {items.map((entry: EntryWithState) => {
+            const previewText = getEntryPreviewText(entry.summary)
+            const backfillMeta = getBackfillStatusMeta(entry, t)
+
+            return (
+              <div
+                key={entry.id}
+                className="flex items-start justify-between gap-3 rounded-md px-2 py-2 transition-colors hover:bg-background/80"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="line-clamp-2 text-sm font-medium">
+                    {translatedTitles[entry.id] || entry.title}
                   </p>
-                )}
-                <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span>{entry.author || t('manageFeeds.unknownAuthor')}</span>
-                  <span>•</span>
-                  <span>{formatEntryDate(entry.published_at || entry.created_at)}</span>
-                  {!entry.is_read && (
-                    <>
-                      <span>•</span>
-                      <span>{t('manageFeeds.unread')}</span>
-                    </>
+                  {previewText && (
+                    <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+                      {previewText}
+                    </p>
+                  )}
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span>{entry.author || t('manageFeeds.unknownAuthor')}</span>
+                    <span>•</span>
+                    <span>{formatEntryDate(entry.published_at || entry.created_at)}</span>
+                    {!entry.is_read && (
+                      <>
+                        <span>•</span>
+                        <span>{t('manageFeeds.unread')}</span>
+                      </>
+                    )}
+                  </div>
+                  {backfillMeta && (
+                    <div className="mt-2 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span
+                          className={cn(
+                            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
+                            backfillMeta.toneClass
+                          )}
+                        >
+                          <Wand2 className="h-3 w-3" />
+                          {backfillMeta.label}
+                        </span>
+                        {typeof entry.content_backfill_attempts === 'number' && (
+                          <span className="text-muted-foreground">
+                            {t('manageFeeds.contentBackfill.attempts', {
+                              count: entry.content_backfill_attempts,
+                            })}
+                          </span>
+                        )}
+                      </div>
+                      {entry.content_backfill_status === 'failed' && entry.content_backfill_error && (
+                        <p className="break-words text-xs leading-5 text-destructive">
+                          {t('manageFeeds.contentBackfill.errorLog', {
+                            message: entry.content_backfill_error,
+                          })}
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setPreviewEntry(entry)}
+                    title={t('manageFeeds.previewArticleDetails')}
+                    className={ICON_BUTTON_CLASS}
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => window.open(entry.url || feedUrl, '_blank')}
+                    title={t('manageFeeds.openArticle')}
+                    className={ICON_BUTTON_CLASS}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
-              <div className="flex shrink-0 items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => setPreviewEntry(entry)}
-                  title={t('manageFeeds.previewArticleDetails')}
-                  className={ICON_BUTTON_CLASS}
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => window.open(entry.url || feedUrl, '_blank')}
-                  title={t('manageFeeds.openArticle')}
-                  className={ICON_BUTTON_CLASS}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       )}
 
@@ -1658,6 +1693,41 @@ function RecentEntriesPreview({ feedId, feedUrl }: { feedId: string; feedUrl: st
 
 function formatEntryDate(value: string) {
   return new Date(value).toLocaleString()
+}
+
+function getBackfillStatusMeta(
+  entry: Pick<EntryWithState, 'content_backfill_status'>,
+  t: ReturnType<typeof useTranslation>['t']
+) {
+  switch (entry.content_backfill_status) {
+    case 'pending':
+      return {
+        label: t('manageFeeds.contentBackfill.pending'),
+        toneClass: 'bg-amber-500/10 text-amber-700',
+      }
+    case 'processing':
+      return {
+        label: t('manageFeeds.contentBackfill.processing'),
+        toneClass: 'bg-primary/12 text-primary',
+      }
+    case 'done':
+      return {
+        label: t('manageFeeds.contentBackfill.done'),
+        toneClass: 'bg-emerald-500/10 text-emerald-700',
+      }
+    case 'failed':
+      return {
+        label: t('manageFeeds.contentBackfill.failed'),
+        toneClass: 'bg-destructive/10 text-destructive',
+      }
+    case 'skipped':
+      return {
+        label: t('manageFeeds.contentBackfill.skipped'),
+        toneClass: 'bg-muted text-muted-foreground',
+      }
+    default:
+      return null
+  }
 }
 
 function getEntryPreviewText(summary: string | null, content?: string | null) {

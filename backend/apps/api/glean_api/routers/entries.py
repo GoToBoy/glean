@@ -294,8 +294,12 @@ async def translate_texts(
     translated_new: list[str] = []
     if to_translate:
         provider_name = "google"
-        if isinstance(current_user.settings, dict):
-            configured_provider = current_user.settings.get("translation_provider")
+        if current_user.settings:
+            if isinstance(current_user.settings, dict):
+                configured_provider = current_user.settings.get("translation_provider")
+            else:
+                configured_provider = getattr(current_user.settings, "translation_provider", None)
+
             if isinstance(configured_provider, str) and configured_provider.strip():
                 provider_name = configured_provider.strip()
         provider = create_translation_provider(current_user.settings)

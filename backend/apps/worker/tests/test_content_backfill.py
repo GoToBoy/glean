@@ -5,11 +5,51 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from glean_worker.tasks.content_backfill import backfill_entry_content_task
+from glean_worker.tasks.content_backfill import backfill_entry_content_task, enqueue_feed_content_backfill
 
 
 class TestBackfillEntryContentTask:
     """Test single-entry content backfill behavior."""
+
+    @pytest.mark.asyncio
+    async def test_rsshub_entry_backfill_job_is_skipped_without_extraction(self):
+        """Stale queued jobs for RSSHub entries should not run full-text extraction."""
+        mock_entry = MagicMock()
+        mock_entry.id = "entry-rsshub"
+        mock_entry.url = "https://example.com/article"
+        mock_entry.content_backfill_status = "processing"
+        mock_entry.content_backfill_attempts = 2
+        mock_entry.content_backfill_error = "old_error"
+        mock_entry.__dict__["feed"] = MagicMock(source_type="rsshub")
+
+        entry_result = MagicMock()
+        entry_result.scalar_one_or_none.return_value = mock_entry
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=entry_result)
+
+        extract_mock = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx,
+            patch(
+                "glean_worker.tasks.content_backfill.extract_entry_content_update",
+                new=extract_mock,
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await backfill_entry_content_task({"redis": AsyncMock()}, "entry-rsshub")
+
+        assert result == {
+            "status": "skipped",
+            "entry_id": "entry-rsshub",
+            "reason": "rsshub_source",
+        }
+        assert mock_entry.content_backfill_status == "skipped"
+        assert mock_entry.content_backfill_attempts == 0
+        assert mock_entry.content_backfill_error is None
+        extract_mock.assert_not_awaited()
+        mock_session.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_successful_backfill_updates_entry_and_invalidates_translations(self):
@@ -83,6 +123,7 @@ class TestBackfillEntryContentTask:
         mock_entry.content_source = None
         mock_entry.content_backfill_status = "pending"
         mock_entry.content_backfill_attempts = 0
+        mock_entry.__dict__["feed"] = MagicMock(source_type="feed")
 
         entry_result = MagicMock()
         entry_result.scalar_one_or_none.return_value = mock_entry
@@ -120,6 +161,7 @@ class TestBackfillEntryContentTask:
         mock_entry.content_source = "feed_summary_only"
         mock_entry.content_backfill_status = "pending"
         mock_entry.content_backfill_attempts = 0
+        mock_entry.__dict__["feed"] = MagicMock(source_type="feed")
 
         entry_result = MagicMock()
         entry_result.scalar_one_or_none.return_value = mock_entry
@@ -164,6 +206,7 @@ class TestBackfillEntryContentTask:
         mock_entry.embedding_status = "done"
         mock_entry.embedding_error = None
         mock_entry.embedding_at = object()
+        mock_entry.__dict__["feed"] = MagicMock(source_type="feed")
 
         entry_result = MagicMock()
         entry_result.scalar_one_or_none.return_value = mock_entry
@@ -207,3 +250,36 @@ class TestBackfillEntryContentTask:
         assert result["status"] == "skipped"
         assert result["reason"] == "duplicate_entry_conflict"
         assert result["entry_id"] == "entry-3"
+
+
+class TestEnqueueFeedContentBackfill:
+    """Test feed-level content backfill enqueue behavior."""
+
+    @pytest.mark.asyncio
+    async def test_rsshub_feed_backfill_enqueue_is_skipped(self):
+        """RSSHub feeds should not enqueue article full-text backfill jobs."""
+        feed_result = MagicMock()
+        feed_result.scalar_one_or_none.return_value = "rsshub"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(return_value=feed_result)
+
+        mock_redis = AsyncMock()
+
+        with patch("glean_worker.tasks.content_backfill.get_session_context") as mock_ctx:
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await enqueue_feed_content_backfill(
+                {"redis": mock_redis},
+                "feed-rsshub",
+                force=True,
+            )
+
+        assert result == {
+            "feed_id": "feed-rsshub",
+            "matched": 0,
+            "enqueued": 0,
+            "entry_ids": [],
+            "skipped": True,
+            "reason": "rsshub_source",
+        }
+        mock_redis.enqueue_job.assert_not_awaited()

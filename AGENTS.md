@@ -54,26 +54,30 @@ Before changing feed fetch, queue, scheduler, or worker progress behavior, read:
 
 Before changing deployment or local runtime workflows, read:
 
+- `docs/operations/local-runtime-modes.md`
 - `docs/operations/personal-deployment-guide.md`
-- `docs/operations/local-harness.md`
+- `DEVELOPMENT.md`
 
-## Local Runtime Harness
+## Local Runtime Workflow
 
-Prefer the local harness over ad hoc command sequences when booting and inspecting the app locally.
+Default to Mode A from `docs/operations/local-runtime-modes.md`: Docker for infra, host processes for app code.
+
+Use Mode B only when you explicitly want a clean full-stack Docker verification run.
+Use Mode C only when you want deployment-like packaged-image behavior.
 
 Primary commands:
 
-- `python3 -m harness up`
-- `python3 -m harness down`
-- `python3 -m harness status`
-- `python3 -m harness health`
-- `python3 -m harness logs <service>`
-- `python3 -m harness logs <service> --errors`
-- `python3 -m harness doctor`
-- `python3 -m harness snapshot`
-- `python3 -m harness instances`
-
-Thin Make wrappers are documented in `docs/operations/local-harness.md`.
+- `make up`
+- `make db-upgrade`
+- `make down`
+- `make logs`
+- `make api`
+- `make worker`
+- `make web`
+- `make admin`
+- `make dev-all`
+- `make test`
+- `make lint`
 
 ## Repository Conventions
 

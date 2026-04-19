@@ -116,9 +116,10 @@ async def create_admin(username: str, password: str, role: str, force: bool = Fa
             admin = await service.create_admin_user(
                 username=username, password=hashed_password, role=admin_role
             )
+            role_value = admin.role.value if hasattr(admin.role, "value") else str(admin.role)
             print("✅ Admin user created successfully!")
             print(f"   Username: {admin.username}")
-            print(f"   Role: {admin.role.value}")
+            print(f"   Role: {role_value}")
             print(f"   ID: {admin.id}")
             return True
         except Exception as e:

@@ -7,7 +7,7 @@ This directory is the repository knowledge system of record.
 - [Architecture](./architecture/index.md)
   - system maps, runtime flow, and domain-specific invariants
 - [Operations](./operations/index.md)
-  - deployment, runtime operations, guardrails, and local harness usage
+  - deployment, runtime operations, guardrails, and local development workflows
 - [Agent Workflows](./agent-workflows/index.md)
   - planner/generator/evaluator loop, low-risk direct edits, and review artifacts
 - [Product](./product/index.md)

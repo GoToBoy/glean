@@ -26,7 +26,6 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 - **Interactive Reading**: Support for keyboard navigation (j/k), inline original article view with iframe fallback, and cross-device list anchor persistence.
 - Optimized reader experience with zero-jitter read status synchronization and automatic scroll reset on article switch.
 - Admin dashboard with feed operations, retry/reset actions, batch management, and user administration.
-- **Local Harness CLI**: Integrated `python3 -m harness` toolkit for simplified local development, health checks, and service orchestration.
 - PostgreSQL + `pgvector` vector storage. This fork no longer depends on Milvus.
 
 ## Why This Fork Uses Its Own Primary Branch
@@ -60,11 +59,11 @@ curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/docker-
 # Optional: download the example env file from this branch
 curl -fsSL https://raw.githubusercontent.com/GoToBoy/glean/personal-main/.env.example -o .env
 
+# Optional: point Dockerized backend/worker at an external MTranServer
+# Example: MTRAN_SERVER_URL=http://192.168.31.19:8989
+
 # Start Glean
 docker compose up -d
-
-# Optional: enable local MTranServer for translation
-docker compose --profile mtran up -d
 ```
 
 Access:
@@ -95,7 +94,6 @@ Default services:
 - `worker` - background jobs for feed fetch, browser-based full-text extraction, cleanup, translation, embeddings
 - `web` - main reader UI
 - `admin` - admin dashboard
-- `mtranserver` - optional translation service, enabled via `--profile mtran`
 
 Prebuilt images are available on GHCR:
 
@@ -119,7 +117,7 @@ Important environment variables:
 | `WEB_PORT` | Web UI port | `80` |
 | `ADMIN_PORT` | Admin UI port | `3001` |
 | `IMAGE_TAG` | Docker image tag | `latest` |
-| `MTRAN_SERVER_URL` | Backend/worker translation endpoint | `http://mtranserver:8989` |
+| `MTRAN_SERVER_URL` | External translation endpoint reachable from backend/worker containers | unset |
 | `WORKER_JOB_TIMEOUT_SECONDS` | Worker timeout for long-running jobs | `1800` |
 | `WORKER_MAX_JOBS` | Max concurrent arq jobs in the worker | `4` |
 | `FEED_REFRESH_INTERVAL_MINUTES` | Scheduled feed refresh interval and default `next_fetch_at` delay | `720` |
@@ -142,7 +140,7 @@ Performance note for Docker deployments:
 
 - Auto-translate non-Chinese content into Chinese.
 - Sentence/paragraph-aware bilingual rendering with persisted cache.
-- Configurable translation providers, including MTranServer and remote-provider setups.
+- Configurable translation providers, including external MTranServer deployments and remote-provider setups.
 - Improved mobile reader navigation, list restore, and reduced duplicate translation work.
 
 ### Feeds and Discovery
@@ -157,7 +155,7 @@ Performance note for Docker deployments:
 - Feed-level refresh controls plus refresh-all / retry-errored actions.
 - Batch operations in the admin feed list.
 - User management, password reset, and subscription import workflows.
-- Docker-oriented deployment with branch-specific compose files and optional MTran profile.
+- Docker-oriented deployment with branch-specific compose files and support for external translation services.
 
 ## Tech Stack
 
@@ -175,6 +173,13 @@ Performance note for Docker deployments:
 ## Development
 
 See [DEVELOPMENT.md](./DEVELOPMENT.md) for the full setup.
+For the runtime-mode split and Docker guidance, see [docs/operations/local-runtime-modes.md](./docs/operations/local-runtime-modes.md).
+
+Recommended local modes:
+
+- Mode A: daily development. Docker runs only `postgres` and `redis`; the host runs `api`, `worker`, `web`, and `admin`.
+- Mode B: clean local verification. Docker runs the full stack from local builds.
+- Mode C: deployment-like compose run. Docker runs the packaged images from `docker-compose.yml`.
 
 Quick start:
 
@@ -183,17 +188,39 @@ git clone https://github.com/GoToBoy/glean.git
 cd glean
 npm install
 
-# Start infra
+# Install backend and frontend dependencies
+make install-backend
+make install-frontend
+
+# Start infra only
 make up
 
-# Run migrations
+# Create database schema
 make db-upgrade
+
+# Create or reset the local admin account
+cd backend && uv run python scripts/create-admin.py --username admin --password 'Admin123!' --role super_admin --force
 
 # Start all dev services
 make dev-all
 
-# Preferred local orchestration entrypoint
-python3 -m harness up
+# Or run services individually in separate terminals
+make api
+make worker
+make web
+make admin
+```
+
+Initialization notes:
+
+- `make up` starts only `postgres` and `redis`
+- the project is not fully initialized until migrations have run
+- `admin / Admin123!` is only expected to work after the admin creation script completes
+
+Clean full-stack Docker verification:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 Development endpoints:
@@ -208,7 +235,7 @@ Development endpoints:
 - [docs/references/branch-delta.md](./docs/references/branch-delta.md) - summary of what `personal-main` adds over upstream `main`
 - [docs/product/feature-change-log.md](./docs/product/feature-change-log.md) - feature-level change log
 - [docs/product/rss-browser-extraction-plan.md](./docs/product/rss-browser-extraction-plan.md) - browser fallback plan for blocked RSS article pages
-- [docs/operations/local-harness.md](./docs/operations/local-harness.md) - local harness commands and runtime model
+- [docs/operations/local-runtime-modes.md](./docs/operations/local-runtime-modes.md) - recommended local Docker and host runtime split
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - local development guide
 
 ## Contributing

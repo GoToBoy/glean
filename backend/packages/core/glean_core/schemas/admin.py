@@ -109,6 +109,7 @@ class AdminFeedListItem(BaseModel):
     id: str
     url: str
     title: str
+    source_type: str = "feed"
     status: str
     subscriber_count: int = 0
     last_fetch_attempt_at: datetime | None
@@ -201,6 +202,10 @@ class AdminEntryListItem(BaseModel):
     url: str
     title: str
     author: str | None
+    content_backfill_status: str | None = None
+    content_backfill_attempts: int = 0
+    content_backfill_error: str | None = None
+    content_source: str | None = None
     published_at: datetime | None
     created_at: datetime
 

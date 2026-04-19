@@ -137,8 +137,8 @@ def _is_rsshub_url(url: str | None) -> bool:
 
 
 def _feed_uses_rsshub(feed: Feed) -> bool:
-    """Return True when the feed's primary source is RSSHub-backed."""
-    return _is_rsshub_url(getattr(feed, "url", None))
+    """Return True when the feed was explicitly created as an RSSHub source."""
+    return getattr(feed, "source_type", None) == "rsshub"
 
 
 def _rsshub_retry_delay_minutes(failure_count: int) -> int:
@@ -574,6 +574,7 @@ async def fetch_feed_task(
                 )
             if _feed_uses_rsshub(feed):
                 await _close_rsshub_circuit(ctx.get("redis"))
+            uses_rsshub_subscription_source = _feed_uses_rsshub(feed)
 
             # Update feed metadata
             feed.title = parsed_feed.title or feed.title
@@ -626,7 +627,13 @@ async def fetch_feed_task(
                 content_source = "feed_fulltext" if parsed_entry.has_full_content else "feed_summary_only"
                 if not parsed_entry.has_full_content:
                     run_summary["summary_only_count"] += 1
-                content_backfill_status = "done" if parsed_entry.has_full_content else "pending"
+                content_backfill_status = (
+                    "done"
+                    if parsed_entry.has_full_content
+                    else "skipped"
+                    if uses_rsshub_subscription_source
+                    else "pending"
+                )
                 content_backfill_attempts = 0
                 content_backfill_error = None
                 content_backfill_at = None
@@ -666,7 +673,13 @@ async def fetch_feed_task(
                 inserted_entry_id = insert_result.scalar_one_or_none()
 
                 if not inserted_entry_id:
-                    if backfill_existing_entries and guid and parsed_entry.url and "redis" in ctx:
+                    if (
+                        not uses_rsshub_subscription_source
+                        and backfill_existing_entries
+                        and guid
+                        and parsed_entry.url
+                        and "redis" in ctx
+                    ):
                         existing_entry_result = await session.execute(
                             select(Entry)
                             .where(Entry.feed_id == feed.id, Entry.guid == guid)
@@ -687,12 +700,16 @@ async def fetch_feed_task(
                 pending_inserts_since_commit += 1
                 run_summary["new_entries"] = new_entries
 
-                requires_content_backfill = should_backfill_entry(
-                    content=entry_content,
-                    summary=parsed_entry.summary,
-                    content_source=content_source,
-                    content_backfill_status=content_backfill_status,
-                    force=False,
+                requires_content_backfill = (
+                    False
+                    if uses_rsshub_subscription_source
+                    else should_backfill_entry(
+                        content=entry_content,
+                        summary=parsed_entry.summary,
+                        content_source=content_source,
+                        content_backfill_status=content_backfill_status,
+                        force=False,
+                    )
                 )
                 if (
                     requires_content_backfill

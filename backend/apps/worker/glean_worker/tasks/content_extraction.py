@@ -73,7 +73,11 @@ async def extract_entry_content_update(url: str) -> EntryContentUpdate:
     """Fetch full text for one entry URL and normalize the source label."""
     result = await fetch_and_extract_fulltext(url)
     if not result or not result.content:
-        return EntryContentUpdate(content=None, source=None, error="empty_extraction")
+        return EntryContentUpdate(
+            content=None,
+            source=None,
+            error=(result.error_reason if result else None) or "empty_extraction",
+        )
 
     source = "backfill_browser" if result.used_browser else "backfill_http"
     return EntryContentUpdate(content=result.content, source=source)

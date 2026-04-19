@@ -106,10 +106,14 @@ Do not modify these areas based only on surface UI symptoms. Preserve the docume
 ## Quick Start
 
 ```bash
-# Start infrastructure (PostgreSQL + Redis + Milvus)
+# Default daily development mode:
+# Docker for infrastructure, host machine for application processes
 make up
 
-# Start all services (API + Worker + Web)
+# Apply migrations
+make db-upgrade
+
+# Start all services (API + Worker + Web + Admin)
 make dev-all
 
 # Or run services individually
@@ -121,6 +125,7 @@ make electron        # Electron desktop app
 ```
 
 For detailed deployment instructions, see [DEPLOY.md](DEPLOY.md).
+For the current local runtime split, see [docs/operations/local-runtime-modes.md](docs/operations/local-runtime-modes.md).
 
 ## Docker Compose Configuration
 
@@ -146,7 +151,7 @@ IMAGE_TAG=v0.3.0-alpha.1 docker compose up -d
 ### Development Environment
 
 ```bash
-# Start development infrastructure (PostgreSQL, Redis, Milvus)
+# Mode A: start development infrastructure only
 docker compose -f docker-compose.dev.yml up -d
 
 # View logs
@@ -159,8 +164,8 @@ docker compose -f docker-compose.dev.yml down
 ### Local Development with Override
 
 ```bash
-# Use local builds instead of Docker images
-docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+# Mode B: use local builds for a cleaner full-stack verification run
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 ```
 
 ### Test Environment

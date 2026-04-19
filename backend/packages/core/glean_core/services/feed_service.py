@@ -23,6 +23,7 @@ from glean_database.models import (
     Bookmark,
     Entry,
     Feed,
+    FeedSourceType,
     Subscription,
     UserEntry,
     UserPreferenceStats,
@@ -333,6 +334,7 @@ class FeedService:
         feed_title: str | None = None,
         folder_id: str | None = None,
         rsshub_path: str | None = None,
+        source_type: FeedSourceType | str | None = None,
     ) -> SubscriptionResponse:
         """
         Create a new subscription.
@@ -343,6 +345,7 @@ class FeedService:
             feed_title: Optional feed title (if None, uses URL as title).
             folder_id: Optional folder to place the subscription in.
             rsshub_path: Optional RSSHub path. If provided, overrides feed_url.
+            source_type: Optional explicit feed source type for discovered fallback cases.
 
         Returns:
             Subscription response.
@@ -350,6 +353,8 @@ class FeedService:
         Raises:
             ValueError: If subscription already exists.
         """
+        source_type_value = source_type or (FeedSourceType.RSSHUB if rsshub_path else FeedSourceType.FEED)
+        resolved_source_type = FeedSourceType(source_type_value)
         if rsshub_path:
             feed_url = await self._build_rsshub_feed_url(rsshub_path)
         elif not feed_url:
@@ -363,9 +368,16 @@ class FeedService:
         if not feed:
             # Create new feed
             title = feed_title if feed_title else feed_url
-            feed = Feed(url=feed_url, title=title, status="active")
+            feed = Feed(
+                url=feed_url,
+                title=title,
+                status="active",
+                source_type=resolved_source_type,
+            )
             self.session.add(feed)
             await self.session.flush()
+        elif resolved_source_type == FeedSourceType.RSSHUB:
+            feed.source_type = FeedSourceType.RSSHUB
 
         # Check if subscription already exists
         stmt = select(Subscription).where(
@@ -556,11 +568,15 @@ class FeedService:
 
         # Update feed URL if provided
         resolved_feed_url = feed_url
+        source_type = FeedSourceType.FEED if feed_url else None
         if rsshub_path:
             resolved_feed_url = await self._build_rsshub_feed_url(rsshub_path)
+            source_type = FeedSourceType.RSSHUB
 
         if resolved_feed_url and subscription.feed:
             subscription.feed.url = resolved_feed_url
+            if source_type is not None:
+                subscription.feed.source_type = source_type
 
         await self.session.commit()
 

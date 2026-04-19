@@ -136,7 +136,17 @@
     "deleting": "Deleting...",
     "loading": "Loading...",
     "noContent": "No content available",
-    "viewOriginal": "View Original Article"
+    "viewOriginal": "View Original Article",
+    "contentBackfill": {
+      "pending": "Needs content fill",
+      "processing": "Filling article content",
+      "done": "Content filled",
+      "failed": "Content fill failed",
+      "skipped": "Content fill skipped",
+      "attempts": "Attempts: {{count}}",
+      "source": "Source: {{source}}",
+      "errorLog": "Error log: {{message}}"
+    }
   },
   "feeds": {
     "feedErrorTitle": "Feed Error",

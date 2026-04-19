@@ -7,7 +7,7 @@ Parses RSS and Atom feeds using feedparser.
 import html
 from datetime import UTC, datetime
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 import feedparser
 from bs4 import BeautifulSoup
@@ -82,7 +82,7 @@ class ParsedFeed:
     icon_url: str | None
     entries: list["ParsedEntry"]
 
-    def __init__(self, data: FeedParserDict):
+    def __init__(self, data: FeedParserDict, feed_url: str):
         """
         Initialize from feedparser data.
 
@@ -102,21 +102,24 @@ class ParsedFeed:
 
         # Get entries with proper type handling
         entries_data: list[dict[str, Any]] = list(data.get("entries", []))  # type: ignore[arg-type]
-        self.entries = [ParsedEntry(entry) for entry in entries_data]
+        entry_base_url = self.site_url or feed_url
+        self.entries = [ParsedEntry(entry, base_url=entry_base_url) for entry in entries_data]
 
 
 class ParsedEntry:
     """Parsed entry data."""
 
-    def __init__(self, data: dict[str, Any]):
+    def __init__(self, data: dict[str, Any], base_url: str | None = None):
         """
         Initialize from feedparser entry data.
 
         Args:
             data: Entry data from feedparser.
         """
-        self.guid = data.get("id") or data.get("link", "")
-        self.url = data.get("link", "")
+        raw_guid = str(data.get("id") or data.get("link", ""))
+        raw_url = str(data.get("link", ""))
+        self.guid = _resolve_entry_url(raw_guid, base_url)
+        self.url = _resolve_entry_url(raw_url, base_url)
         # Decode HTML entities in title
         raw_title = data.get("title", "")
         self.title = html.unescape(raw_title) if raw_title else ""
@@ -168,4 +171,13 @@ async def parse_feed(content: str, url: str) -> ParsedFeed:
         # Feed has errors and no entries
         raise ValueError(f"Failed to parse feed: {data.get('bozo_exception', 'Unknown error')}")
 
-    return ParsedFeed(data)
+    return ParsedFeed(data, feed_url=url)
+
+
+def _resolve_entry_url(value: str, base_url: str | None) -> str:
+    """Resolve relative feed entry URLs against the best available feed base URL."""
+    if not value:
+        return ""
+    if not base_url:
+        return value
+    return urljoin(base_url, value)

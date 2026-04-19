@@ -1,0 +1,5 @@
+# This directory is a Syncthing folder marker.
+# Do not delete.
+
+folderID: rdtcb-irhvq
+created: 2026-04-18T08:54:36-07:00

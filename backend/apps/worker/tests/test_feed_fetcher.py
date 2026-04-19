@@ -87,6 +87,7 @@ class TestFetchFeedTask:
         mock_feed.error_count = 0
         mock_feed.fetch_error_message = None
         mock_feed.last_entry_at = None
+        mock_feed.source_type = "feed"
         mock_feed.title = "Old title"
         mock_feed.description = ""
         mock_feed.language = None
@@ -404,6 +405,7 @@ class TestFetchFeedTaskProgress:
         mock_feed.error_count = 0
         mock_feed.fetch_error_message = None
         mock_feed.last_entry_at = None
+        mock_feed.source_type = "feed"
         mock_feed.title = "Old title"
         mock_feed.description = ""
         mock_feed.language = None
@@ -464,6 +466,150 @@ class TestFetchFeedTaskProgress:
         )
 
     @pytest.mark.asyncio
+    async def test_rsshub_summary_only_entry_skips_content_backfill_for_new_entry(self):
+        """RSSHub entries should not enqueue full-text extraction for summary-only content."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "http://192.168.31.19:46169/twitter/user/openai"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+        mock_feed.source_type = "rsshub"
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://x.com/openai/status/1"
+        entry.title = "OpenAI on X"
+        entry.author = None
+        entry.content = "<p>short social update</p>"
+        entry.summary = "short social update"
+        entry.published_at = None
+        entry.has_full_content = False
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "OpenAI on X"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://x.com/openai"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = "entry-1"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_feed_result, mock_insert_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        mock_redis = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch(
+                "glean_worker.tasks.feed_fetcher.fetch_feed",
+                new=AsyncMock(return_value=("<xml />", {})),
+            ),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await fetch_feed_task({"redis": mock_redis}, feed_id="feed-1")
+
+        assert result["status"] == "success"
+        assert result["new_entries"] == 1
+        mock_redis.enqueue_job.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rsshub_route_url_with_feed_source_type_still_queues_backfill(self):
+        """RSSHub-looking URLs only skip backfill when the stored feed source type is rsshub."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "http://192.168.31.19:46169/twitter/user/openai"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+        mock_feed.source_type = "feed"
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://x.com/openai/status/1"
+        entry.title = "OpenAI on X"
+        entry.author = None
+        entry.content = "<p>short social update</p>"
+        entry.summary = "short social update"
+        entry.published_at = None
+        entry.has_full_content = False
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "OpenAI on X"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://x.com/openai"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = "entry-1"
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_feed_result, mock_insert_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        mock_redis = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch(
+                "glean_worker.tasks.feed_fetcher.fetch_feed",
+                new=AsyncMock(return_value=("<xml />", {})),
+            ),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await fetch_feed_task({"redis": mock_redis}, feed_id="feed-1")
+
+        assert result["status"] == "success"
+        assert result["new_entries"] == 1
+        mock_redis.enqueue_job.assert_any_await(
+            "backfill_entry_content_task", "entry-1", force=False
+        )
+
+    @pytest.mark.asyncio
     async def test_summary_only_entry_without_redis_skips_sync_extraction(self):
         """The main fetch path should not block on extraction even without a Redis client."""
         mock_feed = MagicMock()
@@ -480,6 +626,7 @@ class TestFetchFeedTaskProgress:
         mock_feed.description = ""
         mock_feed.language = None
         mock_feed.icon_url = None
+        mock_feed.source_type = "rsshub"
 
         entry = MagicMock()
         entry.guid = "entry-1"
@@ -609,6 +756,76 @@ class TestFetchFeedTaskProgress:
         mock_redis.enqueue_job.assert_awaited_once_with(
             "backfill_entry_content_task", "existing-entry-1", force=False
         )
+
+    @pytest.mark.asyncio
+    async def test_manual_refresh_skips_backfill_for_existing_rsshub_summary_only_entry(self):
+        """RSSHub manual refresh should not backfill duplicate teaser-only entries."""
+        mock_feed = MagicMock()
+        mock_feed.id = "feed-1"
+        mock_feed.url = "http://192.168.31.19:46169/twitter/user/openai"
+        mock_feed.site_url = None
+        mock_feed.etag = None
+        mock_feed.last_modified = None
+        mock_feed.status = FeedStatus.ACTIVE
+        mock_feed.error_count = 0
+        mock_feed.fetch_error_message = None
+        mock_feed.last_entry_at = None
+        mock_feed.title = "Old title"
+        mock_feed.description = ""
+        mock_feed.language = None
+        mock_feed.icon_url = None
+        mock_feed.source_type = "rsshub"
+
+        entry = MagicMock()
+        entry.guid = "entry-1"
+        entry.url = "https://x.com/openai/status/1"
+        entry.title = "OpenAI on X"
+        entry.author = None
+        entry.content = "<p>short social update</p>"
+        entry.summary = "short social update"
+        entry.published_at = None
+        entry.has_full_content = False
+
+        parsed_feed = MagicMock()
+        parsed_feed.title = "OpenAI on X"
+        parsed_feed.description = ""
+        parsed_feed.site_url = "https://x.com/openai"
+        parsed_feed.language = "en"
+        parsed_feed.icon_url = None
+        parsed_feed.entries = [entry]
+
+        mock_feed_result = MagicMock()
+        mock_feed_result.scalar_one_or_none.return_value = mock_feed
+
+        mock_insert_result = MagicMock()
+        mock_insert_result.scalar_one_or_none.return_value = None
+
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=[mock_feed_result, mock_insert_result])
+
+        mock_rsshub_service = MagicMock()
+        mock_rsshub_service.convert_for_fetch = AsyncMock(return_value=[])
+        mock_redis = AsyncMock()
+
+        with (
+            patch("glean_worker.tasks.feed_fetcher.get_session_context") as mock_ctx,
+            patch("glean_worker.tasks.feed_fetcher.RSSHubService", return_value=mock_rsshub_service),
+            patch("glean_worker.tasks.feed_fetcher.fetch_feed", new=AsyncMock(return_value=("<xml />", {}))),
+            patch("glean_worker.tasks.feed_fetcher.parse_feed", new=AsyncMock(return_value=parsed_feed)),
+            patch("glean_worker.tasks.feed_fetcher._is_vectorization_enabled", new=AsyncMock(return_value=False)),
+            patch(
+                "glean_worker.tasks.feed_fetcher.find_active_feed_fetch_run",
+                new=AsyncMock(return_value=None),
+            ),
+        ):
+            mock_ctx.return_value.__aenter__.return_value = mock_session
+            result = await fetch_feed_task(
+                {"redis": mock_redis}, feed_id="feed-1", backfill_existing_entries=True
+            )
+
+        assert result["status"] == "success"
+        assert result["new_entries"] == 0
+        mock_redis.enqueue_job.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_manual_refresh_tolerates_duplicate_existing_guid_rows(self):
@@ -895,6 +1112,7 @@ class TestFetchFeedTaskProgress:
         mock_feed.error_count = 4
         mock_feed.fetch_error_message = None
         mock_feed.last_entry_at = None
+        mock_feed.source_type = "rsshub"
 
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = mock_feed

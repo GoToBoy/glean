@@ -3,6 +3,7 @@
 import json
 from typing import Any
 
+from glean_core.schemas.user import UserSettings
 from glean_core.services.translation_providers import (
     DEFAULT_MTRAN_SERVER_URL,
     FallbackProvider,
@@ -101,6 +102,27 @@ def test_create_provider_returns_mtran() -> None:
     assert provider.primary.base_url == "http://localhost:8080"
     assert provider.primary.api_key == "token-123"
     assert provider.primary.model == "mtran-large"
+
+
+def test_create_provider_accepts_user_settings_model() -> None:
+    from unittest.mock import patch
+
+    with patch(
+        "glean_core.services.translation_providers._is_mtran_available",
+        return_value=True,
+    ):
+        provider = create_translation_provider(
+            UserSettings(
+                translation_provider="mtran",
+                translation_base_url="http://localhost:8080",
+                translation_api_key="token-123",
+                translation_model="mtran-large",
+            )
+        )
+
+    assert isinstance(provider, FallbackProvider)
+    assert isinstance(provider.primary, MTranProvider)
+    assert provider.primary.base_url == "http://localhost:8080"
 
 
 def test_create_provider_falls_back_when_mtran_unavailable() -> None:
@@ -257,11 +279,11 @@ def test_mtran_batch_chunks_large_payloads(monkeypatch) -> None:  # type: ignore
     assert [len(call[1]["json"]["texts"]) for call in fake_client.calls] == [24, 6]
 
 
-def test_mtran_default_url_uses_container_port() -> None:
+def test_mtran_default_url_uses_localhost_fallback() -> None:
     provider = MTranProvider()
 
-    assert DEFAULT_MTRAN_SERVER_URL == "http://mtranserver:8989"
-    assert provider.base_url == "http://mtranserver:8989"
+    assert DEFAULT_MTRAN_SERVER_URL == "http://127.0.0.1:8989"
+    assert provider.base_url == "http://127.0.0.1:8989"
 
 
 def test_parse_openai_batch_response_numbered() -> None:

@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
 from glean_core.services import TypedConfigService
-from glean_database.models import Entry
+from glean_database.models import Entry, Feed
 from glean_database.models.entry_translation import EntryTranslation
 from glean_database.session import get_session_context
 
@@ -21,6 +21,30 @@ from .content_extraction import (
 )
 
 logger = get_logger(__name__)
+
+
+async def _entry_uses_rsshub_source(session, entry: Entry) -> bool:
+    """Return True when the entry belongs to an explicitly RSSHub-backed feed."""
+    loaded_feed = getattr(entry, "__dict__", {}).get("feed")
+    if getattr(loaded_feed, "source_type", None) == "rsshub":
+        return True
+    if getattr(loaded_feed, "source_type", None) == "feed":
+        return False
+
+    feed_id = getattr(entry, "feed_id", None)
+    if not isinstance(feed_id, str) or not feed_id:
+        return False
+
+    result = await session.execute(select(Feed.source_type).where(Feed.id == feed_id))
+    return result.scalar_one_or_none() == "rsshub"
+
+
+def _feed_source_type_value(source_type: Any) -> str | None:
+    """Normalize enum/string feed source types for comparisons."""
+    if isinstance(source_type, str):
+        return source_type
+    value = getattr(source_type, "value", None)
+    return value if isinstance(value, str) else None
 
 
 def _is_duplicate_feed_guid_error(error: Exception) -> bool:
@@ -64,6 +88,21 @@ async def enqueue_feed_content_backfill(
 ) -> dict[str, Any]:
     """Select feed entries for content backfill and enqueue one job per entry."""
     async with get_session_context() as session:
+        feed_result = await session.execute(select(Feed.source_type).where(Feed.id == feed_id))
+        if _feed_source_type_value(feed_result.scalar_one_or_none()) == "rsshub":
+            logger.info(
+                "Skipped content backfill enqueue for RSSHub feed",
+                extra={"feed_id": feed_id, "force": force, "missing_only": missing_only},
+            )
+            return {
+                "feed_id": feed_id,
+                "matched": 0,
+                "enqueued": 0,
+                "entry_ids": [],
+                "skipped": True,
+                "reason": "rsshub_source",
+            }
+
         stmt = select(Entry).where(Entry.feed_id == feed_id)
         if published_after is not None:
             stmt = stmt.where(Entry.published_at >= published_after)
@@ -118,6 +157,14 @@ async def backfill_entry_content_task(
         entry = result.scalar_one_or_none()
         if not entry:
             return {"status": "error", "entry_id": entry_id, "message": "Entry not found"}
+
+        if await _entry_uses_rsshub_source(session, entry):
+            entry.content_backfill_status = "skipped"
+            entry.content_backfill_attempts = 0
+            entry.content_backfill_error = None
+            entry.content_backfill_at = datetime.now(UTC)
+            await session.commit()
+            return {"status": "skipped", "entry_id": entry_id, "reason": "rsshub_source"}
 
         if not entry.url:
             entry.content_backfill_status = "skipped"

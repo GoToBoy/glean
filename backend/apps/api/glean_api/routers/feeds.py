@@ -214,6 +214,7 @@ async def discover_feed_url(
     feed_title = None
     source_error: str | None = None
     rsshub_path = (data.rsshub_path or "").strip() or None
+    source_type = "rsshub" if rsshub_path else "feed"
 
     import contextlib
 
@@ -253,6 +254,7 @@ async def discover_feed_url(
                         extra={"source_url": source_url, "rsshub_url": selected_rsshub_url},
                     )
                     feed_url = selected_rsshub_url
+                    source_type = "rsshub"
                 else:
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
@@ -275,6 +277,7 @@ async def discover_feed_url(
             feed_title,
             data.folder_id,
             rsshub_path,
+            source_type,
         )
 
         await enqueue_feed_refresh_job(

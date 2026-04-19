@@ -29,6 +29,7 @@ class FeedResponse(BaseModel):
     description: str | None
     icon_url: str | None
     language: str | None
+    source_type: str = "feed"
     status: str
     error_count: int
     last_fetch_attempt_at: datetime | None
