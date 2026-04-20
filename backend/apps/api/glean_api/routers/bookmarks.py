@@ -15,7 +15,6 @@ from glean_core.schemas.bookmark import (
     BookmarkFolderRequest,
     BookmarkListResponse,
     BookmarkResponse,
-    BookmarkTagRequest,
     BookmarkUpdate,
 )
 from glean_core.services import BookmarkService
@@ -32,7 +31,6 @@ async def get_bookmarks(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     folder_id: str | None = Query(None, description="Filter by folder"),
-    tag_ids: list[str] | None = Query(None, description="Filter by tags"),
     search: str | None = Query(None, description="Search in title"),
     sort: str = Query("created_at", description="Sort field"),
     order: str = Query("desc", description="Sort order"),
@@ -46,7 +44,6 @@ async def get_bookmarks(
         page: Page number.
         per_page: Items per page.
         folder_id: Filter by folder ID.
-        tag_ids: Filter by tag IDs (intersection).
         search: Search in title.
         sort: Sort field (created_at or title).
         order: Sort order (asc or desc).
@@ -59,7 +56,6 @@ async def get_bookmarks(
         page=page,
         per_page=per_page,
         folder_id=folder_id,
-        tag_ids=tag_ids,
         search=search,
         sort=sort,
         order=order,
@@ -240,58 +236,3 @@ async def remove_folder_from_bookmark(
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
-
-@router.post("/{bookmark_id}/tags", response_model=BookmarkResponse)
-async def add_tag_to_bookmark(
-    bookmark_id: str,
-    data: BookmarkTagRequest,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    bookmark_service: Annotated[BookmarkService, Depends(get_bookmark_service)],
-) -> BookmarkResponse:
-    """
-    Add a tag to a bookmark.
-
-    Args:
-        bookmark_id: Bookmark identifier.
-        data: Tag association data.
-        current_user: Current authenticated user.
-        bookmark_service: Bookmark service instance.
-
-    Returns:
-        Updated bookmark.
-
-    Raises:
-        HTTPException: If bookmark or tag not found.
-    """
-    try:
-        return await bookmark_service.add_tag(bookmark_id, current_user.id, data.tag_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
-
-
-@router.delete("/{bookmark_id}/tags/{tag_id}", response_model=BookmarkResponse)
-async def remove_tag_from_bookmark(
-    bookmark_id: str,
-    tag_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    bookmark_service: Annotated[BookmarkService, Depends(get_bookmark_service)],
-) -> BookmarkResponse:
-    """
-    Remove a tag from a bookmark.
-
-    Args:
-        bookmark_id: Bookmark identifier.
-        tag_id: Tag identifier.
-        current_user: Current authenticated user.
-        bookmark_service: Bookmark service instance.
-
-    Returns:
-        Updated bookmark.
-
-    Raises:
-        HTTPException: If bookmark not found.
-    """
-    try:
-        return await bookmark_service.remove_tag(bookmark_id, current_user.id, tag_id)
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e

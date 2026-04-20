@@ -44,7 +44,7 @@ vi.mock('../../stores/folderStore', () => ({
 }))
 
 describe('SidebarFeedsSection', () => {
-  it('renders today-board directly below smart and marks it active when selected', () => {
+  it('renders today-board before all feeds and marks it active when selected', () => {
     render(
       <SidebarFeedsSection
         isSidebarOpen
@@ -62,9 +62,7 @@ describe('SidebarFeedsSection', () => {
         onFeedSelect={vi.fn()}
         onFeedHover={vi.fn()}
         onFolderHover={vi.fn()}
-        onSmartViewSelect={vi.fn()}
         onTodayBoardViewSelect={vi.fn()}
-        isSmartView={false}
         isTodayBoardView
         isReaderPage
         currentFeedId={undefined}
@@ -81,17 +79,12 @@ describe('SidebarFeedsSection', () => {
       />
     )
 
-    const smartButton = screen.getByRole('button', { name: 'smart' })
     const todayBoardButton = screen.getByRole('button', { name: 'todayBoard' })
     const allFeedsButton = screen.getByRole('button', { name: 'allFeeds' })
 
     expect(
-      smartButton.compareDocumentPosition(todayBoardButton) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy()
-    expect(
       todayBoardButton.compareDocumentPosition(allFeedsButton) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
     expect(todayBoardButton.className).toContain('bg-primary/10')
-    expect(smartButton.className).toContain('text-muted-foreground')
   })
 })

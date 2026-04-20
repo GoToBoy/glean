@@ -9,21 +9,17 @@ from .ai_summary import AIDailySummary, AIEntrySupplement
 from .api_token import APIToken
 from .base import Base, TimestampMixin
 from .bookmark import Bookmark
-from .discovery_candidate import DiscoveryCandidate
-from .discovery_feedback import DiscoveryFeedback
 from .entry import Entry
 from .entry_translation import EntryTranslation
 from .feed import Feed, FeedSourceType, FeedStatus
 from .feed_fetch_run import FeedFetchRun
 from .feed_fetch_stage_event import FeedFetchStageEvent
 from .folder import Folder, FolderType
-from .junction import BookmarkFolder, BookmarkTag, UserEntryTag
+from .junction import BookmarkFolder
 from .subscription import Subscription
-from .tag import Tag
 from .user import User
 from .user_auth_provider import UserAuthProvider
 from .user_entry import UserEntry
-from .user_preference_stats import UserPreferenceStats
 
 __all__ = [
     "Base",
@@ -46,15 +42,8 @@ __all__ = [
     # M2 models
     "Folder",
     "FolderType",
-    "Tag",
     "Bookmark",
-    "DiscoveryCandidate",
-    "DiscoveryFeedback",
     "BookmarkFolder",
-    "BookmarkTag",
-    "UserEntryTag",
-    # M3 models
-    "UserPreferenceStats",
     # MCP models
     "APIToken",
     # Translation models

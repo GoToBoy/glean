@@ -1,12 +1,9 @@
 {
   "sidebar": {
     "feeds": "订阅",
-    "smart": "智能列表",
     "todayBoard": "今日收录",
-    "discover": "发现",
     "allFeeds": "全部订阅",
-    "bookmarks": "书签",
-    "tags": "标签",
+    "bookmarks": "归档",
     "settings": "设置",
     "folders": "文件夹",
     "logout": "退出登录",
@@ -53,9 +50,9 @@
       "create": "创建",
       "creating": "创建中...",
       "descriptionFeeds": "创建一个新文件夹来整理订阅。",
-      "descriptionBookmarks": "创建一个新文件夹来整理书签。",
+      "descriptionBookmarks": "创建一个新文件夹来整理归档内容。",
       "subfolderDescriptionFeeds": "创建新子文件夹以进一步组织订阅。",
-      "subfolderDescriptionBookmarks": "创建新子文件夹以进一步组织书签。"
+      "subfolderDescriptionBookmarks": "创建新子文件夹以进一步组织归档内容。"
     },
     "renameFolder": {
       "title": "重命名文件夹",
@@ -100,13 +97,6 @@
       "message": "将此订阅中的所有文章标为已读？",
       "confirm": "标为已读",
       "marking": "标记中..."
-    },
-    "deleteTag": {
-      "title": "删除标签？",
-      "message": "确定要删除此标签吗？",
-      "delete": "删除",
-      "deleting": "删除中...",
-      "description": "确定要删除标签“{{name}}”吗？这将把它从所有关联的书签和文章中移除，且该操作无法撤销。"
     }
   },
   "contextMenu": {
@@ -159,7 +149,7 @@
     "noTagsYet": "暂无标签",
     "createTag": "创建标签",
     "editTag": "编辑标签",
-    "createTagDescription": "创建新标签以整理您的书签。",
+    "createTagDescription": "创建新标签以整理您的归档内容。",
     "editTagDescription": "更新标签名称和颜色。",
     "tagName": "名称",
     "tagColor": "颜色",
@@ -178,7 +168,7 @@
     "totalFeeds": "总订阅数"
   },
   "bookmarks": {
-    "allBookmarks": "全部收藏"
+    "allBookmarks": "全部归档"
   },
   "manageSubscriptions": {
     "subscriptionCount": "{{count}} 个订阅",

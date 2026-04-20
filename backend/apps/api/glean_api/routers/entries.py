@@ -5,11 +5,9 @@ Provides endpoints for reading and managing feed entries.
 """
 
 import asyncio
-from contextlib import suppress
 from datetime import date, datetime
 from typing import Annotated
 
-from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 
@@ -32,8 +30,6 @@ from glean_core.services.translation_providers import create_translation_provide
 from ..dependencies import (
     get_current_user,
     get_entry_service,
-    get_redis_pool,
-    get_score_service,
     get_translation_service,
 )
 
@@ -46,17 +42,15 @@ router = APIRouter()
 async def list_entries(
     current_user: Annotated[UserResponse, Depends(get_current_user)],
     entry_service: Annotated[EntryService, Depends(get_entry_service)],
-    score_service: Annotated[object, Depends(get_score_service)],  # ScoreService | None
     feed_id: str | None = None,
     folder_id: str | None = None,
     is_read: bool | None = None,
-    is_liked: bool | None = None,
     read_later: bool | None = None,
     collected_after: datetime | None = Query(None),
     collected_before: datetime | None = Query(None),
     page: int = Query(1, ge=1),
     per_page: int = Query(20, ge=1, le=100),
-    view: str = Query("timeline", regex="^(timeline|smart|today-board)$"),
+    view: str = Query("timeline", regex="^(timeline|today-board)$"),
 ) -> EntryListResponse:
     """
     Get entries with filtering and pagination.
@@ -64,17 +58,15 @@ async def list_entries(
     Args:
         current_user: Current authenticated user.
         entry_service: Entry service.
-        score_service: Score service for real-time preference scoring.
         feed_id: Optional filter by feed ID.
         folder_id: Optional filter by folder ID (gets entries from all feeds in folder).
         is_read: Optional filter by read status.
-        is_liked: Optional filter by liked status.
         read_later: Optional filter by read later status.
         collected_after: Optional inclusive lower bound for collection time filtering.
         collected_before: Optional exclusive upper bound for collection time filtering.
         page: Page number (1-indexed).
         per_page: Items per page (max 100).
-        view: View mode ("timeline", "smart", or "today-board").
+        view: View mode ("timeline" or "today-board").
 
     Returns:
         Paginated list of entries.
@@ -84,14 +76,12 @@ async def list_entries(
         feed_id=feed_id,
         folder_id=folder_id,
         is_read=is_read,
-        is_liked=is_liked,
         read_later=read_later,
         collected_after=collected_after,
         collected_before=collected_before,
         page=page,
         per_page=per_page,
         view=view,
-        score_service=score_service,  # type: ignore[arg-type]
     )
 
 
@@ -128,20 +118,7 @@ async def list_today_entries(
         page=1,
         per_page=limit,
         view="today-board",
-        score_service=None,
     )
-
-
-@router.get("/feedback-summary")
-async def get_feedback_summary(
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    entry_service: Annotated[EntryService, Depends(get_entry_service)],
-    days: int = Query(7, ge=1, le=30),
-) -> dict[str, int]:
-    """Get recent explicit feedback count for the current user."""
-    count = await entry_service.get_recent_explicit_feedback_count(current_user.id, days=days)
-    return {"recent_explicit_feedback_count": count}
-
 
 @router.get("/{entry_id}")
 async def get_entry(
@@ -177,7 +154,7 @@ async def update_entry_state(
     entry_service: Annotated[EntryService, Depends(get_entry_service)],
 ) -> EntryResponse:
     """
-    Update entry state (read, liked, read later).
+    Update entry state (read and read later).
 
     Args:
         entry_id: Entry identifier.
@@ -386,130 +363,6 @@ async def get_paragraph_translations(
     """
     result = await translation_service.get_paragraph_translations(entry_id, target_language)
     return ParagraphTranslationsResponse(translations=result or {})
-
-
-# M3: Preference signal endpoints
-
-
-@router.post("/{entry_id}/like")
-async def like_entry(
-    entry_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    entry_service: Annotated[EntryService, Depends(get_entry_service)],
-    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> EntryResponse:
-    """
-    Mark entry as liked.
-
-    This is a convenience endpoint that sets is_liked=True and
-    triggers preference model update.
-
-    Args:
-        entry_id: Entry identifier.
-        current_user: Current authenticated user.
-        entry_service: Entry service.
-        redis_pool: Redis connection pool.
-
-    Returns:
-        Updated entry.
-
-    Raises:
-        HTTPException: If entry not found.
-    """
-    try:
-        result = await entry_service.update_entry_state(
-            entry_id, current_user.id, UpdateEntryStateRequest(is_liked=True)
-        )
-
-        # Queue preference update task (M3)
-        # Don't fail the request if preference update fails
-        with suppress(Exception):
-            await redis_pool.enqueue_job(
-                "update_user_preference",
-                user_id=current_user.id,
-                entry_id=entry_id,
-                signal_type="like",
-            )
-
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
-
-@router.post("/{entry_id}/dislike")
-async def dislike_entry(
-    entry_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    entry_service: Annotated[EntryService, Depends(get_entry_service)],
-    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> EntryResponse:
-    """
-    Mark entry as disliked.
-
-    This is a convenience endpoint that sets is_liked=False and
-    triggers preference model update.
-
-    Args:
-        entry_id: Entry identifier.
-        current_user: Current authenticated user.
-        entry_service: Entry service.
-        redis_pool: Redis connection pool.
-
-    Returns:
-        Updated entry.
-
-    Raises:
-        HTTPException: If entry not found.
-    """
-    try:
-        result = await entry_service.update_entry_state(
-            entry_id, current_user.id, UpdateEntryStateRequest(is_liked=False)
-        )
-
-        # Queue preference update task (M3)
-        # Don't fail the request if preference update fails
-        with suppress(Exception):
-            await redis_pool.enqueue_job(
-                "update_user_preference",
-                user_id=current_user.id,
-                entry_id=entry_id,
-                signal_type="dislike",
-            )
-
-        return result
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
-
-@router.delete("/{entry_id}/reaction")
-async def remove_reaction(
-    entry_id: str,
-    current_user: Annotated[UserResponse, Depends(get_current_user)],
-    entry_service: Annotated[EntryService, Depends(get_entry_service)],
-) -> EntryResponse:
-    """
-    Remove like/dislike reaction from entry.
-
-    This is a convenience endpoint that sets is_liked=None.
-
-    Args:
-        entry_id: Entry identifier.
-        current_user: Current authenticated user.
-        entry_service: Entry service.
-
-    Returns:
-        Updated entry.
-
-    Raises:
-        HTTPException: If entry not found.
-    """
-    try:
-        return await entry_service.update_entry_state(
-            entry_id, current_user.id, UpdateEntryStateRequest(is_liked=None)
-        )
-    except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from None
-
 
 # Translation endpoints
 

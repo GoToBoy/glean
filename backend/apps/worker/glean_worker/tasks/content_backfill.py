@@ -5,6 +5,7 @@ from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import get_logger
 from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
@@ -23,7 +24,7 @@ from .content_extraction import (
 logger = get_logger(__name__)
 
 
-async def _entry_uses_rsshub_source(session, entry: Entry) -> bool:
+async def _entry_uses_rsshub_source(session: AsyncSession, entry: Entry) -> bool:
     """Return True when the entry belongs to an explicitly RSSHub-backed feed."""
     loaded_feed = getattr(entry, "__dict__", {}).get("feed")
     if getattr(loaded_feed, "source_type", None) == "rsshub":
@@ -52,7 +53,7 @@ def _is_duplicate_feed_guid_error(error: Exception) -> bool:
     return "uq_feed_guid" in str(error)
 
 
-async def _load_duplicate_entry_ids(session, entry: Entry) -> list[str]:
+async def _load_duplicate_entry_ids(session: AsyncSession, entry: Entry) -> list[str]:
     """Return all entry ids sharing the same feed_id/guid as the target entry."""
     feed_id = getattr(entry, "feed_id", None)
     guid = getattr(entry, "guid", None)
@@ -67,7 +68,7 @@ async def _load_duplicate_entry_ids(session, entry: Entry) -> list[str]:
     return list(result.scalars().all())
 
 
-async def _is_vectorization_enabled(session) -> bool:
+async def _is_vectorization_enabled(session: AsyncSession) -> bool:
     """Check if vectorization is enabled and healthy."""
     config_service = TypedConfigService(session)
     config = await config_service.get(EmbeddingConfig)

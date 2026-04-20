@@ -1,0 +1,1645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reader · 今日收录</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #FAF8F3;
+    --bg-card: #FFFFFF;
+    --bg-hover: #F1EDE2;
+    --bg-sidebar: #F5F2EA;
+    --text: #1A1A1A;
+    --text-secondary: #5E5A52;
+    --text-tertiary: #9A968C;
+    --divider: #E5E0D2;
+    --divider-strong: #B8B3A5;
+    --accent: #B8312F;
+    --accent-soft: #F5E6E5;
+    --shadow: 0 2px 8px rgba(0,0,0,0.04);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.08);
+
+    --sidebar-w-collapsed: 56px;
+    --sidebar-w-expanded: 320px;
+    --page-pad: 48px;
+  }
+  [data-theme="dark"] {
+    --bg: #161614;
+    --bg-card: #1F1E1B;
+    --bg-hover: #2A2925;
+    --bg-sidebar: #1C1B18;
+    --text: #F2EFE7;
+    --text-secondary: #A8A498;
+    --text-tertiary: #6E6B62;
+    --divider: #2F2D28;
+    --divider-strong: #4A4740;
+    --accent: #E56B67;
+    --accent-soft: #3A2523;
+    --shadow: 0 2px 8px rgba(0,0,0,0.3);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    transition: background 0.3s, color 0.3s;
+  }
+  .serif { font-family: 'Noto Serif SC', Georgia, 'Songti SC', serif; }
+
+  .progress-bar {
+    position: fixed;
+    top: 0; left: 0;
+    height: 2px;
+    background: var(--accent);
+    width: 0;
+    z-index: 100;
+    transition: width 0.1s;
+  }
+
+  /* ============ Full-width Layout ============ */
+  .app {
+    display: flex;
+    min-height: 100vh;
+  }
+  .main {
+    flex: 1;
+    min-width: 0;
+    transition: margin-right 0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+  .main.panel-open { margin-right: calc(var(--sidebar-w-expanded) - var(--sidebar-w-collapsed)); }
+
+  /* Top nav - full width */
+  .topnav {
+    position: sticky;
+    top: 0;
+    background: rgba(250,248,243,0.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--divider);
+    z-index: 50;
+  }
+  [data-theme="dark"] .topnav { background: rgba(22,22,20,0.88); }
+  .topnav-inner {
+    padding: 12px var(--page-pad);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .logo {
+    font-family: 'Noto Serif SC', serif;
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+  }
+  .logo::before { content: "◆ "; color: var(--accent); }
+  .date-switcher {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 8px;
+  }
+  .date-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s;
+  }
+  .date-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .date-btn:disabled { opacity: 0.3; cursor: default; }
+  .date-current {
+    font-size: 13px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 5px;
+    background: var(--bg-hover);
+    white-space: nowrap;
+  }
+  .nav-spacer { flex: 1; }
+  .icon-btn {
+    width: 32px; height: 32px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .add-btn {
+    background: var(--text);
+    color: var(--bg);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+  }
+  .add-btn:hover { opacity: 0.85; }
+
+  /* ============ Masthead ============ */
+  .masthead {
+    padding: 56px var(--page-pad) 24px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .masthead-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+  .masthead-date {
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    font-weight: 500;
+    margin-bottom: 10px;
+  }
+  .masthead-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(32px, 5vw, 52px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    margin-bottom: 24px;
+  }
+  .masthead-stats {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 16px 0 4px;
+    border-top: 1px solid var(--divider);
+  }
+  .stat {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .stat-num {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text);
+    font-feature-settings: "tnum";
+    line-height: 1;
+  }
+  .stat-label { color: var(--text-tertiary); font-size: 12px; }
+  .stat-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--divider);
+  }
+  .read-progress {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .progress-track {
+    width: 140px;
+    height: 4px;
+    background: var(--divider);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 28%;
+    border-radius: 2px;
+  }
+  .progress-text {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-feature-settings: "tnum";
+    white-space: nowrap;
+  }
+
+  /* ============ Content ============ */
+  .content {
+    padding: 0 var(--page-pad) 160px;
+  }
+  .content-inner {
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+
+  /* Section heading */
+  .section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 56px 0 4px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--text);
+  }
+  .section-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .section-count {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-weight: 400;
+  }
+  .section-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .ghost-btn {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .ghost-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+  /* ============ Hero - full width, readable inner ============ */
+  .hero-wrap {
+    padding: 40px 0 20px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--divider);
+  }
+  .hero {
+    max-width: 920px;
+  }
+  .article-tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .hero-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(28px, 3.4vw, 42px);
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+    transition: color 0.15s;
+  }
+  .hero-wrap:hover .hero-title { color: var(--accent); }
+  .hero-excerpt {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 17px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 16px;
+  }
+  .meta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-tertiary);
+    flex-wrap: wrap;
+  }
+  .source {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .source-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .meta-dot {
+    width: 3px; height: 3px;
+    background: var(--text-tertiary);
+    border-radius: 50%;
+  }
+
+  /* ============ Trending (multi-source) full width ============ */
+  .trending {
+    background: var(--bg-card);
+    border: 1px solid var(--divider);
+    border-radius: 10px;
+    padding: 22px 24px;
+    margin: 24px 0 0;
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .trending:hover { border-color: var(--divider-strong); }
+  .trending-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .trending-badge::before {
+    content: "";
+    width: 5px; height: 5px;
+    background: var(--accent);
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  .trending-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: clamp(18px, 2vw, 22px);
+    font-weight: 700;
+    margin-bottom: 10px;
+    line-height: 1.3;
+    max-width: 920px;
+  }
+  .trending:hover .trending-title { color: var(--accent); }
+  .trending-excerpt {
+    font-size: 14px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    margin-bottom: 14px;
+    max-width: 920px;
+  }
+  .source-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .source-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    background: var(--bg-hover);
+    border-radius: 12px;
+    font-size: 11px;
+    color: var(--text-secondary);
+    transition: all 0.15s;
+  }
+  .source-chip:hover { background: var(--accent-soft); color: var(--accent); }
+  .source-chip .source-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ============ Article grid - responsive flow ============ */
+  .article-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0;
+  }
+  .article {
+    padding: 24px 28px 22px 28px;
+    cursor: pointer;
+    position: relative;
+    border-bottom: 1px solid var(--divider);
+    border-right: 1px solid var(--divider);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: background 0.15s;
+  }
+  .article:hover { background: var(--bg-hover); }
+  .article::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 26px;
+    width: 3px;
+    height: 18px;
+    background: transparent;
+    border-radius: 2px;
+    transition: background 0.15s;
+  }
+  .article:hover::before { background: var(--accent); }
+  .article-tag-sm {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    font-weight: 500;
+  }
+  .article-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 19px;
+    font-weight: 600;
+    line-height: 1.35;
+    transition: color 0.15s;
+    letter-spacing: -0.01em;
+  }
+  .article:hover .article-title { color: var(--accent); }
+  .article-excerpt {
+    font-size: 13.5px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    flex: 1;
+  }
+  .article-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 4px;
+  }
+  .article-actions {
+    display: flex;
+    gap: 2px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .article:hover .article-actions { opacity: 1; }
+  .article-actions .icon-btn { width: 26px; height: 26px; }
+
+  /* Right-most column: remove right border */
+  .article-grid .article:nth-child(1) { border-left: 1px solid var(--divider); }
+  @media (min-width: 1) {
+    .article-grid { border-left: 1px solid var(--divider); }
+    .article { border-left: none; }
+    .article-grid .article:nth-child(1) { border-left: none; }
+  }
+
+  /* ============ Compact list (time flow) ============ */
+  .compact-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+    gap: 0;
+    border-left: 1px solid var(--divider);
+  }
+  .compact {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--divider);
+    border-right: 1px solid var(--divider);
+    cursor: pointer;
+    display: grid;
+    grid-template-columns: 56px 1fr auto;
+    gap: 16px;
+    align-items: center;
+    transition: background 0.15s;
+  }
+  .compact:hover { background: var(--bg-hover); }
+  .compact:hover .compact-title { color: var(--accent); }
+  .compact-time {
+    font-size: 12px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+  .compact-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.4;
+    margin-bottom: 4px;
+    transition: color 0.15s;
+  }
+  .compact-meta {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .compact-actions {
+    display: flex;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .compact:hover .compact-actions { opacity: 1; }
+
+  /* ============ Right Sidebar ============ */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: 100vh;
+    width: var(--sidebar-w-collapsed);
+    background: var(--bg-sidebar);
+    border-left: 1px solid var(--divider);
+    display: flex;
+    flex-direction: column;
+    z-index: 40;
+    flex-shrink: 0;
+  }
+  .sidebar-activity {
+    width: var(--sidebar-w-collapsed);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 14px 0;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .activity-btn {
+    width: 36px; height: 36px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    color: var(--text-tertiary);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 0.15s;
+  }
+  .activity-btn:hover { background: var(--bg-hover); color: var(--text); }
+  .activity-btn.active { color: var(--text); background: var(--bg-card); box-shadow: var(--shadow); }
+  .activity-btn.active::before {
+    content: "";
+    position: absolute;
+    left: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 2px;
+    height: 18px;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .activity-badge {
+    position: absolute;
+    top: 4px; right: 4px;
+    min-width: 14px; height: 14px;
+    background: var(--accent);
+    color: white;
+    border-radius: 7px;
+    font-size: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 3px;
+    font-weight: 600;
+  }
+  .activity-divider {
+    width: 24px; height: 1px;
+    background: var(--divider);
+    margin: 6px 0;
+  }
+  .activity-spacer { flex: 1; }
+
+  .sidebar-panel {
+    position: fixed;
+    top: 0;
+    right: var(--sidebar-w-collapsed);
+    width: calc(var(--sidebar-w-expanded) - var(--sidebar-w-collapsed));
+    height: 100vh;
+    background: var(--bg-card);
+    border-left: 1px solid var(--divider);
+    transform: translateX(100%);
+    transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+    z-index: 39;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-panel.open { transform: translateX(0); }
+  .panel-head {
+    padding: 18px 18px 12px;
+    border-bottom: 1px solid var(--divider);
+    flex-shrink: 0;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+  .panel-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .panel-sub {
+    font-size: 11px;
+    color: var(--text-tertiary);
+  }
+  .panel-close {
+    display: none;
+  }
+  .panel-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 6px;
+  }
+  .panel-foot {
+    padding: 12px 14px;
+    border-top: 1px solid var(--divider);
+    flex-shrink: 0;
+  }
+
+  /* Feed list */
+  .folder { margin-bottom: 2px; }
+  .folder-head {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 5px;
+  }
+  .folder-head:hover { background: var(--bg-hover); }
+  .folder-chevron { transition: transform 0.15s; flex-shrink: 0; }
+  .folder.collapsed .folder-chevron { transform: rotate(-90deg); }
+  .folder.collapsed .folder-items { display: none; }
+  .folder-count { margin-left: auto; font-weight: 400; color: var(--text-tertiary); }
+  .source-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px 6px 24px;
+    font-size: 12.5px;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--text);
+  }
+  .source-item:hover { background: var(--bg-hover); }
+  .source-item.paused { opacity: 0.5; }
+  .source-icon {
+    width: 10px; height: 10px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .source-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .source-badge {
+    font-size: 10px;
+    color: var(--text-tertiary);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Settings */
+  .settings-group { padding: 10px 4px 18px; }
+  .settings-group-title {
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-tertiary);
+    font-weight: 600;
+    padding: 0 10px;
+    margin-bottom: 6px;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 10px;
+    border-radius: 5px;
+    font-size: 13px;
+    gap: 10px;
+  }
+  .settings-row:hover { background: var(--bg-hover); }
+  .settings-label { color: var(--text); }
+  .settings-sub { font-size: 11px; color: var(--text-tertiary); margin-top: 2px; }
+
+  .seg {
+    display: flex;
+    gap: 2px;
+    background: var(--bg-hover);
+    padding: 2px;
+    border-radius: 6px;
+  }
+  .seg-opt {
+    padding: 3px 8px;
+    font-size: 11px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-secondary);
+    border: none;
+    background: none;
+  }
+  .seg-opt.active { background: var(--bg-card); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+
+  .switch {
+    width: 32px; height: 18px;
+    background: var(--divider-strong);
+    border-radius: 9px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .switch.on { background: var(--accent); }
+  .switch::after {
+    content: "";
+    position: absolute;
+    top: 2px; left: 2px;
+    width: 14px; height: 14px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.15s;
+  }
+  .switch.on::after { transform: translateX(14px); }
+
+  .account-card {
+    padding: 14px;
+    background: var(--bg-hover);
+    border-radius: 8px;
+    margin: 8px 4px 4px;
+  }
+  .account-email { font-size: 13px; font-weight: 500; margin-bottom: 2px; word-break: break-all; }
+  .account-plan { font-size: 11px; color: var(--text-tertiary); }
+  .text-btn {
+    background: none;
+    border: none;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 6px 10px;
+    border-radius: 5px;
+    text-align: left;
+    display: block;
+    width: 100%;
+  }
+  .text-btn:hover { color: var(--accent); background: var(--bg-hover); }
+
+  /* Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 90;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: auto; }
+  .modal {
+    background: var(--bg-card);
+    border-radius: 14px;
+    padding: 28px;
+    width: 500px;
+    max-width: calc(100vw - 32px);
+    box-shadow: var(--shadow-lg);
+    transform: scale(0.96);
+    transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: scale(1); }
+  .modal-title {
+    font-family: 'Noto Serif SC', serif;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .modal-subtitle {
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--divider);
+    color: var(--text);
+    padding: 11px 13px;
+    border-radius: 7px;
+    font-size: 14px;
+    outline: none;
+    transition: border 0.15s;
+    font-family: inherit;
+  }
+  .input:focus { border-color: var(--accent); }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 20px;
+  }
+  .btn-primary {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    padding: 9px 16px;
+    border-radius: 7px;
+    font-weight: 500;
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .btn-secondary {
+    background: none;
+    border: 1px solid var(--divider);
+    color: var(--text);
+    padding: 9px 16px;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  /* ============ Responsive ============ */
+  @media (max-width: 1200px) {
+    :root { --page-pad: 32px; }
+  }
+
+  /* Tablet & below: sidebar collapses into bottom bar */
+  @media (max-width: 900px) {
+    :root { --page-pad: 24px; }
+    .masthead { padding-top: 40px; }
+    .article { padding: 20px 22px; }
+    .compact-list { grid-template-columns: 1fr; }
+  }
+
+  @media (max-width: 720px) {
+    :root { --page-pad: 18px; }
+    .app { flex-direction: column; }
+    .main.panel-open { margin-right: 0; }
+    /* Sidebar becomes bottom tab bar */
+    .sidebar {
+      position: fixed;
+      bottom: 0; left: 0; right: 0; top: auto;
+      width: 100%;
+      height: 56px;
+      border-left: none;
+      border-top: 1px solid var(--divider);
+      flex-direction: row;
+    }
+    .sidebar-activity {
+      flex-direction: row;
+      width: 100%;
+      height: 100%;
+      padding: 0;
+      justify-content: space-around;
+      align-items: center;
+    }
+    .activity-btn.active::before {
+      left: 50%;
+      top: -8px;
+      transform: translateX(-50%);
+      width: 18px;
+      height: 2px;
+    }
+    .activity-spacer, .activity-divider { display: none; }
+    /* Panel becomes full-width bottom sheet */
+    .sidebar-panel {
+      bottom: 56px;
+      top: auto;
+      right: 0;
+      width: 100%;
+      height: 70vh;
+      border-left: none;
+      border-top: 1px solid var(--divider);
+      border-radius: 14px 14px 0 0;
+      transform: translateY(100%);
+    }
+    .sidebar-panel.open { transform: translateY(0); }
+    .panel-close { display: flex; }
+    .content { padding-bottom: 120px; }
+    .masthead-stats { gap: 14px; }
+    .stat-num { font-size: 20px; }
+    .masthead-title { margin-bottom: 20px; }
+    .read-progress { margin-left: 0; width: 100%; margin-top: 8px; }
+    .progress-track { flex: 1; width: auto; }
+    .article { padding: 18px 20px; }
+    .article-title { font-size: 17px; }
+    .section-head { margin-top: 44px; }
+    .trending { padding: 18px 20px; }
+    .compact { grid-template-columns: 48px 1fr; padding: 14px 16px; }
+    .compact-actions { display: none; }
+    .topnav-inner { padding: 10px 18px; gap: 10px; }
+    .date-switcher { margin-left: 0; }
+    .logo { font-size: 16px; }
+  }
+  @media (max-width: 480px) {
+    .hero-excerpt { font-size: 15px; }
+    .article-grid, .compact-list { border-left: none; }
+    .article, .compact { border-right: none; }
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    background: var(--bg-hover);
+    border: 1px solid var(--divider);
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'Inter', monospace;
+    color: var(--text-secondary);
+    line-height: 1.3;
+  }
+</style>
+</head>
+<body>
+
+<div class="progress-bar" id="progressBar"></div>
+
+<div class="app">
+<div class="main" id="mainArea">
+
+<nav class="topnav">
+  <div class="topnav-inner">
+    <div class="logo serif">Reader</div>
+    <div class="date-switcher">
+      <button class="date-btn" title="前一天 (←)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <span class="date-current">今日 · 4月19日</span>
+      <button class="date-btn" disabled title="后一天 (→)"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 18 15 12 9 6"/></svg></button>
+    </div>
+    <div class="nav-spacer"></div>
+    <button class="icon-btn" title="搜索 (⌘K)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    </button>
+    <button class="add-btn" onclick="openModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      添加订阅
+    </button>
+  </div>
+</nav>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <div class="masthead-date">2026 · 04 · 19 · SUN</div>
+    <h1 class="masthead-title serif">今日收录</h1>
+    <div class="masthead-stats">
+      <div class="stat"><span class="stat-num">42</span><span class="stat-label">篇文章</span></div>
+      <div class="stat-divider"></div>
+      <div class="stat"><span class="stat-num">18</span><span class="stat-label">个订阅源</span></div>
+      <div class="stat-divider"></div>
+      <div class="stat"><span class="stat-num">3</span><span class="stat-label">个主题</span></div>
+      <div class="stat-divider"></div>
+      <div class="stat"><span class="stat-num">2h 14m</span><span class="stat-label">预计阅读</span></div>
+      <div class="read-progress">
+        <span class="progress-text">已读 12 / 42</span>
+        <div class="progress-track"><div class="progress-fill"></div></div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="content">
+<div class="content-inner">
+
+  <!-- Hero -->
+  <article class="hero-wrap">
+    <div class="hero">
+      <div class="article-tag">今日精选 · 深度</div>
+      <h2 class="hero-title serif">大模型时代,编辑的角色正在被重新定义</h2>
+      <p class="hero-excerpt">当生成变得廉价,判断反而稀缺。从《纽约客》到小型独立出版物,新一代编辑正在把自己的工作从"催稿"重新塑造为"策展"——他们不再只是文字把关人,而是信号的筛选者。一份关于这一转变的长篇观察。</p>
+      <div class="meta">
+        <span class="source"><span class="source-dot" style="background:#B8312F"></span>The Browser</span>
+        <span class="meta-dot"></span>
+        <span>14 分钟阅读</span>
+        <span class="meta-dot"></span>
+        <span>上午 9:12</span>
+      </div>
+    </div>
+  </article>
+
+  <!-- AI / Tech cluster -->
+  <div class="section-head">
+    <h2 class="section-title serif">AI / 技术 <span class="section-count">12 篇 · 5 个源</span></h2>
+    <div class="section-actions">
+      <button class="ghost-btn">全部已读</button>
+      <button class="ghost-btn">折叠</button>
+    </div>
+  </div>
+
+  <div class="trending">
+    <div class="trending-badge">今日热点 · 6 个源同时报道</div>
+    <h3 class="trending-title serif">OpenAI 发布 GPT-5.5,API 定价下调 40%</h3>
+    <p class="trending-excerpt">新模型在 MMLU、GPQA 等基准上创下新纪录。多家媒体聚焦其在科研场景的表现,《纽约时报》采访三位诺奖得主评价其推理深度。</p>
+    <div class="source-chips">
+      <span class="source-chip"><span class="source-dot" style="background:#B8312F"></span>Stratechery</span>
+      <span class="source-chip"><span class="source-dot" style="background:#3A5F7D"></span>Platformer</span>
+      <span class="source-chip"><span class="source-dot" style="background:#6B8F71"></span>The Information</span>
+      <span class="source-chip"><span class="source-dot" style="background:#B8863B"></span>Simon Willison</span>
+      <span class="source-chip"><span class="source-dot" style="background:#7D4E8C"></span>Interconnects</span>
+      <span class="source-chip">+1</span>
+    </div>
+  </div>
+
+  <div class="article-grid" style="margin-top: 24px;">
+    <article class="article">
+      <div class="article-tag-sm">观点</div>
+      <h3 class="article-title serif">我用 Claude 重构了十年前的老项目</h3>
+      <p class="article-excerpt">一个关于遗留代码、文档腐烂和 AI 辅助考古的故事。作者分享了具体的 prompt 策略和踩过的坑,包括如何让模型主动请求缺失的上下文。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#B8863B"></span>Simon Willison</span>
+          <span class="meta-dot"></span><span>6 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn" title="稍后读"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn" title="标为已读"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">教程</div>
+      <h3 class="article-title serif">本地跑大模型的三种姿势,哪种最适合你</h3>
+      <p class="article-excerpt">Ollama、LM Studio、llama.cpp 的完整对比。包含 M 系列芯片和消费级 GPU 的性能基准,以及针对不同使用场景的选择建议。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#6B8F71"></span>少数派</span>
+          <span class="meta-dot"></span><span>9 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">分析</div>
+      <h3 class="article-title serif">RL 训练正在吞噬预训练预算</h3>
+      <p class="article-excerpt">2026 年,头部实验室投入 RL 后训练的算力第一次超过预训练。这意味着数据工程的重点正在转移,以及整个 AI 供应链的利润将如何重新分配。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#7D4E8C"></span>Interconnects</span>
+          <span class="meta-dot"></span><span>12 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">Platformer</div>
+      <h3 class="article-title serif">Anthropic 估值跃升至 $400B,员工期权解禁机制曝光</h3>
+      <p class="article-excerpt">本轮融资详情、二级市场需求,以及关于团队 retention 的若干细节。Casey Newton 写了个简明的解读。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#3A5F7D"></span>Platformer</span>
+          <span class="meta-dot"></span><span>5 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">Rust Weekly</div>
+      <h3 class="article-title serif">为什么 Rust 项目的编译时间终于有救了</h3>
+      <p class="article-excerpt">cargo 的增量编译改进 + rustc 并行前端,让大型项目二次编译时间从 3 分钟降到 20 秒。附 benchmark 详解。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#3A5F7D"></span>Rust Weekly</span>
+          <span class="meta-dot"></span><span>6 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">The Information</div>
+      <h3 class="article-title serif">NVIDIA 对中国推理市场的"降级策略"</h3>
+      <p class="article-excerpt">为了规避出口管制同时保住市场份额,NVIDIA 正在设计一系列"刚好能用"的阉割版芯片——但客户不一定买账。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#B8312F"></span>The Information</span>
+          <span class="meta-dot"></span><span>8 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <!-- Design / Product cluster -->
+  <div class="section-head">
+    <h2 class="section-title serif">设计 / 产品 <span class="section-count">8 篇 · 4 个源</span></h2>
+    <div class="section-actions">
+      <button class="ghost-btn">全部已读</button>
+      <button class="ghost-btn">折叠</button>
+    </div>
+  </div>
+
+  <div class="article-grid" style="margin-top: 12px;">
+    <article class="article">
+      <div class="article-tag-sm">Linear</div>
+      <h3 class="article-title serif">Linear 的设计哲学:不是极简,是克制</h3>
+      <p class="article-excerpt">采访 Linear 设计团队,聊他们如何在六年里抵抗"加功能"的冲动。关于边界、默认值,以及"为什么有些产品越做越好用"。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#6B8F71"></span>产品沉思录</span>
+          <span class="meta-dot"></span><span>11 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">工具</div>
+      <h3 class="article-title serif">为什么 Figma 的 Dev Mode 改变了我们的工作流</h3>
+      <p class="article-excerpt">设计与工程的"最后一公里"终于变短了。来自三个一线团队的实际使用反馈,和一些预料之外的副作用。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#7D4E8C"></span>UX Collective</span>
+          <span class="meta-dot"></span><span>10 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">UX 模式</div>
+      <h3 class="article-title serif">空状态设计的 7 个反模式</h3>
+      <p class="article-excerpt">不是"暂无数据"就完事了。好的空状态是一次对话,一次邀请——七个真实产品中的失败案例和对应的改进方案。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#B8863B"></span>Nielsen Norman</span>
+          <span class="meta-dot"></span><span>5 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">Fast Company</div>
+      <h3 class="article-title serif">新一代图标设计:从隐喻到感受</h3>
+      <p class="article-excerpt">当所有人都在画软盘和放大镜,设计师 Mark 把图标做成了微型动画。关于图标语言在下一个十年的走向。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#3F7D8C"></span>Fast Company</span>
+          <span class="meta-dot"></span><span>7 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">Lenny's</div>
+      <h3 class="article-title serif">Brian Chesky:Airbnb 的未来不是酒店,是"回家"</h3>
+      <p class="article-excerpt">Lenny 与 Airbnb CEO 的两小时对话,聊产品哲学、组织重构、和他如何再次"founder mode"。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#6B8F71"></span>Lenny's Newsletter</span>
+          <span class="meta-dot"></span><span>18 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+
+    <article class="article">
+      <div class="article-tag-sm">范阳</div>
+      <h3 class="article-title serif">为什么软件团队还在用 Scrum</h3>
+      <p class="article-excerpt">即使所有人都抱怨站会,它仍然是默认选项。一份关于组织惯性的田野笔记。</p>
+      <div class="article-bottom">
+        <div class="meta">
+          <span class="source"><span class="source-dot" style="background:#3A5F7D"></span>范阳</span>
+          <span class="meta-dot"></span><span>8 分钟</span>
+        </div>
+        <div class="article-actions">
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg></button>
+          <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+        </div>
+      </div>
+    </article>
+  </div>
+
+  <!-- Time flow -->
+  <div class="section-head">
+    <h2 class="section-title serif">其他 <span class="section-count">19 篇 · 按时间</span></h2>
+    <div class="section-actions">
+      <button class="ghost-btn">全部已读</button>
+    </div>
+  </div>
+
+  <div class="compact-list" style="margin-top: 12px;">
+    <div class="compact">
+      <div class="compact-time">12:34</div>
+      <div>
+        <div class="compact-title serif">独立开发者如何看待"氛围编程"(Vibe Coding)的兴起</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#B8863B"></span>Indie Hackers 周刊</span><span>·</span><span>4 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">11:58</div>
+      <div>
+        <div class="compact-title serif">书评:《慢思考的复兴》——为什么我们越来越难读完一本书</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#7D4E8C"></span>The New Yorker</span><span>·</span><span>15 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">11:22</div>
+      <div>
+        <div class="compact-title serif">搬家第 7 天,我终于承认自己需要更少的东西</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#3F7D8C"></span>信息差</span><span>·</span><span>3 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">10:46</div>
+      <div>
+        <div class="compact-title serif">Cloudflare Q1 财报:AI 推理业务占比首次超过 CDN</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#8C4F3F"></span>Stratechery</span><span>·</span><span>8 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">09:33</div>
+      <div>
+        <div class="compact-title serif">气候变化如何改变全球咖啡豆供应链</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#6B8F71"></span>The Atlantic</span><span>·</span><span>12 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">08:20</div>
+      <div>
+        <div class="compact-title serif">一个周末用 Val Town 搭出来的 MVP:它并不完美,但它上线了</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#B8863B"></span>Indie Hackers 周刊</span><span>·</span><span>5 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">07:55</div>
+      <div>
+        <div class="compact-title serif">采访:那位做了 15 年独立字体的设计师</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#3F7D8C"></span>信息差</span><span>·</span><span>9 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+    <div class="compact">
+      <div class="compact-time">06:40</div>
+      <div>
+        <div class="compact-title serif">Things 4 会不会来?Cultured Code 的十年沉默</div>
+        <div class="compact-meta"><span class="source"><span class="source-dot" style="background:#6B8F71"></span>少数派</span><span>·</span><span>7 分钟</span></div>
+      </div>
+      <div class="compact-actions">
+        <button class="icon-btn"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align:center; padding: 36px 0 0;">
+    <button class="ghost-btn" style="border:1px solid var(--divider); padding: 8px 20px; font-size: 13px;">查看全部 19 篇 ↓</button>
+  </div>
+
+  <section style="padding: 80px 0 0; text-align: center; color: var(--text-tertiary); font-size: 13px;">
+    <div style="border-top: 1px dashed var(--divider); padding-top: 28px;">
+      <p style="font-family: 'Noto Serif SC', serif; font-size: 15px; margin-bottom: 6px;">今天的内容看完了</p>
+      <p>回顾 <a href="#" style="color:var(--accent); text-decoration:none; font-weight:500;">昨日收录 →</a></p>
+    </div>
+  </section>
+
+</div>
+</main>
+
+</div><!-- /main -->
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-activity">
+    <button class="activity-btn" id="btnFeeds" title="订阅源" onclick="togglePanel('feeds')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+      <span class="activity-badge">18</span>
+    </button>
+    <button class="activity-btn" id="btnSaved" title="稍后读" onclick="togglePanel('saved')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+      <span class="activity-badge" style="background:var(--divider-strong);color:white">3</span>
+    </button>
+    <div class="activity-divider"></div>
+    <button class="activity-btn" id="btnSettings" title="设置" onclick="togglePanel('settings')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </button>
+    <div class="activity-spacer"></div>
+    <button class="activity-btn" title="快捷键">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+    </button>
+  </div>
+</aside>
+
+<!-- Feeds panel -->
+<aside class="sidebar-panel" id="panelFeeds">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title serif">订阅源</div>
+      <div class="panel-sub">18 个源 · 6 个文件夹</div>
+    </div>
+    <button class="icon-btn panel-close" onclick="togglePanel('feeds')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="panel-body">
+    <div class="folder">
+      <div class="folder-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <svg class="folder-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        ⭐ 核心源
+        <span class="folder-count">5</span>
+      </div>
+      <div class="folder-items">
+        <div class="source-item"><span class="source-icon" style="background:#B8312F"></span><span class="source-name">Stratechery</span><span class="source-badge">3</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#3A5F7D"></span><span class="source-name">范阳</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#6B8F71"></span><span class="source-name">产品沉思录</span><span class="source-badge">2</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#B8863B"></span><span class="source-name">Simon Willison</span><span class="source-badge">2</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#7D4E8C"></span><span class="source-name">The Browser</span><span class="source-badge">1</span></div>
+      </div>
+    </div>
+    <div class="folder">
+      <div class="folder-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <svg class="folder-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        技术 / AI
+        <span class="folder-count">6</span>
+      </div>
+      <div class="folder-items">
+        <div class="source-item"><span class="source-icon" style="background:#3F7D8C"></span><span class="source-name">Platformer</span><span class="source-badge">2</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#8C4F3F"></span><span class="source-name">Interconnects</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#3A5F7D"></span><span class="source-name">Rust Weekly</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#6B8F71"></span><span class="source-name">少数派</span><span class="source-badge">4</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#B8312F"></span><span class="source-name">The Information</span><span class="source-badge">1</span></div>
+        <div class="source-item paused"><span class="source-icon" style="background:#999"></span><span class="source-name">Hacker News Daily</span><span class="source-badge">暂停</span></div>
+      </div>
+    </div>
+    <div class="folder">
+      <div class="folder-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <svg class="folder-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        设计 / 产品
+        <span class="folder-count">4</span>
+      </div>
+      <div class="folder-items">
+        <div class="source-item"><span class="source-icon" style="background:#7D4E8C"></span><span class="source-name">UX Collective</span><span class="source-badge">2</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#B8863B"></span><span class="source-name">Nielsen Norman</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#3F7D8C"></span><span class="source-name">Fast Company</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#6B8F71"></span><span class="source-name">Lenny's Newsletter</span><span class="source-badge">1</span></div>
+      </div>
+    </div>
+    <div class="folder collapsed">
+      <div class="folder-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <svg class="folder-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        文化 / 随笔
+        <span class="folder-count">3</span>
+      </div>
+      <div class="folder-items">
+        <div class="source-item"><span class="source-icon" style="background:#3F7D8C"></span><span class="source-name">信息差</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#7D4E8C"></span><span class="source-name">The New Yorker</span><span class="source-badge">1</span></div>
+        <div class="source-item"><span class="source-icon" style="background:#B8863B"></span><span class="source-name">Indie Hackers 周刊</span><span class="source-badge">1</span></div>
+      </div>
+    </div>
+    <div class="folder collapsed">
+      <div class="folder-head" onclick="this.parentElement.classList.toggle('collapsed')">
+        <svg class="folder-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+        📦 存档
+        <span class="folder-count">0</span>
+      </div>
+      <div class="folder-items"></div>
+    </div>
+  </div>
+  <div class="panel-foot">
+    <button class="add-btn" style="width:100%; justify-content:center;" onclick="openModal()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      添加订阅
+    </button>
+  </div>
+</aside>
+
+<!-- Saved panel -->
+<aside class="sidebar-panel" id="panelSaved">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title serif">稍后读</div>
+      <div class="panel-sub">3 篇 · 预计 24 分钟</div>
+    </div>
+    <button class="icon-btn panel-close" onclick="togglePanel('saved')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="panel-body" style="padding: 8px 14px;">
+    <div style="padding: 14px 0; border-bottom: 1px solid var(--divider); cursor: pointer;">
+      <div class="article-title serif" style="font-size: 15px; margin-bottom: 6px;">大模型时代,编辑的角色正在被重新定义</div>
+      <div class="meta"><span class="source"><span class="source-dot" style="background:#B8312F"></span>The Browser</span><span>·</span><span>14 分钟</span></div>
+    </div>
+    <div style="padding: 14px 0; border-bottom: 1px solid var(--divider); cursor: pointer;">
+      <div class="article-title serif" style="font-size: 15px; margin-bottom: 6px;">书评:《慢思考的复兴》</div>
+      <div class="meta"><span class="source"><span class="source-dot" style="background:#7D4E8C"></span>The New Yorker</span><span>·</span><span>15 分钟</span></div>
+    </div>
+    <div style="padding: 14px 0; cursor: pointer;">
+      <div class="article-title serif" style="font-size: 15px; margin-bottom: 6px;">Brian Chesky:Airbnb 的未来</div>
+      <div class="meta"><span class="source"><span class="source-dot" style="background:#6B8F71"></span>Lenny's Newsletter</span><span>·</span><span>18 分钟</span></div>
+    </div>
+  </div>
+</aside>
+
+<!-- Settings panel -->
+<aside class="sidebar-panel" id="panelSettings">
+  <div class="panel-head">
+    <div>
+      <div class="panel-title serif">设置</div>
+      <div class="panel-sub">偏好与账户</div>
+    </div>
+    <button class="icon-btn panel-close" onclick="togglePanel('settings')">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+  </div>
+  <div class="panel-body">
+    <div class="settings-group">
+      <div class="settings-group-title">外观</div>
+      <div class="settings-row">
+        <div class="settings-label">主题</div>
+        <div class="seg">
+          <button class="seg-opt active" onclick="setTheme('light',this)">亮</button>
+          <button class="seg-opt" onclick="setTheme('dark',this)">暗</button>
+          <button class="seg-opt" onclick="setTheme('auto',this)">自动</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">字号</div>
+        <div class="seg">
+          <button class="seg-opt">小</button>
+          <button class="seg-opt active">中</button>
+          <button class="seg-opt">大</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">排版</div>
+        <div class="seg">
+          <button class="seg-opt active">宋体</button>
+          <button class="seg-opt">黑体</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">列表密度</div>
+        <div class="seg">
+          <button class="seg-opt">紧凑</button>
+          <button class="seg-opt active">适中</button>
+          <button class="seg-opt">舒适</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">阅读</div>
+      <div class="settings-row">
+        <div><div class="settings-label">滚动自动已读</div><div class="settings-sub">文章滚出视口后自动标记</div></div>
+        <div class="switch on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">显示摘要</div><div class="settings-sub">列表视图展示预览</div></div>
+        <div class="switch on" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div class="settings-row">
+        <div><div class="settings-label">主题聚合</div><div class="settings-sub">自动识别多源热点</div></div>
+        <div class="switch on" onclick="this.classList.toggle('on')"></div>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">同步</div>
+      <div class="settings-row">
+        <div class="settings-label">刷新频率</div>
+        <div class="seg">
+          <button class="seg-opt">15m</button>
+          <button class="seg-opt active">30m</button>
+          <button class="seg-opt">1h</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-label">保留天数</div>
+        <div class="seg">
+          <button class="seg-opt">30</button>
+          <button class="seg-opt active">90</button>
+          <button class="seg-opt">∞</button>
+        </div>
+      </div>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">数据</div>
+      <button class="text-btn">导入 OPML</button>
+      <button class="text-btn">导出 OPML</button>
+      <button class="text-btn">导出阅读记录</button>
+    </div>
+    <div class="settings-group">
+      <div class="settings-group-title">账户</div>
+      <div class="account-card">
+        <div class="account-email">fries_kites7f@icloud.com</div>
+        <div class="account-plan">个人计划 · 42 个订阅</div>
+      </div>
+      <button class="text-btn">快捷键参考</button>
+      <button class="text-btn">帮助与反馈</button>
+      <button class="text-btn" style="color: var(--accent);">退出登录</button>
+    </div>
+  </div>
+</aside>
+
+</div><!-- /app -->
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+  <div class="modal">
+    <div class="modal-title serif">添加订阅</div>
+    <div class="modal-subtitle">粘贴 RSS 链接、网站地址,或者搜索订阅源名称</div>
+    <input type="text" class="input" placeholder="https://example.com/feed.xml 或 site.com">
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeModal()">取消</button>
+      <button class="btn-primary">添加</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  let currentPanel = null;
+  function togglePanel(name) {
+    const panels = { feeds: 'panelFeeds', saved: 'panelSaved', settings: 'panelSettings' };
+    const btns = { feeds: 'btnFeeds', saved: 'btnSaved', settings: 'btnSettings' };
+    Object.values(panels).forEach(id => document.getElementById(id).classList.remove('open'));
+    Object.values(btns).forEach(id => document.getElementById(id).classList.remove('active'));
+    if (currentPanel === name) {
+      currentPanel = null;
+      document.getElementById('mainArea').classList.remove('panel-open');
+    } else {
+      document.getElementById(panels[name]).classList.add('open');
+      document.getElementById(btns[name]).classList.add('active');
+      document.getElementById('mainArea').classList.add('panel-open');
+      currentPanel = name;
+    }
+  }
+  function openModal() {
+    document.getElementById('modalOverlay').classList.add('open');
+    setTimeout(() => document.querySelector('.modal input').focus(), 50);
+  }
+  function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+  function setTheme(mode, el) {
+    const html = document.documentElement;
+    if (mode === 'auto') {
+      html.setAttribute('data-theme', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    } else { html.setAttribute('data-theme', mode); }
+    if (el) {
+      el.parentElement.querySelectorAll('.seg-opt').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+    }
+  }
+  window.addEventListener('scroll', () => {
+    const h = document.documentElement;
+    document.getElementById('progressBar').style.width = (h.scrollTop / (h.scrollHeight - h.clientHeight) * 100) + '%';
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') { closeModal(); if (currentPanel) togglePanel(currentPanel); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); alert('搜索待实现'); }
+  });
+</script>
+</body>
+</html>

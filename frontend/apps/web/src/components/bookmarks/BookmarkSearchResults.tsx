@@ -1,5 +1,5 @@
 import { format } from 'date-fns'
-import { Edit3, ExternalLink, FolderOpen, Tag as TagIcon, Trash2 } from 'lucide-react'
+import { Edit3, ExternalLink, FolderOpen, Trash2 } from 'lucide-react'
 import type { Bookmark } from '@glean/types'
 import { stripHtmlTags } from '../../lib/html'
 
@@ -59,12 +59,6 @@ export function BookmarkSearchResults({
               <span className="inline-flex items-center gap-1">
                 <FolderOpen className="h-3.5 w-3.5" />
                 {bookmark.folders.length}
-              </span>
-            )}
-            {bookmark.tags.length > 0 && (
-              <span className="inline-flex items-center gap-1">
-                <TagIcon className="h-3.5 w-3.5" />
-                {bookmark.tags.length}
               </span>
             )}
           </div>

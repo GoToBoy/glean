@@ -23,7 +23,6 @@ from .bookmark import (
     BookmarkFolderRequest,
     BookmarkListResponse,
     BookmarkResponse,
-    BookmarkTagRequest,
     BookmarkUpdate,
 )
 from .config import (
@@ -35,22 +34,13 @@ from .config import (
     EmbeddingConfigResponse,
     EmbeddingConfigUpdateRequest,
     EmbeddingRebuildProgress,
-    PreferenceConfig,
     RateLimitConfig,
     RSSHubConfig,
     RSSHubConfigUpdateRequest,
-    ScoreConfig,
     SystemTimeResponse,
     ValidationResult,
     VectorizationStatus,
     VectorizationStatusResponse,
-)
-from .discovery import (
-    DiscoveryActionResponse,
-    DiscoveryCandidateResponse,
-    DiscoveryFeedbackRequest,
-    DiscoveryListResponse,
-    DiscoveryTrialRequest,
 )
 from .entry import (
     EntryListResponse,
@@ -80,14 +70,6 @@ from .folder import (
     FolderTreeNode,
     FolderTreeResponse,
     FolderUpdate,
-)
-from .tag import (
-    TagBatchRequest,
-    TagCreate,
-    TagListResponse,
-    TagResponse,
-    TagUpdate,
-    TagWithCountsResponse,
 )
 from .user import UserResponse, UserSettings, UserUpdate
 
@@ -138,13 +120,6 @@ __all__ = [
     "BookmarkResponse",
     "BookmarkListResponse",
     "BookmarkFolderRequest",
-    "BookmarkTagRequest",
-    # Discovery
-    "DiscoveryCandidateResponse",
-    "DiscoveryListResponse",
-    "DiscoveryTrialRequest",
-    "DiscoveryFeedbackRequest",
-    "DiscoveryActionResponse",
     # M2: Folder
     "FolderCreate",
     "FolderUpdate",
@@ -153,13 +128,6 @@ __all__ = [
     "FolderResponse",
     "FolderTreeNode",
     "FolderTreeResponse",
-    # M2: Tag
-    "TagCreate",
-    "TagUpdate",
-    "TagResponse",
-    "TagWithCountsResponse",
-    "TagListResponse",
-    "TagBatchRequest",
     # Config
     "AIIntegrationConfig",
     "AIIntegrationConfigResponse",
@@ -169,11 +137,9 @@ __all__ = [
     "EmbeddingConfigResponse",
     "EmbeddingConfigUpdateRequest",
     "EmbeddingRebuildProgress",
-    "PreferenceConfig",
     "RateLimitConfig",
     "RSSHubConfig",
     "RSSHubConfigUpdateRequest",
-    "ScoreConfig",
     "SystemTimeResponse",
     "ValidationResult",
     "VectorizationStatus",

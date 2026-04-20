@@ -2,7 +2,6 @@
   "filters": {
     "all": "All",
     "unread": "Unread",
-    "smart": "Smart",
     "readLater": "Later"
   },
   "actions": {
@@ -23,14 +22,10 @@
     "openOriginalAutoOpened": "This site blocks in-app embedding. Opened in a new tab.",
     "openExternally": "Open Externally",
     "more": "More",
-    "moreDescription": "Translation, archive, and preference actions",
+    "moreDescription": "Translation, read-later, and archive actions",
     "close": "Close",
     "fullscreen": "Enter fullscreen",
     "exitFullscreen": "Exit fullscreen",
-    "like": "Like",
-    "liked": "Liked",
-    "dislike": "Dislike",
-    "disliked": "Disliked",
     "archiveFailed": "Archive failed",
     "translationIncomplete": "The translation could not be completed."
   },
@@ -52,13 +47,6 @@
       "next": "Next",
       "previous": "Previous"
     }
-  },
-  "smart": {
-    "title": "Smart",
-    "description": "Sorted by your preferences",
-    "limitedMode": "Limited Smart Mode",
-    "enableVectorizationHint": "Enable vectorization for AI-powered recommendations based on content similarity.",
-    "goToSettings": "Go to Settings"
   },
   "todayBoard": {
     "title": "Today's Intake",
@@ -102,8 +90,6 @@
     "bilingualMode": "Bilingual: {{language}}",
     "failed": "Translation failed",
     "retry": "Retry",
-    "sentenceMode": "Sentence translation active",
-    "translatingVisible": "Translating visible content",
     "hideTranslation": "Hide Translation",
     "preToggleTitle": "Preformatted blocks detected",
     "preToggleDesc": "Some blocks may be commands or logs. Translate them?",
@@ -111,7 +97,7 @@
   },
   "feedback": {
     "title": "Help improve recommendations?",
-    "description": "If this article was useful, leave quick feedback to tune your Smart list.",
+    "description": "If this article was useful, leave quick feedback to tune future recommendations.",
     "later": "Later"
   }
 }

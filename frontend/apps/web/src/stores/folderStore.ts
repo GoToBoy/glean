@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { folderService } from '@glean/api-client'
 import { logger } from '@glean/logger'
 import type { FolderTreeNode, FolderType, CreateFolderRequest, Folder } from '@glean/types'
+import { queryClient } from '../lib/queryClient'
+import { folderKeys } from '../hooks/useFolders'
 
 interface FolderState {
   feedFolders: FolderTreeNode[]
@@ -30,8 +32,12 @@ export const useFolderStore = create<FolderState>((set, get) => ({
       const response = await folderService.getFolders(type)
       if (type === 'feed') {
         set({ feedFolders: response.folders })
+        // Populate TanStack Query cache so useFolders('feed') subscribers get data immediately
+        queryClient.setQueryData(folderKeys.tree('feed'), response.folders)
       } else if (type === 'bookmark') {
         set({ bookmarkFolders: response.folders })
+        // Populate TanStack Query cache so useFolders('bookmark') subscribers get data immediately
+        queryClient.setQueryData(folderKeys.tree('bookmark'), response.folders)
       } else {
         // Fetch both if no type specified
         const feedResp = await folderService.getFolders('feed')
@@ -40,6 +46,9 @@ export const useFolderStore = create<FolderState>((set, get) => ({
           feedFolders: feedResp.folders,
           bookmarkFolders: bookmarkResp.folders,
         })
+        // Populate TanStack Query cache for both types
+        queryClient.setQueryData(folderKeys.tree('feed'), feedResp.folders)
+        queryClient.setQueryData(folderKeys.tree('bookmark'), bookmarkResp.folders)
       }
     } catch (err) {
       set({ error: 'Failed to load folders' })

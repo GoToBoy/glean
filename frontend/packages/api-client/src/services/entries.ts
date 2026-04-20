@@ -1,7 +1,6 @@
 import type {
   EntryWithState,
   EntryListResponse,
-  FeedbackSummaryResponse,
   ParagraphTranslationsResponse,
   TranslateTextsResponse,
   TranslationResponse,
@@ -19,20 +18,17 @@ export class EntryService {
 
   /**
    * Get entries with filtering and pagination.
-   *
-   * @param params.view - View mode: "timeline" (default) or "smart" (sorted by preference score)
    */
   async getEntries(params?: {
     feed_id?: string
     folder_id?: string
     is_read?: boolean
-    is_liked?: boolean
     read_later?: boolean
     collected_after?: string
     collected_before?: string
     page?: number
     per_page?: number
-    view?: 'timeline' | 'smart' | 'today-board'
+    view?: 'timeline' | 'today-board'
   }, options?: { signal?: AbortSignal }): Promise<EntryListResponse> {
     return this.client.get<EntryListResponse>('/entries', { params, signal: options?.signal })
   }
@@ -62,7 +58,7 @@ export class EntryService {
   }
 
   /**
-   * Update entry state (read, liked, read later).
+   * Update entry state (read and read later).
    */
   async updateEntryState(entryId: string, data: UpdateEntryStateRequest): Promise<EntryWithState> {
     return this.client.patch<EntryWithState>(`/entries/${entryId}`, data)
@@ -76,38 +72,6 @@ export class EntryService {
       feed_id: feedId,
       folder_id: folderId,
     })
-  }
-
-  /**
-   * Get recent explicit feedback summary for prompt gating.
-   */
-  async getFeedbackSummary(days: number = 7): Promise<FeedbackSummaryResponse> {
-    return this.client.get<FeedbackSummaryResponse>('/entries/feedback-summary', {
-      params: { days },
-    })
-  }
-
-  // M3: Preference signal endpoints
-
-  /**
-   * Mark entry as liked.
-   */
-  async likeEntry(entryId: string): Promise<EntryWithState> {
-    return this.client.post<EntryWithState>(`/entries/${entryId}/like`)
-  }
-
-  /**
-   * Mark entry as disliked.
-   */
-  async dislikeEntry(entryId: string): Promise<EntryWithState> {
-    return this.client.post<EntryWithState>(`/entries/${entryId}/dislike`)
-  }
-
-  /**
-   * Remove like/dislike reaction from entry.
-   */
-  async removeReaction(entryId: string): Promise<EntryWithState> {
-    return this.client.delete<EntryWithState>(`/entries/${entryId}/reaction`)
   }
 
   // Translation endpoints

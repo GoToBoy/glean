@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react'
+import { useCallback } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { folderService } from '@glean/api-client'
 import { logger } from '@glean/logger'
 import type {
@@ -9,83 +10,91 @@ import type {
   Folder,
 } from '@glean/types'
 
-export function useFolders(type?: FolderType) {
-  const [folders, setFolders] = useState<FolderTreeNode[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+/**
+ * Query key factory for folder tree queries.
+ */
+export const folderKeys = {
+  all: ['folders'] as const,
+  tree: (type?: FolderType) => [...folderKeys.all, 'tree', type] as const,
+}
 
-  const fetchFolders = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
+export function useFolders(type?: FolderType) {
+  const queryClient = useQueryClient()
+
+  const {
+    data: folders = [] as FolderTreeNode[],
+    isFetching: loading,
+    error: queryError,
+    refetch: fetchFolders,
+  } = useQuery({
+    queryKey: folderKeys.tree(type),
+    queryFn: async (): Promise<FolderTreeNode[]> => {
       const response = await folderService.getFolders(type)
-      setFolders(response.folders)
-    } catch (err) {
-      setError('Failed to load folders')
-      logger.error('Failed to fetch folders:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [type])
+      return response.folders
+    },
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  })
+
+  const error = queryError ? 'Failed to load folders' : null
+
+  const invalidateFolders = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: folderKeys.tree(type) })
+  }, [queryClient, type])
 
   const createFolder = useCallback(
     async (data: CreateFolderRequest): Promise<Folder | null> => {
       try {
         const folder = await folderService.createFolder(data)
-        await fetchFolders()
+        invalidateFolders()
         return folder
       } catch (err) {
-        setError('Failed to create folder')
         logger.error('Failed to create folder:', err)
         return null
       }
     },
-    [fetchFolders]
+    [invalidateFolders]
   )
 
   const updateFolder = useCallback(
     async (folderId: string, data: UpdateFolderRequest): Promise<Folder | null> => {
       try {
         const folder = await folderService.updateFolder(folderId, data)
-        await fetchFolders()
+        invalidateFolders()
         return folder
       } catch (err) {
-        setError('Failed to update folder')
         logger.error('Failed to update folder:', err)
         return null
       }
     },
-    [fetchFolders]
+    [invalidateFolders]
   )
 
   const deleteFolder = useCallback(
     async (folderId: string): Promise<boolean> => {
       try {
         await folderService.deleteFolder(folderId)
-        await fetchFolders()
+        invalidateFolders()
         return true
       } catch (err) {
-        setError('Failed to delete folder')
         logger.error('Failed to delete folder:', err)
         return false
       }
     },
-    [fetchFolders]
+    [invalidateFolders]
   )
 
   const moveFolder = useCallback(
     async (folderId: string, parentId: string | null): Promise<Folder | null> => {
       try {
         const folder = await folderService.moveFolder(folderId, { parent_id: parentId })
-        await fetchFolders()
+        invalidateFolders()
         return folder
       } catch (err) {
-        setError('Failed to move folder')
         logger.error('Failed to move folder:', err)
         return null
       }
     },
-    [fetchFolders]
+    [invalidateFolders]
   )
 
   return {

@@ -10,11 +10,6 @@ export type TranslationTargetLanguage = 'zh-CN' | 'en'
 export interface UserSettings {
   read_later_days?: number // Days until read later items expire (0 = never)
   show_read_later_remaining?: boolean // Show remaining time in read later list
-  reader_mode?: 'legacy' | 'new'
-  ranking_mode?: 'time' | 'value' | 'mixed'
-  recommendation_strength?: 'off' | 'weak'
-  explore_ratio?: number
-  manual_only?: boolean
   translation_provider?: 'google' | 'deepl' | 'openai' | 'mtran'
   translation_target_language?: TranslationTargetLanguage
   list_translation_auto_enabled?: boolean // Auto-enable list viewport translation
@@ -24,7 +19,6 @@ export interface UserSettings {
   translation_api_key?: string
   translation_model?: string
   translation_base_url?: string
-  discovery_tavily_api_key?: string
 }
 
 /** User account information */
@@ -111,7 +105,6 @@ export interface Entry {
 /** Entry with user state */
 export interface EntryWithState extends Entry {
   is_read: boolean
-  is_liked: boolean | null // true = liked, false = disliked, null = no feedback
   read_later: boolean
   read_later_until: string | null // ISO date string when read later expires
   triage_state?: 'now' | 'later' | 'archive' | 'trial'
@@ -126,33 +119,6 @@ export interface EntryWithState extends Entry {
   // Feed info for display in aggregated views
   feed_title: string | null
   feed_icon_url: string | null
-  // M3: Preference score
-  preference_score: number | null // 0-100 preference score
-  debug_info: ScoreDebugInfo | null // Debug information (if debug mode enabled)
-}
-
-export interface DiscoveryCandidate {
-  id: string
-  feed_url: string
-  site_url: string | null
-  title: string | null
-  language: string | null
-  topic: string
-  source_kind: string
-  reason: string
-  quality_score: number
-  relevance_score: number
-  novelty_score: number
-  diversity_score: number
-  discovery_score: number
-  fetch_success_rate: number
-  update_stability_score: number
-  dedup_ratio: number
-  is_blocked: boolean
-  trial_started_at: string | null
-  trial_ends_at: string | null
-  subscribed_at: string | null
-  refreshed_at: string
 }
 
 // M2: Folder types
@@ -204,51 +170,10 @@ export interface ReorderFoldersRequest {
   orders: FolderOrderItem[]
 }
 
-// M2: Tag types
-export interface Tag {
-  id: string
-  user_id: string
-  name: string
-  color: string | null
-  created_at: string
-}
-
-export interface TagWithCounts extends Tag {
-  bookmark_count: number
-  entry_count: number
-}
-
-export interface TagListResponse {
-  tags: TagWithCounts[]
-}
-
-export interface CreateTagRequest {
-  name: string
-  color?: string | null
-}
-
-export interface UpdateTagRequest {
-  name?: string
-  color?: string | null
-}
-
-export interface BatchTagRequest {
-  action: 'add' | 'remove'
-  tag_id: string
-  target_type: 'bookmark' | 'user_entry'
-  target_ids: string[]
-}
-
 // M2: Bookmark types
 export interface BookmarkFolderSimple {
   id: string
   name: string
-}
-
-export interface BookmarkTagSimple {
-  id: string
-  name: string
-  color: string | null
 }
 
 export interface Bookmark {
@@ -261,7 +186,6 @@ export interface Bookmark {
   content: string | null // Full article content (HTML) for in-app reading
   snapshot_status: 'pending' | 'processing' | 'done' | 'failed'
   folders: BookmarkFolderSimple[]
-  tags: BookmarkTagSimple[]
   created_at: string
   updated_at: string
 }
@@ -280,38 +204,11 @@ export interface CreateBookmarkRequest {
   title?: string
   excerpt?: string
   folder_ids?: string[]
-  tag_ids?: string[]
 }
 
 export interface UpdateBookmarkRequest {
   title?: string
   excerpt?: string
-}
-
-// M3: Preference types
-export interface ScoreDebugInfo {
-  positive_sim: number // Similarity to positive preferences [-1, 1]
-  negative_sim: number // Similarity to negative preferences [-1, 1]
-  confidence: number // Model confidence [0, 1]
-  source_boost: number // Boost from source affinity
-  author_boost: number // Boost from author affinity
-}
-
-export interface PreferenceStats {
-  total_likes: number
-  total_dislikes: number
-  total_bookmarks: number
-  preference_strength: 'weak' | 'moderate' | 'strong'
-  top_sources: Array<{
-    feed_id: string
-    feed_title: string
-    affinity_score: number
-  }>
-  top_authors: Array<{
-    name: string
-    affinity_score: number
-  }>
-  model_updated_at: string | null
 }
 
 // MCP: API Token types

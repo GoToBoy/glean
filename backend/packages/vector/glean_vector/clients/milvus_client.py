@@ -1,19 +1,32 @@
 """Milvus client for vector operations."""
 
+from __future__ import annotations
+
 import asyncio
 from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
-from pymilvus import (
-    Collection,
-    CollectionSchema,
-    DataType,
-    FieldSchema,
-    MilvusException,
-    connections,
-    utility,
-)
+try:
+    from pymilvus import (  # type: ignore[import-not-found]  # optional runtime dep
+        Collection,
+        CollectionSchema,
+        DataType,
+        FieldSchema,
+        MilvusException,
+        connections,
+        utility,
+    )
+except ImportError:
+    # pymilvus is not installed; MilvusClient methods will raise at runtime if called.
+    # Annotate as Any so pyright doesn't infer None and cascade errors into call sites.
+    Collection: Any = None  # type: ignore[assignment]
+    CollectionSchema: Any = None  # type: ignore[assignment]
+    DataType: Any = None  # type: ignore[assignment]
+    FieldSchema: Any = None  # type: ignore[assignment]
+    MilvusException: Any = Exception  # type: ignore[assignment]
+    connections: Any = None  # type: ignore[assignment]
+    utility: Any = None  # type: ignore[assignment]
 
 from glean_core import get_logger
 from glean_vector.config import milvus_config
@@ -32,8 +45,8 @@ class MilvusClient:
         """Initialize Milvus client."""
         self.config = milvus_config
         self._connected = False
-        self._entries_collection: Collection | None = None
-        self._prefs_collection: Collection | None = None
+        self._entries_collection: Any = None
+        self._prefs_collection: Any = None
 
     @staticmethod
     def _escape_string(s: str) -> str:
@@ -65,7 +78,7 @@ class MilvusClient:
         return f"{provider}:{model}:{dimension}"
 
     @staticmethod
-    def _extract_model_signature(collection: Collection) -> str | None:
+    def _extract_model_signature(collection: Any) -> str | None:
         """
         Extract model signature from collection description.
 
@@ -299,7 +312,7 @@ class MilvusClient:
 
     def _create_entries_collection(
         self, dimension: int, provider: str | None = None, model: str | None = None
-    ) -> Collection:
+    ) -> Any:
         """
         Create Milvus collection for entry embeddings.
 
@@ -371,7 +384,7 @@ class MilvusClient:
 
     def _create_user_preferences_collection(
         self, dimension: int, provider: str | None = None, model: str | None = None
-    ) -> Collection:
+    ) -> Any:
         """
         Create Milvus collection for user preference vectors.
 
@@ -432,7 +445,7 @@ class MilvusClient:
         collection.load()  # type: ignore[reportUnknownMemberType]
         return collection
 
-    def _is_collection_not_found_error(self, e: MilvusException) -> bool:
+    def _is_collection_not_found_error(self, e: Exception) -> bool:
         """
         Check if the exception is a "collection not found" error.
 
@@ -446,7 +459,8 @@ class MilvusClient:
             True if this is a collection not found error
         """
         # Milvus error code 100 = collection not found
-        return e.code == 100 or "collection not found" in str(e).lower()
+        exc: Any = e
+        return exc.code == 100 or "collection not found" in str(e).lower()
 
     def _refresh_entries_collection(self) -> None:
         """

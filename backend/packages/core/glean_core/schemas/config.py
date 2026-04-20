@@ -70,38 +70,6 @@ class EmbeddingConfig(BaseModel):
         return self.rate_limit.providers.get(self.provider, self.rate_limit.default)
 
 
-class PreferenceConfig(BaseModel):
-    """
-    Preference calculation configuration.
-
-    Stored in system_configs table with key = NAMESPACE.
-    """
-
-    NAMESPACE: ClassVar[str] = "preference"
-
-    default_score: float = 50.0
-    confidence_threshold: int = 10
-    like_weight: float = 1.0
-    dislike_weight: float = -1.0
-    bookmark_weight: float = 0.7
-    source_boost_max: float = 5.0
-    author_boost_max: float = 3.0
-
-
-class ScoreConfig(BaseModel):
-    """
-    Score calculation configuration.
-
-    Stored in system_configs table with key = NAMESPACE.
-    """
-
-    NAMESPACE: ClassVar[str] = "score"
-
-    recommend_threshold: float = 70.0
-    low_interest_threshold: float = 40.0
-    cache_ttl: int = 3600
-
-
 class RSSHubConfig(BaseModel):
     """
     RSSHub conversion configuration.

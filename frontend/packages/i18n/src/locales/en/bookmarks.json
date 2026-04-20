@@ -1,10 +1,10 @@
 {
-  "title": "Bookmarks",
-  "subtitle": "Your saved articles",
+  "title": "Archive",
+  "subtitle": "Your saved archive items",
   "actions": {
-    "addBookmark": "Add Bookmark",
-    "removeBookmark": "Remove Bookmark",
-    "editBookmark": "Edit Bookmark",
+    "addBookmark": "Add to Archive",
+    "removeBookmark": "Remove from Archive",
+    "editBookmark": "Edit Archive Item",
     "moveToFolder": "Move to Folder",
     "addToFolder": "Add to Folder",
     "removeFromFolder": "Remove from Folder",
@@ -37,12 +37,12 @@
     "creating": "Creating..."
   },
   "empty": {
-    "title": "No bookmarks yet",
-    "description": "Save articles you want to read later",
-    "addBookmark": "Add a Bookmark",
-    "noBookmarks": "No bookmarks found",
-    "noBookmarksDescription": "Save articles or add external URLs to build your collection",
-    "addFirstBookmark": "Add Your First Bookmark"
+    "title": "No archive items yet",
+    "description": "Save articles and links you want to keep",
+    "addBookmark": "Add to Archive",
+    "noBookmarks": "No archive items found",
+    "noBookmarksDescription": "Save articles or add external URLs to build your personal archive",
+    "addFirstBookmark": "Add Your First Archive Item"
   },
   "metadata": {
     "title": "Title",
@@ -54,11 +54,11 @@
     "updatedAt": "Updated"
   },
   "placeholders": {
-    "searchBookmarks": "Search bookmarks...",
+    "searchBookmarks": "Search archive...",
     "searchTag": "Search or create tag...",
     "articleTitle": "Article title",
     "addNote": "Add a note...",
-    "bookmarkTitle": "Bookmark title",
+    "bookmarkTitle": "Archive title",
     "bookmarkNotes": "Add notes...",
     "searchFolder": "Search or create folder..."
   },
@@ -75,12 +75,12 @@
     "exitFullscreen": "Exit fullscreen"
   },
   "pagination": {
-    "showing": "Showing {{count}} of {{total}} bookmarks",
+    "showing": "Showing {{count}} of {{total}} archive items",
     "previous": "Previous",
     "next": "Next"
   },
   "delete": {
-    "confirm": "This action cannot be undone. The bookmark will be permanently deleted.",
+    "confirm": "This action cannot be undone. The archive item will be permanently deleted.",
     "deleting": "Deleting...",
     "delete": "Delete"
   },
@@ -92,8 +92,8 @@
   },
   "dialogs": {
     "createBookmark": {
-      "title": "Add Bookmark",
-      "description": "Save a URL or create a note for later reading.",
+      "title": "Add to Archive",
+      "description": "Save a URL or create a note in your personal archive.",
       "url": "URL",
       "bookmarkTitle": "Title",
       "notes": "Notes",
@@ -101,15 +101,15 @@
       "tags": "Tags",
       "error": {
         "urlOrTitleRequired": "Please provide a URL or title",
-        "failedToCreate": "Failed to create bookmark"
+        "failedToCreate": "Failed to create archive item"
       },
       "cancel": "Cancel",
       "saving": "Saving...",
-      "save": "Save Bookmark"
+      "save": "Save to Archive"
     },
     "editBookmark": {
-      "title": "Edit Bookmark",
-      "description": "Update bookmark details, folders, and tags.",
+      "title": "Edit Archive Item",
+      "description": "Update archive item details and folders.",
       "bookmarkTitle": "Title",
       "notes": "Notes",
       "source": {
@@ -121,7 +121,7 @@
       "tags": "Tags",
       "error": {
         "titleRequired": "Title is required",
-        "failedToUpdate": "Failed to update bookmark"
+        "failedToUpdate": "Failed to update archive item"
       },
       "cancel": "Cancel",
       "saving": "Saving...",

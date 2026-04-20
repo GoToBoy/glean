@@ -208,11 +208,6 @@ class EmbeddingValidationService:
             result = await session.execute(text("SELECT 1 FROM entry_embeddings LIMIT 0"))
             entries_ok = True
 
-            result = await session.execute(
-                text("SELECT 1 FROM user_preference_vectors LIMIT 0")
-            )
-            prefs_ok = True
-
             logger.info("pgvector validation successful")
             return ValidationResult(
                 success=True,
@@ -220,7 +215,6 @@ class EmbeddingValidationService:
                 details={
                     "extension": "vector",
                     "entry_embeddings_table": entries_ok,
-                    "user_preference_vectors_table": prefs_ok,
                     "dimension": dimension,
                     "provider": provider,
                     "model": model,

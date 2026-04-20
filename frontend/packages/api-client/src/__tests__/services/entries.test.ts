@@ -33,13 +33,13 @@ describe('EntryService', () => {
     expect(result).toEqual(response)
   })
 
-  it('should get entries with smart view', async () => {
+  it('should get entries with today-board view', async () => {
     vi.mocked(mockClient.get).mockResolvedValue({ items: [], total: 0, page: 1, total_pages: 0 })
 
-    await service.getEntries({ view: 'smart' })
+    await service.getEntries({ view: 'today-board' })
 
     expect(mockClient.get).toHaveBeenCalledWith('/entries', {
-      params: { view: 'smart' },
+      params: { view: 'today-board' },
       signal: undefined,
     })
   })
@@ -99,33 +99,4 @@ describe('EntryService', () => {
     })
   })
 
-  it('should like an entry', async () => {
-    const entry = { id: 'e1', reaction: 'like' }
-    vi.mocked(mockClient.post).mockResolvedValue(entry)
-
-    const result = await service.likeEntry('e1')
-
-    expect(mockClient.post).toHaveBeenCalledWith('/entries/e1/like')
-    expect(result).toEqual(entry)
-  })
-
-  it('should dislike an entry', async () => {
-    const entry = { id: 'e1', reaction: 'dislike' }
-    vi.mocked(mockClient.post).mockResolvedValue(entry)
-
-    const result = await service.dislikeEntry('e1')
-
-    expect(mockClient.post).toHaveBeenCalledWith('/entries/e1/dislike')
-    expect(result).toEqual(entry)
-  })
-
-  it('should remove a reaction', async () => {
-    const entry = { id: 'e1', reaction: null }
-    vi.mocked(mockClient.delete).mockResolvedValue(entry)
-
-    const result = await service.removeReaction('e1')
-
-    expect(mockClient.delete).toHaveBeenCalledWith('/entries/e1/reaction')
-    expect(result).toEqual(entry)
-  })
 })

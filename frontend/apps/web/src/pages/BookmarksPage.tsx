@@ -2,18 +2,16 @@ import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useBookmarkStore } from '../stores/bookmarkStore'
 import { useFolderStore } from '../stores/folderStore'
-import { useTagStore } from '../stores/tagStore'
 import { useEntry } from '../hooks/useEntries'
 import { useTranslation } from '@glean/i18n'
 import { ArticleReader, ArticleReaderSkeleton } from '../components/ArticleReader'
 import { SourceGroupBoard } from '../components/bookmarks/SourceGroupBoard'
 import { BookmarkSearchResults } from '../components/bookmarks/BookmarkSearchResults'
 import { groupBookmarksBySource } from '../components/bookmarks/bookmarkGrouping'
-import type { Bookmark, FolderTreeNode, TagWithCounts, EntryWithState } from '@glean/types'
+import type { Bookmark, FolderTreeNode, EntryWithState } from '@glean/types'
 import {
   Bookmark as BookmarkIcon,
   FolderOpen,
-  Tag,
   Plus,
   Search,
   ExternalLink,
@@ -22,7 +20,6 @@ import {
   Loader2,
   X,
   FileText,
-  Tags,
   BookOpen,
 } from 'lucide-react'
 import {
@@ -72,7 +69,6 @@ function convertBookmarkToEntry(bookmark: Bookmark): EntryWithState {
 
     // User state fields
     is_read: true, // Bookmarks are considered read
-    is_liked: null,
     read_later: false,
     read_later_until: null,
     read_at: bookmark.created_at,
@@ -82,17 +78,13 @@ function convertBookmarkToEntry(bookmark: Bookmark): EntryWithState {
     // Feed info (not applicable for bookmarks)
     feed_title: null,
     feed_icon_url: null,
-
-    // Preference score (not applicable for bookmarks)
-    preference_score: null,
-    debug_info: null,
   }
 }
 
 /**
  * Bookmarks page.
  *
- * Displays bookmarked content with folder and tag filtering.
+ * Displays bookmarked content with folder filtering.
  */
 export default function BookmarksPage() {
   const { t } = useTranslation('bookmarks')
@@ -111,14 +103,11 @@ export default function BookmarksPage() {
   } = useBookmarkStore()
 
   const { bookmarkFolders } = useFolderStore()
-  const { tags, fetchTags } = useTagStore()
 
   // Get filters from URL params
   const selectedFolder = searchParams.get('folder') || null
-  const selectedTag = searchParams.get('tag') || null
   const [searchQuery, setSearchQuery] = useState('')
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('')
-  const [listTagFilter, setListTagFilter] = useState('')
   const [showCreateBookmark, setShowCreateBookmark] = useState(false)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -130,17 +119,10 @@ export default function BookmarksPage() {
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
   const [isFullscreen, setIsFullscreen] = useState(false)
 
-  const activeTagFilter = selectedTag || listTagFilter || null
-  const hasActiveFilters = Boolean(selectedFolder || activeTagFilter || searchQuery)
+  const hasActiveFilters = Boolean(selectedFolder || searchQuery)
   const displayMode: 'source' | 'results' = hasActiveFilters ? 'results' : 'source'
 
   const sourceGroups = useMemo(() => groupBookmarksBySource(bookmarks), [bookmarks])
-
-  useEffect(() => {
-    if (selectedTag) {
-      setListTagFilter('')
-    }
-  }, [selectedTag])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -150,32 +132,22 @@ export default function BookmarksPage() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Initial data loading
-  useEffect(() => {
-    fetchTags()
-  }, [fetchTags])
-
   // Handle filter changes from URL
   useEffect(() => {
     const params: Parameters<typeof fetchBookmarks>[0] = {
       page: 1,
       folder_id: selectedFolder ?? undefined,
-      tag_ids: activeTagFilter ? [activeTagFilter] : undefined,
       search: debouncedSearchQuery || undefined,
     }
 
     fetchBookmarks(params)
-  }, [selectedFolder, activeTagFilter, debouncedSearchQuery, fetchBookmarks])
+  }, [selectedFolder, debouncedSearchQuery, fetchBookmarks])
 
   // Clear filter helper
-  const clearFilter = (type: 'folder' | 'tag' | 'search') => {
+  const clearFilter = (type: 'folder' | 'search') => {
     if (type === 'folder') {
       const newParams = new URLSearchParams(searchParams)
       newParams.delete('folder')
-      navigate(`/bookmarks${newParams.toString() ? `?${newParams.toString()}` : ''}`)
-    } else if (type === 'tag') {
-      const newParams = new URLSearchParams(searchParams)
-      newParams.delete('tag')
       navigate(`/bookmarks${newParams.toString() ? `?${newParams.toString()}` : ''}`)
     } else {
       setSearchQuery('')
@@ -246,20 +218,6 @@ export default function BookmarksPage() {
                   className="h-10 w-full [&_input]:pl-9"
                 />
               </div>
-              <select
-                value={listTagFilter}
-                onChange={(e) => setListTagFilter(e.target.value)}
-                disabled={!!selectedTag}
-                className="border-input bg-background text-foreground h-10 shrink-0 rounded-lg border px-3 text-sm disabled:opacity-60"
-                title="Tag filter"
-              >
-                <option value="">All tags</option>
-                {tags.map((tag) => (
-                  <option key={tag.id} value={tag.id}>
-                    {tag.name}
-                  </option>
-                ))}
-              </select>
               <Button
                 onClick={() => setShowCreateBookmark(true)}
                 className="h-10 shrink-0 whitespace-nowrap"
@@ -270,7 +228,7 @@ export default function BookmarksPage() {
             </div>
 
             {/* Active filters */}
-            {(selectedFolder || selectedTag || listTagFilter || searchQuery) && (
+            {(selectedFolder || searchQuery) && (
               <div className="mt-3 flex flex-wrap items-center gap-1.5">
                 <span className="text-muted-foreground text-xs">{t('filters.label')}</span>
                 {selectedFolder && (
@@ -287,39 +245,6 @@ export default function BookmarksPage() {
                     </button>
                   </span>
                 )}
-                {selectedTag &&
-                  (() => {
-                    const tag = tags.find((t) => t.id === selectedTag)
-                    return tag ? (
-                      <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
-                        <Tag className="h-3 w-3" />
-                        <span className="max-w-24 truncate">{tag.name}</span>
-                        <button
-                          onClick={() => clearFilter('tag')}
-                          className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ) : null
-                  })()}
-                {!selectedTag &&
-                  listTagFilter &&
-                  (() => {
-                    const tag = tags.find((t) => t.id === listTagFilter)
-                    return tag ? (
-                      <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
-                        <Tag className="h-3 w-3" />
-                        <span className="max-w-24 truncate">{tag.name}</span>
-                        <button
-                          onClick={() => setListTagFilter('')}
-                          className="touch-target-none hover:bg-accent hover:text-foreground rounded p-0.5 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </span>
-                    ) : null
-                  })()}
                 {searchQuery && (
                   <span className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full py-1 pr-1 pl-2 text-xs">
                     <Search className="h-3 w-3" />
@@ -339,7 +264,7 @@ export default function BookmarksPage() {
           {/* Bookmarks Grid/List */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6">
             <div
-              key={`${selectedFolder || 'all'}-${activeTagFilter || 'none'}-${displayMode}`}
+              key={`${selectedFolder || 'all'}-${displayMode}`}
               className="feed-content-transition"
             >
               {loading ? (
@@ -431,7 +356,6 @@ export default function BookmarksPage() {
         bookmark={editingBookmark}
         onClose={() => setEditingBookmark(null)}
         folders={bookmarkFolders}
-        tags={tags}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -546,13 +470,11 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
   const { t } = useTranslation('bookmarks')
   const { createBookmark } = useBookmarkStore()
   const { bookmarkFolders } = useFolderStore()
-  const { tags } = useTagStore()
 
   const [url, setUrl] = useState('')
   const [title, setTitle] = useState('')
   const [excerpt, setExcerpt] = useState('')
   const [selectedFolders, setSelectedFolders] = useState<string[]>([])
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -572,14 +494,12 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
         title: title || url,
         excerpt: excerpt || undefined,
         folder_ids: selectedFolders.length > 0 ? selectedFolders : undefined,
-        tag_ids: selectedTags.length > 0 ? selectedTags : undefined,
       })
       // Reset form
       setUrl('')
       setTitle('')
       setExcerpt('')
       setSelectedFolders([])
-      setSelectedTags([])
       onOpenChange(false)
     } catch (err) {
       setError(t('dialogs.createBookmark.error.failedToCreate'))
@@ -592,12 +512,6 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
   const toggleFolder = (folderId: string) => {
     setSelectedFolders((prev) =>
       prev.includes(folderId) ? prev.filter((id) => id !== folderId) : [...prev, folderId]
-    )
-  }
-
-  const toggleTag = (tagId: string) => {
-    setSelectedTags((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     )
   }
 
@@ -673,37 +587,6 @@ function CreateBookmarkDialog({ open, onOpenChange }: CreateBookmarkDialogProps)
               </div>
             )}
 
-            {/* Tag selection */}
-            {tags.length > 0 && (
-              <div>
-                <label className="text-foreground mb-1.5 block text-sm font-medium">
-                  {t('dialogs.createBookmark.tags')}
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {tags.map((tag) => (
-                    <button
-                      key={tag.id}
-                      type="button"
-                      onClick={() => toggleTag(tag.id)}
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                        selectedTags.includes(tag.id)
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-accent'
-                      }`}
-                    >
-                      {tag.color && (
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: tag.color }}
-                        />
-                      )}
-                      {tag.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
 
@@ -743,29 +626,24 @@ interface EditBookmarkDialogProps {
   bookmark: Bookmark | null
   onClose: () => void
   folders: FolderTreeNode[]
-  tags: TagWithCounts[]
 }
 
-function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDialogProps) {
+function EditBookmarkDialog({ bookmark, onClose, folders }: EditBookmarkDialogProps) {
   const { t } = useTranslation('bookmarks')
-  const { updateBookmark, addFolder, removeFolder, addTag, removeTag } = useBookmarkStore()
+  const { updateBookmark, addFolder, removeFolder } = useBookmarkStore()
   const { createFolder } = useFolderStore()
-  const { createTag } = useTagStore()
 
   const [title, setTitle] = useState('')
   const [excerpt, setExcerpt] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
 
-  // Track which folders/tags are selected
+  // Track which folders are selected
   const [selectedFolderIds, setSelectedFolderIds] = useState<string[]>([])
-  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([])
 
-  // Search states for folder/tag selection
+  // Search state for folder selection
   const [folderSearch, setFolderSearch] = useState('')
-  const [tagSearch, setTagSearch] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
-  const [isCreatingTag, setIsCreatingTag] = useState(false)
 
   // Initialize form when bookmark changes
   useEffect(() => {
@@ -773,7 +651,6 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
       setTitle(bookmark.title)
       setExcerpt(bookmark.excerpt || '')
       setSelectedFolderIds(bookmark.folders.map((f) => f.id))
-      setSelectedTagIds(bookmark.tags.map((t) => t.id))
       setError('')
     }
   }, [bookmark])
@@ -807,18 +684,6 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
         await removeFolder(bookmark.id, folderId)
       }
 
-      // Handle tag changes
-      const currentTagIds = bookmark.tags.map((t) => t.id)
-      const tagsToAdd = selectedTagIds.filter((id) => !currentTagIds.includes(id))
-      const tagsToRemove = currentTagIds.filter((id) => !selectedTagIds.includes(id))
-
-      for (const tagId of tagsToAdd) {
-        await addTag(bookmark.id, tagId)
-      }
-      for (const tagId of tagsToRemove) {
-        await removeTag(bookmark.id, tagId)
-      }
-
       onClose()
     } catch (err) {
       setError(t('dialogs.editBookmark.error.failedToUpdate'))
@@ -831,12 +696,6 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
   const toggleFolder = (folderId: string) => {
     setSelectedFolderIds((prev) =>
       prev.includes(folderId) ? prev.filter((id) => id !== folderId) : [...prev, folderId]
-    )
-  }
-
-  const toggleTag = (tagId: string) => {
-    setSelectedTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
     )
   }
 
@@ -857,19 +716,15 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
 
   const flatFolders = flattenFolders(folders)
 
-  // Filtered folders/tags based on search
+  // Filtered folders based on search
   const filteredFolders = flatFolders.filter((folder) =>
     folder.name.toLowerCase().includes(folderSearch.toLowerCase())
-  )
-  const filteredTags = tags.filter((tag) =>
-    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
   )
 
   // Check for exact matches
   const folderExactMatch = flatFolders.some(
     (folder) => folder.name.toLowerCase() === folderSearch.toLowerCase()
   )
-  const tagExactMatch = tags.some((tag) => tag.name.toLowerCase() === tagSearch.toLowerCase())
 
   // Handle creating new folder
   const handleCreateNewFolder = async () => {
@@ -887,21 +742,6 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
       setFolderSearch('')
     } finally {
       setIsCreatingFolder(false)
-    }
-  }
-
-  // Handle creating new tag
-  const handleCreateNewTag = async () => {
-    if (!tagSearch.trim() || tagExactMatch) return
-    setIsCreatingTag(true)
-    try {
-      const newTag = await createTag({ name: tagSearch.trim() })
-      if (newTag) {
-        setSelectedTagIds((prev) => [...prev, newTag.id])
-      }
-      setTagSearch('')
-    } finally {
-      setIsCreatingTag(false)
     }
   }
 
@@ -1075,133 +915,6 @@ function EditBookmarkDialog({ bookmark, onClose, folders, tags }: EditBookmarkDi
                             <>
                               <Plus className="h-4 w-4" />
                               Create &quot;{folderSearch.trim()}&quot;
-                            </>
-                          )}
-                        </MenuItem>
-                      </>
-                    )}
-                  </div>
-                </MenuPopup>
-              </Menu>
-            </div>
-          </div>
-
-          {/* Tags */}
-          <div>
-            <label className="text-foreground mb-1.5 block text-sm font-medium">
-              {t('dialogs.editBookmark.tags')}
-            </label>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {/* Selected tags */}
-              {selectedTagIds.map((tagId) => {
-                const tag = tags.find((t) => t.id === tagId)
-                if (!tag) return null
-                return (
-                  <span
-                    key={tag.id}
-                    className="bg-muted text-muted-foreground inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium"
-                  >
-                    {tag.color && (
-                      <span
-                        className="h-1.5 w-1.5 rounded-full"
-                        style={{ backgroundColor: tag.color }}
-                      />
-                    )}
-                    {tag.name}
-                    <button
-                      type="button"
-                      onClick={() => toggleTag(tag.id)}
-                      className="hover:bg-accent ml-0.5 rounded-full p-0.5"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )
-              })}
-
-              {/* Tag Combobox */}
-              <Menu>
-                <MenuTrigger className="border-muted-foreground/30 text-muted-foreground hover:border-primary hover:text-primary inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-xs transition-colors">
-                  <Tags className="h-3 w-3" />
-                  <Plus className="h-3 w-3" />
-                </MenuTrigger>
-                <MenuPopup align="start" sideOffset={4} className="w-56">
-                  {/* Search Input */}
-                  <div className="p-2">
-                    <div className="relative">
-                      <Search className="text-muted-foreground absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2" />
-                      <input
-                        type="text"
-                        placeholder={t('placeholders.searchTag')}
-                        value={tagSearch}
-                        onChange={(e) => setTagSearch(e.target.value)}
-                        className="border-input placeholder:text-muted-foreground/60 focus:border-primary h-8 w-full rounded-md border bg-transparent pr-3 pl-8 text-sm focus-visible:!shadow-none"
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && tagSearch.trim() && !tagExactMatch) {
-                            e.preventDefault()
-                            handleCreateNewTag()
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <MenuSeparator />
-
-                  {/* Tag List */}
-                  <div className="max-h-48 overflow-y-auto py-1">
-                    {filteredTags.length === 0 && !tagSearch.trim() && (
-                      <div className="text-muted-foreground px-2 py-3 text-center text-xs">
-                        No tags yet. Type to create one.
-                      </div>
-                    )}
-
-                    {filteredTags.map((tag) => {
-                      const isSelected = selectedTagIds.includes(tag.id)
-                      return (
-                        <MenuCheckboxItem
-                          key={tag.id}
-                          checked={isSelected}
-                          onClick={(e) => {
-                            e.preventDefault()
-                            toggleTag(tag.id)
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2">
-                            {tag.color && (
-                              <span
-                                className="h-2 w-2 rounded-full"
-                                style={{ backgroundColor: tag.color }}
-                              />
-                            )}
-                            {tag.name}
-                          </span>
-                        </MenuCheckboxItem>
-                      )
-                    })}
-
-                    {/* Create New Tag Option */}
-                    {tagSearch.trim() && !tagExactMatch && (
-                      <>
-                        {filteredTags.length > 0 && <MenuSeparator />}
-                        <MenuItem
-                          onClick={(e) => {
-                            e.preventDefault()
-                            handleCreateNewTag()
-                          }}
-                          disabled={isCreatingTag}
-                          className="text-primary cursor-pointer"
-                        >
-                          {isCreatingTag ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Creating...
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="h-4 w-4" />
-                              Create &quot;{tagSearch.trim()}&quot;
                             </>
                           )}
                         </MenuItem>

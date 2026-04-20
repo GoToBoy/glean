@@ -5,9 +5,7 @@
     "profile": "个人资料",
     "readLater": "稍后阅读",
     "appearance": "外观",
-    "reader": "阅读模式",
     "manageFeeds": "管理订阅",
-    "preferences": "偏好",
     "apiTokens": "API 令牌",
     "aiIntegration": "AI",
     "translation": "翻译"
@@ -56,33 +54,6 @@
       "auto": "自动",
       "autoDesc": "跟随系统偏好"
     }
-  },
-  "readerMode": {
-    "title": "阅读模式",
-    "desc": "配置旧版/新版模式和推荐控制项。",
-    "modeLabel": "阅读模式",
-    "modeOptions": {
-      "legacy": "旧版",
-      "new": "新版（统一）"
-    },
-    "rankingLabel": "排序模式",
-    "rankingOptions": {
-      "time": "时间",
-      "value": "每分钟价值",
-      "mixed": "混合"
-    },
-    "recommendationLabel": "推荐强度",
-    "recommendationOptions": {
-      "off": "关闭",
-      "weak": "弱"
-    },
-    "exploreRatioLabel": "探索比例",
-    "manualOnlyLabel": "仅手动订阅",
-    "manualOnlyDesc": "关闭发现/推荐，保持纯手动 RSS。",
-    "discoveryApiKeyLabel": "发现搜索 API 密钥（Tavily）",
-    "discoveryApiKeyDesc": "Discover Sources 可使用你的个人密钥。留空则使用服务端默认密钥。",
-    "discoveryApiKeyPlaceholder": "tvly-...",
-    "discoveryApiKeySaved": "发现搜索密钥已保存"
   },
   "manageFeeds": {
     "title": "管理订阅",
@@ -257,60 +228,6 @@
     "unsubscribeDescription": "确定要取消订阅此源吗？此操作无法撤销。",
     "cancel": "取消",
     "importing": "正在导入订阅..."
-  },
-  "preferences": {
-    "title": "偏好",
-    "desc": "管理您的内容偏好和智能过滤器",
-    "rebuildModel": "重建模型",
-    "rebuilding": "重建中...",
-    "showPreferenceScores": "显示偏好分数",
-    "showPreferenceScoresDesc": "在智能列表中显示相关性分数",
-    "autoMarkReadOnScroll": "滚动时自动标记已读",
-    "autoMarkReadOnScrollDesc": "当你滚动越过条目后，自动将其标记为已读。",
-    "autoMarkReadThreshold": "超过以下距离后标记为已读",
-    "failedToLoad": "加载偏好设置失败",
-    "totalInteractions": "总交互数",
-    "acrossAllFeeds": "所有订阅源",
-    "likedItems": "喜欢的项目",
-    "dislikedItems": "不喜欢的项目",
-    "modelStrength": "模型强度",
-    "basedOnInteractionCount": "基于交互数量",
-    "recentActivity": "最近活动",
-    "lastModelTraining": "上次模型训练",
-    "totalBookmarks": "总收藏数",
-    "topSources": "最受喜爱来源",
-    "topSourcesDesc": "亲和度最高的订阅源",
-    "topAuthors": "最受喜爱作者",
-    "topAuthorsDesc": "亲和度最高的作者",
-    "rebuildConfirmTitle": "重建偏好模型？",
-    "rebuildConfirmDesc": "这将使用您所有的历史交互重新训练您的个人推荐模型。此过程可能需要几分钟才能完成。",
-    "cancel": "取消",
-    "strength": {
-      "strong": "强",
-      "moderate": "中等",
-      "weak": "弱",
-      "none": "无"
-    },
-    "ofInteractions": "% 的交互",
-    "stats": {
-      "liked": "喜欢的文章",
-      "disliked": "不喜欢的文章",
-      "bookmarked": "已收藏的文章",
-      "modelStrength": "模型强度",
-      "modelStrengthDesc": "基于你的反馈历史",
-      "lastUpdated": "上次更新：{{date}}"
-    },
-    "displaySettings": {
-      "title": "显示设置",
-      "desc": "自定义偏好显示方式",
-      "showScore": "显示偏好分数",
-      "showScoreDesc": "在智能列表条目上显示推荐分数"
-    },
-    "rebuildHint": "从所有历史反馈重建偏好模型",
-    "empty": {
-      "title": "暂无偏好数据",
-      "description": "开始点赞或点踩文章以训练偏好模型"
-    }
   },
   "translation": {
     "title": "翻译",

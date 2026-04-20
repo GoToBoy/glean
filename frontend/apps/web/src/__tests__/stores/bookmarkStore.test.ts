@@ -8,8 +8,6 @@ vi.mock('@glean/api-client', () => ({
     deleteBookmark: vi.fn(),
     addFolder: vi.fn(),
     removeFolder: vi.fn(),
-    addTag: vi.fn(),
-    removeTag: vi.fn(),
   },
 }))
 
@@ -19,7 +17,7 @@ vi.mock('@glean/logger', () => ({
 
 import { useBookmarkStore } from '@/stores/bookmarkStore'
 import { bookmarkService } from '@glean/api-client'
-import { createMockBookmark, createMockBookmarkFolder, createMockBookmarkTag } from '../helpers/mockData'
+import { createMockBookmark, createMockBookmarkFolder } from '../helpers/mockData'
 
 const mockBookmark = createMockBookmark({ id: 'b1', url: 'https://example.com', title: 'Test' })
 
@@ -185,30 +183,6 @@ describe('bookmarkStore', () => {
       vi.mocked(bookmarkService.removeFolder).mockResolvedValue(updated)
 
       const result = await useBookmarkStore.getState().removeFolder('b1', 'f1')
-
-      expect(result).toEqual(updated)
-    })
-  })
-
-  describe('addTag', () => {
-    it('should add tag and update bookmark', async () => {
-      const updated = { ...mockBookmark, tags: [createMockBookmarkTag({ id: 't1' })] }
-      useBookmarkStore.setState({ bookmarks: [mockBookmark] })
-      vi.mocked(bookmarkService.addTag).mockResolvedValue(updated)
-
-      const result = await useBookmarkStore.getState().addTag('b1', 't1')
-
-      expect(result).toEqual(updated)
-    })
-  })
-
-  describe('removeTag', () => {
-    it('should remove tag and update bookmark', async () => {
-      const updated = { ...mockBookmark, tags: [] }
-      useBookmarkStore.setState({ bookmarks: [{ ...mockBookmark, tags: [createMockBookmarkTag({ id: 't1' })] }] })
-      vi.mocked(bookmarkService.removeTag).mockResolvedValue(updated)
-
-      const result = await useBookmarkStore.getState().removeTag('b1', 't1')
 
       expect(result).toEqual(updated)
     })

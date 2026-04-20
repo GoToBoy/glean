@@ -30,6 +30,12 @@ interface AuthState {
  * Manages user authentication state, login/logout actions,
  * and token persistence.
  */
+// Tracks an in-flight loadUser() call so concurrent callers (e.g. React
+// StrictMode double-invoking effects, or App.tsx + ProtectedRoute both calling
+// loadUser on mount) all await the same promise instead of one of them
+// returning synchronously before authentication has been resolved.
+let loadUserPromise: Promise<void> | null = null
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
@@ -42,7 +48,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const response = await authService.login({ email, password })
-      authService.saveTokens(response.tokens)
+      await authService.saveTokens(response.tokens)
       set({
         user: response.user,
         isAuthenticated: true,
@@ -59,7 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const response = await authService.register({ email, password, name })
-      authService.saveTokens(response.tokens)
+      await authService.saveTokens(response.tokens)
       set({
         user: response.user,
         isAuthenticated: true,
@@ -81,7 +87,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       await authService.logout()
-      authService.clearTokens()
+      await authService.clearTokens()
       set({
         user: null,
         isAuthenticated: false,
@@ -95,34 +101,47 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loadUser: async () => {
-    // Prevent concurrent calls
-    if (get().isLoading) return
+    // De-duplicate concurrent callers by sharing a single in-flight promise.
+    // Returning early (as the previous `if (isLoading) return` did) caused a
+    // race with React StrictMode's double-invoked effect: the second call
+    // resolved synchronously, flipping `isInitialized` in App.tsx before the
+    // real auth check finished, so ProtectedRoute saw the default
+    // `isAuthenticated: false` state and redirected to /login on refresh.
+    if (loadUserPromise) return loadUserPromise
 
     set({ isLoading: true, error: null })
 
-    const isAuthenticated = await authService.isAuthenticated()
-    if (!isAuthenticated) {
-      set({ isAuthenticated: false, user: null, isLoading: false })
-      return
-    }
+    loadUserPromise = (async () => {
+      try {
+        const isAuthenticated = await authService.isAuthenticated()
+        if (!isAuthenticated) {
+          set({ isAuthenticated: false, user: null, isLoading: false })
+          return
+        }
 
-    try {
-      const user = await authService.getCurrentUser()
-      set({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-      })
-    } catch (error) {
-      // Only clear tokens on explicit auth rejection (401).
-      // Network errors and timeouts mean the server is slow — do not log the user out.
-      if (isAuthError(error)) {
-        await authService.clearTokens()
-        set({ user: null, isAuthenticated: false, isLoading: false, error: 'Session expired' })
-      } else {
-        set({ isLoading: false, error: 'Failed to load user' })
+        try {
+          const user = await authService.getCurrentUser()
+          set({
+            user,
+            isAuthenticated: true,
+            isLoading: false,
+          })
+        } catch (error) {
+          // Only clear tokens on explicit auth rejection (401).
+          // Network errors and timeouts mean the server is slow — do not log the user out.
+          if (isAuthError(error)) {
+            await authService.clearTokens()
+            set({ user: null, isAuthenticated: false, isLoading: false, error: 'Session expired' })
+          } else {
+            set({ isLoading: false, error: 'Failed to load user' })
+          }
+        }
+      } finally {
+        loadUserPromise = null
       }
-    }
+    })()
+
+    return loadUserPromise
   },
 
   updateSettings: async (settings) => {

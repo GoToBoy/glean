@@ -5,7 +5,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from glean_worker.tasks.content_backfill import backfill_entry_content_task, enqueue_feed_content_backfill
+from glean_worker.tasks.content_backfill import (
+    backfill_entry_content_task,
+    enqueue_feed_content_backfill,
+)
 
 
 class TestBackfillEntryContentTask:

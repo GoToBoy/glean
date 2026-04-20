@@ -45,17 +45,6 @@ vi.mock('@/stores/folderStore', () => ({
   }),
 }))
 
-vi.mock('@/stores/tagStore', () => ({
-  useTagStore: () => ({
-    tags: [],
-    fetchTags: vi.fn(),
-    createTag: vi.fn(),
-    updateTag: vi.fn(),
-    deleteTag: vi.fn(),
-    reset: vi.fn(),
-  }),
-}))
-
 vi.mock('@/hooks/useSubscriptions', () => ({
   useAllSubscriptions: () => ({ data: [] }),
   useRefreshAllFeeds: () => ({ mutate: vi.fn(), isPending: false }),
@@ -85,10 +74,6 @@ vi.mock('@/components/sidebar/SidebarBookmarksSection', () => ({
   SidebarBookmarksSection: () => <div data-testid="sidebar-bookmarks" />,
 }))
 
-vi.mock('@/components/sidebar/SidebarTagsSection', () => ({
-  SidebarTagsSection: () => <div data-testid="sidebar-tags" />,
-}))
-
 vi.mock('@/components/sidebar/SidebarUserSection', () => ({
   SidebarUserSection: () => <div data-testid="sidebar-user" />,
 }))
@@ -103,18 +88,6 @@ vi.mock('@/components/dialogs/AddFeedDialog', () => ({
 
 vi.mock('@/components/dialogs/CreateFolderDialog', () => ({
   CreateFolderDialog: () => null,
-}))
-
-vi.mock('@/components/dialogs/CreateTagDialog', () => ({
-  CreateTagDialog: () => null,
-}))
-
-vi.mock('@/components/dialogs/EditTagDialog', () => ({
-  EditTagDialog: () => null,
-}))
-
-vi.mock('@/components/dialogs/DeleteTagDialog', () => ({
-  DeleteTagDialog: () => null,
 }))
 
 vi.mock('@/components/dialogs/LogoutConfirmDialog', () => ({

@@ -539,6 +539,7 @@ class MTranProvider(TranslationProvider):
             "to": self._language_code(target),
         }
 
+        response: httpx.Response | None = None
         try:
             with httpx.Client(timeout=self.timeout) as client:
                 response = client.post(
@@ -560,7 +561,7 @@ class MTranProvider(TranslationProvider):
             # If it's a "No model found" error, don't bother with single requests
             err_text = ""
             try:
-                err_text = response.text if "response" in locals() else str(exc)
+                err_text = response.text if response is not None else str(exc)
             except Exception:
                 err_text = str(exc)
 

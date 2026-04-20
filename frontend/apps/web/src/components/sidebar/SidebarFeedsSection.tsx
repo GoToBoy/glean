@@ -31,7 +31,6 @@ import {
   RefreshCw,
   Upload,
   Download,
-  Sparkles,
   CalendarDays,
   FolderInput,
   Folder,
@@ -75,9 +74,7 @@ interface SidebarFeedsSectionProps {
   readonly onFeedSelect: (feedId?: string, folderId?: string) => void
   readonly onFeedHover?: (feedId?: string, folderId?: string) => void
   readonly onFolderHover?: (folderId: string) => void
-  readonly onSmartViewSelect: () => void
   readonly onTodayBoardViewSelect: () => void
-  readonly isSmartView: boolean
   readonly isTodayBoardView: boolean
   readonly isReaderPage: boolean
   readonly currentFeedId?: string
@@ -109,9 +106,7 @@ export function SidebarFeedsSection({
   onFeedSelect,
   onFeedHover,
   onFolderHover,
-  onSmartViewSelect,
   onTodayBoardViewSelect,
-  isSmartView,
   isTodayBoardView,
   isReaderPage,
   currentFeedId,
@@ -268,16 +263,6 @@ export function SidebarFeedsSection({
       {isFeedsSectionExpanded && (
         <>
           <SidebarItem
-            icon={<Sparkles />}
-            label={t('sidebar.smart')}
-            isActive={isSmartView}
-            onClick={onSmartViewSelect}
-            isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
-            compact={isMobileSidebarOpen}
-            title={t('sidebar.smart')}
-          />
-
-          <SidebarItem
             icon={<CalendarDays />}
             label={t('sidebar.todayBoard')}
             isActive={isTodayBoardView}
@@ -291,7 +276,7 @@ export function SidebarFeedsSection({
           <SidebarItem
             icon={<Inbox />}
             label={t('sidebar.allFeeds')}
-            isActive={isReaderPage && !currentFeedId && !currentFolderId && !isSmartView && !isTodayBoardView}
+            isActive={isReaderPage && !currentFeedId && !currentFolderId && !isTodayBoardView}
             onClick={() => onFeedSelect(undefined)}
             onMouseEnter={() => onFeedHover?.(undefined, undefined)}
             onTouchStart={() => onFeedHover?.(undefined, undefined)}

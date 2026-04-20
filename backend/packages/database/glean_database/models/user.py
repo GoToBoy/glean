@@ -77,16 +77,8 @@ class User(Base, TimestampMixin):
     )
     user_entries = relationship("UserEntry", back_populates="user", cascade="all, delete-orphan")
     folders = relationship("Folder", back_populates="user", cascade="all, delete-orphan")
-    tags = relationship("Tag", back_populates="user", cascade="all, delete-orphan")
     bookmarks = relationship("Bookmark", back_populates="user", cascade="all, delete-orphan")
-    preference_stats = relationship(
-        "UserPreferenceStats", back_populates="user", uselist=False, cascade="all, delete-orphan"
-    )
     api_tokens = relationship("APIToken", back_populates="user", cascade="all, delete-orphan")
     auth_providers = relationship(
         "UserAuthProvider", back_populates="user", cascade="all, delete-orphan"
     )
-    discovery_candidates = relationship(
-        "DiscoveryCandidate", cascade="all, delete-orphan"
-    )
-    discovery_feedback = relationship("DiscoveryFeedback", cascade="all, delete-orphan")

@@ -346,9 +346,9 @@ async def download_embedding_model(
 
         provider = SentenceTransformerProvider(model=model, dimension=dimension)
 
-        # _get_model() is blocking (downloads + loads into memory), run in thread pool
+        # get_model() is blocking (downloads + loads into memory), run in thread pool
         loop = asyncio.get_event_loop()
-        await loop.run_in_executor(None, provider._get_model)
+        await loop.run_in_executor(None, provider.get_model)
 
         actual_dimension = provider.dimension
         logger.info(

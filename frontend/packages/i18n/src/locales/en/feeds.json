@@ -1,12 +1,9 @@
 {
   "sidebar": {
     "feeds": "Feeds",
-    "smart": "Smart",
     "todayBoard": "Today's Intake",
-    "discover": "Discover",
     "allFeeds": "All Feeds",
-    "bookmarks": "Bookmarks",
-    "tags": "Tags",
+    "bookmarks": "Archive",
     "settings": "Settings",
     "folders": "Folders",
     "logout": "Sign Out",
@@ -53,9 +50,9 @@
       "create": "Create",
       "creating": "Creating...",
       "descriptionFeeds": "Create a new folder to organize your feeds.",
-      "descriptionBookmarks": "Create a new folder to organize your bookmarks.",
+      "descriptionBookmarks": "Create a new folder to organize your archived items.",
       "subfolderDescriptionFeeds": "Create a new subfolder to further organize your feeds.",
-      "subfolderDescriptionBookmarks": "Create a new subfolder to further organize your bookmarks."
+      "subfolderDescriptionBookmarks": "Create a new subfolder to further organize your archived items."
     },
     "renameFolder": {
       "title": "Rename Folder",
@@ -100,13 +97,6 @@
       "message": "Mark all entries in this feed as read?",
       "confirm": "Mark as Read",
       "marking": "Marking..."
-    },
-    "deleteTag": {
-      "title": "Delete Tag?",
-      "message": "Are you sure you want to delete this tag?",
-      "delete": "Delete",
-      "deleting": "Deleting...",
-      "description": "Are you sure you want to delete the tag \"{{name}}\"? This will remove it from all associated bookmarks and entries. This action cannot be undone."
     }
   },
   "contextMenu": {
@@ -159,7 +149,7 @@
     "noTagsYet": "No tags yet",
     "createTag": "Create Tag",
     "editTag": "Edit Tag",
-    "createTagDescription": "Create a new tag to organize your bookmarks.",
+    "createTagDescription": "Create a new tag to organize your archived items.",
     "editTagDescription": "Update the tag name and color.",
     "tagName": "Name",
     "tagColor": "Color",
@@ -178,7 +168,7 @@
     "totalFeeds": "Total feeds"
   },
   "bookmarks": {
-    "allBookmarks": "All Bookmarks"
+    "allBookmarks": "All Archive"
   },
   "manageSubscriptions": {
     "subscriptionCount": "{{count}} subscription",

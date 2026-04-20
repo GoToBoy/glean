@@ -5,13 +5,12 @@ Handles entry retrieval and user-specific entry state management.
 """
 
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
 
 from arq.connections import ArqRedis
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from glean_core import RedisKeys, get_logger
+from glean_core import get_logger
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
@@ -28,13 +27,6 @@ from glean_database.models import (
 )
 
 logger = get_logger(__name__)
-
-if TYPE_CHECKING:
-    from glean_core.services.simple_score_service import SimpleScoreService
-    from glean_vector.services.score_service import ScoreService
-
-    # Union type for score service
-    ScoreServiceType = ScoreService | SimpleScoreService
 
 
 class EntryService:
@@ -88,14 +80,12 @@ class EntryService:
         feed_id: str | None = None,
         folder_id: str | None = None,
         is_read: bool | None = None,
-        is_liked: bool | None = None,
         read_later: bool | None = None,
         collected_after: datetime | None = None,
         collected_before: datetime | None = None,
         page: int = 1,
         per_page: int = 20,
         view: str = "timeline",
-        score_service: "ScoreServiceType | None" = None,
     ) -> EntryListResponse:
         """
         Get entries for a user with filtering and pagination.
@@ -105,14 +95,12 @@ class EntryService:
             feed_id: Optional feed filter.
             folder_id: Optional folder filter (gets entries from all feeds in folder).
             is_read: Optional read status filter (None = all, True = read only, False = unread only).
-            is_liked: Optional liked status filter.
             read_later: Optional read later filter.
             collected_after: Optional inclusive lower bound for collection-time filtering.
             collected_before: Optional exclusive upper bound for collection-time filtering.
             page: Page number (1-indexed).
             per_page: Items per page.
-            view: View mode ("timeline", "smart", or "today-board").
-            score_service: Score service for real-time scoring (required for smart view).
+            view: View mode ("timeline" or "today-board").
 
         Returns:
             Paginated entry list response.
@@ -170,8 +158,6 @@ class EntryService:
                 stmt = stmt.where(UserEntry.is_read.is_(True))
             else:
                 stmt = stmt.where((UserEntry.is_read.is_(False)) | (UserEntry.is_read.is_(None)))
-        if is_liked is not None:
-            stmt = stmt.where(UserEntry.is_liked == is_liked)
         if read_later is not None:
             stmt = stmt.where(UserEntry.read_later == read_later)
         if collected_after is not None:
@@ -184,39 +170,17 @@ class EntryService:
         total_result = await self.session.execute(count_stmt)
         total = total_result.scalar() or 0
 
-        # For smart view, we need to fetch more entries to score and sort
-        if view == "smart" and score_service:
-            # Fetch more entries for scoring (we'll limit after sorting)
-            fetch_limit = min(total, per_page * 5)  # Fetch 5 pages worth for scoring
-            stmt_for_scoring = stmt.order_by(desc(Entry.published_at)).limit(fetch_limit)
+        order_column = collection_timestamp if view == "today-board" else Entry.published_at
+        stmt = stmt.order_by(desc(order_column), desc(Entry.id)).limit(per_page).offset((page - 1) * per_page)
 
-            result = await self.session.execute(stmt_for_scoring)
-            all_rows = result.all()
+        result = await self.session.execute(stmt)
+        rows = result.all()
 
-            # Extract entries for batch scoring
-            entries_for_scoring = [row[0] for row in all_rows]
-
-            # Calculate scores in batch
-            # Both ScoreService and SimpleScoreService implement batch_calculate_scores
-            # ScoreService returns dict[entry_id, float]
-            # SimpleScoreService returns dict[entry_id, dict with 'score' key]
-            scores_result = await score_service.batch_calculate_scores(user_id, entries_for_scoring)
-
-            # Normalize to dict[str, float]
-            scores: dict[str, float] = {}
-            for entry_id, score_data in scores_result.items():
-                if isinstance(score_data, dict):
-                    # SimpleScoreService format
-                    scores[entry_id] = float(score_data.get("score", 50.0))
-                else:
-                    # ScoreService format
-                    scores[entry_id] = float(score_data)
-
-            # Build items with scores
-            items_with_scores: list[tuple[EntryResponse, float]] = []
-            for entry, user_entry, bookmark_id, feed_title, feed_icon_url in all_rows:
-                score = scores.get(entry.id, 50.0)
-                item = EntryResponse(
+        # Build response items
+        items: list[EntryResponse] = []
+        for entry, user_entry, bookmark_id, feed_title, feed_icon_url in rows:
+            items.append(
+                EntryResponse(
                     id=str(entry.id),
                     feed_id=str(entry.feed_id),
                     url=str(entry.url),
@@ -233,65 +197,15 @@ class EntryService:
                     ingested_at=entry.ingested_at,
                     created_at=entry.created_at,
                     is_read=bool(user_entry.is_read) if user_entry else False,
-                    is_liked=user_entry.is_liked if user_entry else None,
                     read_later=bool(user_entry.read_later) if user_entry else False,
                     read_later_until=(user_entry.read_later_until if user_entry else None),
                     read_at=user_entry.read_at if user_entry else None,
                     is_bookmarked=bookmark_id is not None,
                     bookmark_id=str(bookmark_id) if bookmark_id else None,
-                    preference_score=score,
                     feed_title=feed_title,
                     feed_icon_url=feed_icon_url,
                 )
-                items_with_scores.append((item, score))
-
-            # Sort by score descending
-            items_with_scores.sort(key=lambda x: x[1], reverse=True)
-
-            # Apply pagination
-            start_idx = (page - 1) * per_page
-            end_idx = start_idx + per_page
-            items = [item for item, _ in items_with_scores[start_idx:end_idx]]
-        else:
-            # Timeline view - standard pagination with time ordering
-            order_column = collection_timestamp if view == "today-board" else Entry.published_at
-            stmt = stmt.order_by(desc(order_column), desc(Entry.id)).limit(per_page).offset((page - 1) * per_page)
-
-            result = await self.session.execute(stmt)
-            rows = result.all()
-
-            # Build response items
-            items: list[EntryResponse] = []
-            for entry, user_entry, bookmark_id, feed_title, feed_icon_url in rows:
-                items.append(
-                    EntryResponse(
-                        id=str(entry.id),
-                        feed_id=str(entry.feed_id),
-                        url=str(entry.url),
-                        title=str(entry.title),
-                        author=entry.author,
-                        content=entry.content,
-                        summary=entry.summary,
-                        content_backfill_status=entry.content_backfill_status,
-                        content_backfill_attempts=entry.content_backfill_attempts,
-                        content_backfill_at=entry.content_backfill_at,
-                        content_backfill_error=entry.content_backfill_error,
-                        content_source=entry.content_source,
-                        published_at=entry.published_at,
-                        ingested_at=entry.ingested_at,
-                        created_at=entry.created_at,
-                        is_read=bool(user_entry.is_read) if user_entry else False,
-                        is_liked=user_entry.is_liked if user_entry else None,
-                        read_later=bool(user_entry.read_later) if user_entry else False,
-                        read_later_until=(user_entry.read_later_until if user_entry else None),
-                        read_at=user_entry.read_at if user_entry else None,
-                        is_bookmarked=bookmark_id is not None,
-                        bookmark_id=str(bookmark_id) if bookmark_id else None,
-                        preference_score=None,  # No score for timeline view
-                        feed_title=feed_title,
-                        feed_icon_url=feed_icon_url,
-                    )
-                )
+            )
 
         # Calculate total pages
         total_pages = (total + per_page - 1) // per_page if total > 0 else 0
@@ -376,13 +290,11 @@ class EntryService:
             ingested_at=entry.ingested_at,
             created_at=entry.created_at,
             is_read=bool(user_entry.is_read) if user_entry else False,
-            is_liked=user_entry.is_liked if user_entry else None,
             read_later=bool(user_entry.read_later) if user_entry else False,
             read_later_until=user_entry.read_later_until if user_entry else None,
             read_at=user_entry.read_at if user_entry else None,
             is_bookmarked=bookmark_id is not None,
             bookmark_id=str(bookmark_id) if bookmark_id else None,
-            preference_score=None,  # Scores are calculated real-time in smart view
             feed_title=feed_title,
             feed_icon_url=feed_icon_url,
         )
@@ -425,9 +337,6 @@ class EntryService:
         result = await self.session.execute(stmt)
         user_entry = result.scalar_one_or_none()
 
-        # Track old is_liked value for preference update
-        old_is_liked = user_entry.is_liked if user_entry else None
-
         if not user_entry:
             # Create new UserEntry
             user_entry = UserEntry(entry_id=entry_id, user_id=user_id)
@@ -437,26 +346,11 @@ class EntryService:
         # Use model_dump(exclude_unset=True) to only update explicitly set fields
         now = datetime.now(UTC)
         update_data = update.model_dump(exclude_unset=True)
-        preference_signal_type: str | None = None
 
         if "is_read" in update_data and update.is_read is not None:
             user_entry.is_read = update.is_read
             if update.is_read:
                 user_entry.read_at = now
-
-        if "is_liked" in update_data:
-            # is_liked can be True, False, or None
-            new_is_liked = update.is_liked
-
-            # Only trigger preference update if value actually changed
-            if old_is_liked != new_is_liked and new_is_liked is not None:
-                # Map is_liked to signal type
-                preference_signal_type = "like" if new_is_liked else "dislike"
-
-            user_entry.is_liked = new_is_liked
-            # Update liked_at timestamp when like/dislike is set (not when cleared to null)
-            if new_is_liked is not None:
-                user_entry.liked_at = now
 
         if "read_later" in update_data and update.read_later is not None:
             user_entry.read_later = update.read_later
@@ -484,53 +378,8 @@ class EntryService:
 
         await self.session.commit()
 
-        # Queue preference update task if needed (M3)
-        if preference_signal_type and self.redis_pool:
-            try:
-                # Debounce: Check if we recently queued this signal for this entry
-                debounce_key = RedisKeys.pref_update_debounce(
-                    user_id, entry_id, preference_signal_type
-                )
-
-                # Try to set the key only if it doesn't exist (NX)
-                was_set = await self.redis_pool.set(
-                    debounce_key,
-                    "1",
-                    ex=RedisKeys.PREF_UPDATE_DEBOUNCE_TTL,
-                    nx=True,  # SET if not exists
-                )
-
-                # Only queue if key was newly set (not debounced)
-                if was_set:
-                    await self.redis_pool.enqueue_job(
-                        "update_user_preference",
-                        user_id=user_id,
-                        entry_id=entry_id,
-                        signal_type=preference_signal_type,
-                    )
-            except Exception as e:
-                # Don't fail the request if task queueing fails
-                # The user's like/dislike is already saved
-                logger.warning(f"Failed to queue preference update: {e}")
-                pass
-
         # Return updated entry
         return await self.get_entry(entry_id, user_id)
-
-    async def get_recent_explicit_feedback_count(self, user_id: str, days: int = 7) -> int:
-        """Get recent like/dislike feedback count for a user."""
-        window_start = datetime.now(UTC) - timedelta(days=max(1, days))
-
-        stmt = (
-            select(func.count())
-            .select_from(UserEntry)
-            .where(UserEntry.user_id == user_id)
-            .where(UserEntry.is_liked.is_not(None))
-            .where(UserEntry.liked_at.is_not(None))
-            .where(UserEntry.liked_at >= window_start)
-        )
-        result = await self.session.execute(stmt)
-        return int(result.scalar() or 0)
 
     async def mark_all_read(
         self, user_id: str, feed_id: str | None = None, folder_id: str | None = None

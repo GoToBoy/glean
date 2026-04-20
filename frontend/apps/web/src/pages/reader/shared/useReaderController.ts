@@ -6,9 +6,9 @@ import {
   resolveTodayBoardDateParam,
 } from './todayBoard'
 
-export type FilterType = 'all' | 'unread' | 'smart' | 'read-later'
+export type FilterType = 'all' | 'unread' | 'read-later'
 
-const VALID_FILTERS: FilterType[] = ['all', 'unread', 'smart', 'read-later']
+const VALID_FILTERS: FilterType[] = ['all', 'unread', 'read-later']
 
 /**
  * Route/state controller for reader page-level URL state and selection state.
@@ -22,9 +22,11 @@ export function useReaderController() {
   const entryIdFromUrl = searchParams.get('entry') || null
   const viewParam = searchParams.get('view') || undefined
   const tabParam = searchParams.get('tab') as FilterType | null
-  const isSmartView = viewParam === 'smart'
   const isTodayBoardView = viewParam === 'today-board'
+  const isTimelineView = viewParam === 'timeline'
+  const isDigestView = !isTodayBoardView && !isTimelineView
   const todayBoardDateParam = isTodayBoardView ? searchParams.get('date') : null
+  const digestDateParam = isDigestView ? searchParams.get('date') : null
   const todayBoardTodayDate = systemTime?.current_date ?? ''
   const todayBoardDate =
     isTodayBoardView && todayBoardTodayDate
@@ -35,7 +37,7 @@ export function useReaderController() {
     : []
 
   const [filterType, setFilterType] = useState<FilterType>(() => {
-    if (isTodayBoardView) {
+    if (isTodayBoardView || isDigestView) {
       return 'all'
     }
     if (tabParam && VALID_FILTERS.includes(tabParam)) {
@@ -80,6 +82,33 @@ export function useReaderController() {
       syncEntryParam(null, replace)
     },
     [selectedEntryId, entryIdFromUrl, syncEntryParam]
+  )
+
+  const digestDate =
+    isDigestView && todayBoardTodayDate
+      ? digestDateParam || todayBoardTodayDate
+      : todayBoardTodayDate
+
+  const setDigestDate = useCallback(
+    (dateKey: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('view')
+          next.delete('entry')
+          next.delete('tab')
+          const todayKey = todayBoardTodayDate
+          if (dateKey === todayKey) {
+            next.delete('date')
+          } else {
+            next.set('date', dateKey)
+          }
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams, todayBoardTodayDate]
   )
 
   const setTodayBoardDate = useCallback(
@@ -143,7 +172,7 @@ export function useReaderController() {
     setSearchParams(
       (prev) => {
         const next = new URLSearchParams(prev)
-        if (isTodayBoardView) {
+        if (isTodayBoardView || isDigestView) {
           next.delete('tab')
         } else if (tabParam !== filterType) {
           next.set('tab', filterType)
@@ -154,15 +183,15 @@ export function useReaderController() {
       },
       { replace: true }
     )
-  }, [filterType, isTodayBoardView, tabParam, setSearchParams])
+  }, [filterType, isTodayBoardView, isDigestView, tabParam, setSearchParams])
 
   return {
     selectedFeedId,
     selectedFolderId,
     entryIdFromUrl,
     viewParam,
-    isSmartView,
     isTodayBoardView,
+    isDigestView,
     filterType,
     setFilterType,
     selectedEntryId,
@@ -172,5 +201,7 @@ export function useReaderController() {
     todayBoardTodayDate,
     recentTodayBoardDates,
     setTodayBoardDate,
+    digestDate,
+    setDigestDate,
   }
 }

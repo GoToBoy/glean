@@ -20,18 +20,12 @@ const state = {
     settings: {
       read_later_days: 7,
       show_read_later_remaining: true,
-      reader_mode: 'new',
-      ranking_mode: 'time',
-      recommendation_strength: 'weak',
-      explore_ratio: 0.2,
-      manual_only: false,
       translation_provider: 'google',
       translation_target_language: 'zh-CN',
       list_translation_auto_enabled: true,
       translation_api_key: '',
       translation_model: 'gpt-4o-mini',
       translation_base_url: '',
-      discovery_tavily_api_key: '',
     },
     created_at: iso(-60 * 24 * 30),
   },
@@ -189,7 +183,6 @@ const entriesByFeedId = {
       published_at: iso(-200),
       created_at: iso(-200),
       is_read: false,
-      is_liked: null,
       read_later: false,
       read_later_until: null,
       read_at: null,
@@ -197,8 +190,6 @@ const entriesByFeedId = {
       bookmark_id: null,
       feed_title: 'OpenAI Blog',
       feed_icon_url: 'https://openai.com/favicon.ico',
-      preference_score: 82,
-      debug_info: null,
     },
     {
       id: 'entry-2',
@@ -212,7 +203,6 @@ const entriesByFeedId = {
       published_at: iso(-500),
       created_at: iso(-500),
       is_read: false,
-      is_liked: null,
       read_later: false,
       read_later_until: null,
       read_at: null,
@@ -220,8 +210,6 @@ const entriesByFeedId = {
       bookmark_id: null,
       feed_title: 'OpenAI Blog',
       feed_icon_url: 'https://openai.com/favicon.ico',
-      preference_score: 79,
-      debug_info: null,
     },
   ],
   'feed-2': [
@@ -237,7 +225,6 @@ const entriesByFeedId = {
       published_at: iso(-90),
       created_at: iso(-90),
       is_read: false,
-      is_liked: null,
       read_later: false,
       read_later_until: null,
       read_at: null,
@@ -245,8 +232,6 @@ const entriesByFeedId = {
       bookmark_id: null,
       feed_title: 'Hacker News',
       feed_icon_url: null,
-      preference_score: 76,
-      debug_info: null,
     },
   ],
   'feed-3': [
@@ -262,7 +247,6 @@ const entriesByFeedId = {
       published_at: iso(-260),
       created_at: iso(-260),
       is_read: true,
-      is_liked: null,
       read_later: false,
       read_later_until: null,
       read_at: iso(-120),
@@ -270,8 +254,6 @@ const entriesByFeedId = {
       bookmark_id: null,
       feed_title: 'Smashing Magazine',
       feed_icon_url: null,
-      preference_score: 64,
-      debug_info: null,
     },
   ],
   'feed-4': [
@@ -287,7 +269,6 @@ const entriesByFeedId = {
       published_at: iso(-320),
       created_at: iso(-320),
       is_read: false,
-      is_liked: null,
       read_later: false,
       read_later_until: null,
       read_at: null,
@@ -295,25 +276,27 @@ const entriesByFeedId = {
       bookmark_id: null,
       feed_title: 'Indie Notes',
       feed_icon_url: null,
-      preference_score: 71,
-      debug_info: null,
     },
   ],
 }
 
-const preferenceStats = {
-  total_likes: 34,
-  total_dislikes: 8,
-  total_bookmarks: 19,
-  preference_strength: 'moderate',
-  model_updated_at: iso(-180),
-  top_feeds: [
-    { feed_title: 'OpenAI Blog', affinity_score: 0.92, interaction_count: 12 },
-    { feed_title: 'Hacker News', affinity_score: 0.81, interaction_count: 9 },
-  ],
-  top_authors: [
-    { author: 'OpenAI', affinity_score: 0.88, interaction_count: 10 },
-  ],
+function allEntries() {
+  return Object.values(entriesByFeedId).flat()
+}
+
+function entriesForFolder(folderId) {
+  const feedIds = state.subscriptions
+    .filter((sub) => sub.folder_id === folderId)
+    .map((sub) => sub.feed_id)
+  return feedIds.flatMap((id) => entriesByFeedId[id] || [])
+}
+
+function findEntry(entryId) {
+  for (const entries of Object.values(entriesByFeedId)) {
+    const entry = entries.find((item) => item.id === entryId)
+    if (entry) return entry
+  }
+  return null
 }
 
 function sendJson(res, status, payload, headers = {}) {
@@ -437,10 +420,6 @@ const server = http.createServer(async (req, res) => {
       return sendJson(res, 200, { folders: state.folders[type] || [] })
     }
 
-    if (pathname === '/api/tags' && req.method === 'GET') {
-      return sendJson(res, 200, { tags: [] })
-    }
-
     if (pathname === '/api/feeds/sync/all' && req.method === 'GET') {
       return sendJson(
         res,
@@ -541,6 +520,34 @@ const server = http.createServer(async (req, res) => {
       })
     }
 
+    if (pathname === '/api/entries/today' && req.method === 'GET') {
+      const feedId = searchParams.get('feed_id')
+      const folderId = searchParams.get('folder_id')
+      const limit = Number(searchParams.get('limit') || 500)
+      let items = []
+
+      if (feedId) {
+        items = entriesByFeedId[feedId] || []
+      } else if (folderId) {
+        items = entriesForFolder(folderId)
+      } else {
+        items = allEntries()
+      }
+
+      items = items
+        .slice()
+        .sort((a, b) => new Date(b.published_at || b.created_at) - new Date(a.published_at || a.created_at))
+        .slice(0, limit)
+
+      return sendJson(res, 200, {
+        items,
+        total: items.length,
+        page: 1,
+        per_page: limit,
+        total_pages: 1,
+      })
+    }
+
     if (pathname === '/api/entries' && req.method === 'GET') {
       const feedId = searchParams.get('feed_id')
       const folderId = searchParams.get('folder_id')
@@ -549,12 +556,9 @@ const server = http.createServer(async (req, res) => {
       if (feedId) {
         items = entriesByFeedId[feedId] || []
       } else if (folderId) {
-        const feedIds = state.subscriptions
-          .filter((sub) => sub.folder_id === folderId)
-          .map((sub) => sub.feed_id)
-        items = feedIds.flatMap((id) => entriesByFeedId[id] || [])
+        items = entriesForFolder(folderId)
       } else {
-        items = Object.values(entriesByFeedId).flat()
+        items = allEntries()
       }
 
       return sendJson(res, 200, {
@@ -564,6 +568,25 @@ const server = http.createServer(async (req, res) => {
         per_page: Number(searchParams.get('per_page') || items.length || 10),
         total_pages: 1,
       })
+    }
+
+    if (/^\/api\/entries\/[^/]+$/.test(pathname) && req.method === 'GET') {
+      const entryId = pathname.split('/')[3]
+      const entry = findEntry(entryId)
+      if (!entry) return notFound(res)
+      return sendJson(res, 200, entry)
+    }
+
+    if (/^\/api\/entries\/[^/]+$/.test(pathname) && req.method === 'PATCH') {
+      const entryId = pathname.split('/')[3]
+      const entry = findEntry(entryId)
+      if (!entry) return notFound(res)
+      const body = await readBody(req)
+      Object.assign(entry, body)
+      if (body.is_read === true) {
+        entry.read_at = iso()
+      }
+      return sendJson(res, 200, entry)
     }
 
     if (pathname === '/api/entries/translate-texts' && req.method === 'POST') {
@@ -578,14 +601,6 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/entries/mark-all-read' && req.method === 'POST') {
       return sendJson(res, 200, { message: 'Marked all as read' })
-    }
-
-    if (pathname === '/api/preference/stats' && req.method === 'GET') {
-      return sendJson(res, 200, preferenceStats)
-    }
-
-    if (pathname === '/api/preference/rebuild' && req.method === 'POST') {
-      return sendJson(res, 200, { message: 'Mock rebuild queued' })
     }
 
     if (pathname === '/api/tokens' && req.method === 'GET') {

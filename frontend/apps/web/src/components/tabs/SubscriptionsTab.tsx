@@ -104,7 +104,7 @@ type FeedRefreshState = {
   updatedAt: string
 }
 
-const PANEL_CLASS = 'flex min-h-0 flex-1 flex-col overflow-hidden border'
+const PANEL_CLASS = 'flex min-h-0 flex-1 flex-col overflow-hidden'
 const TOOLBAR_CLASS = 'flex shrink-0 flex-wrap items-center gap-3'
 const SEARCH_CLASS =
   'h-10 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-input'

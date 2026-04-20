@@ -41,7 +41,6 @@ interface SidebarBookmarksSectionProps {
   onSelectFolder: (folderId?: string) => void
   isBookmarksPage: boolean
   currentBookmarkFolderId?: string
-  currentBookmarkTagId?: string
   bookmarkFolders: FolderTreeNode[]
   expandedBookmarkFolders: Set<string>
   toggleBookmarkFolder: (folderId: string) => void
@@ -58,7 +57,6 @@ export function SidebarBookmarksSection({
   onSelectFolder,
   isBookmarksPage,
   currentBookmarkFolderId,
-  currentBookmarkTagId,
   bookmarkFolders,
   expandedBookmarkFolders,
   toggleBookmarkFolder,
@@ -112,7 +110,7 @@ export function SidebarBookmarksSection({
           <SidebarItem
             icon={<Bookmark />}
             label={t('bookmarks.allBookmarks')}
-            isActive={isBookmarksPage && !currentBookmarkFolderId && !currentBookmarkTagId}
+            isActive={isBookmarksPage && !currentBookmarkFolderId}
             onClick={() => onSelectFolder(undefined)}
             isSidebarCollapsed={!isSidebarOpen && !isMobileSidebarOpen}
             compact={isMobileSidebarOpen}

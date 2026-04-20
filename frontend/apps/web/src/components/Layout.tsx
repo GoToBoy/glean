@@ -2,14 +2,12 @@ import { Link, Outlet, useNavigate, useLocation, useSearchParams } from 'react-r
 import { useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import {
-  Rss,
   ChevronLeft,
   Menu as MenuIcon,
   X,
   Languages,
   ChevronDown,
   Inbox,
-  Sparkles,
   Clock,
   Circle,
   CalendarDays,
@@ -30,11 +28,12 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@glean/ui'
-import type { Subscription, TagWithCounts, FolderTreeNode } from '@glean/types'
+import type { Subscription, FolderTreeNode } from '@glean/types'
 import { useAuthStore } from '../stores/authStore'
 import { useBookmarkStore } from '../stores/bookmarkStore'
 import { useFolderStore } from '../stores/folderStore'
-import { useTagStore } from '../stores/tagStore'
+import { useThemeStore } from '../stores/themeStore'
+import { DIGEST_LIGHT_VARS, DIGEST_DARK_VARS } from '../styles/digestTokens'
 import {
   useAllSubscriptions,
   useRefreshAllFeeds,
@@ -46,14 +45,10 @@ import { entryKeys, getInfiniteEntriesQueryOptions } from '../hooks/useEntries'
 import { entryService } from '@glean/api-client'
 import { SidebarFeedsSection } from './sidebar/SidebarFeedsSection'
 import { SidebarBookmarksSection } from './sidebar/SidebarBookmarksSection'
-import { SidebarTagsSection } from './sidebar/SidebarTagsSection'
 import { SidebarUserSection } from './sidebar/SidebarUserSection'
 import { MobileSidebarDrawer } from './sidebar/MobileSidebarDrawer'
 import { AddFeedDialog } from './dialogs/AddFeedDialog'
 import { CreateFolderDialog } from './dialogs/CreateFolderDialog'
-import { CreateTagDialog } from './dialogs/CreateTagDialog'
-import { EditTagDialog } from './dialogs/EditTagDialog'
-import { DeleteTagDialog } from './dialogs/DeleteTagDialog'
 import { LogoutConfirmDialog } from './dialogs/LogoutConfirmDialog'
 
 /**
@@ -72,13 +67,20 @@ const SIDEBAR_STORAGE_KEY = 'glean-sidebar-width'
 export function Layout() {
   const { t } = useTranslation(['feeds', 'reader'])
   const { user, logout } = useAuthStore()
+  const { resolvedTheme } = useThemeStore()
   const { reset: resetBookmarks } = useBookmarkStore()
   const { reset: resetFolders } = useFolderStore()
-  const { reset: resetTags } = useTagStore()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
+  const readerViewParam = searchParams.get('view')
+  const isDigestReaderView =
+    location.pathname === '/reader' &&
+    readerViewParam !== 'timeline' &&
+    readerViewParam !== 'today-board'
+  const isDigestSettings = location.pathname === '/settings'
+  const isDigestTheme = isDigestReaderView || isDigestSettings
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false)
   const [isMobileListTranslationActive, setIsMobileListTranslationActive] = useState(false)
@@ -138,24 +140,16 @@ export function Layout() {
   // Folder state
   const { feedFolders, bookmarkFolders, fetchFolders, createFolder, updateFolder, deleteFolder } =
     useFolderStore()
-  const { tags, fetchTags, createTag, updateTag, deleteTag } = useTagStore()
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set())
   const [expandedBookmarkFolders, setExpandedBookmarkFolders] = useState<Set<string>>(new Set())
   const [isFeedsSectionExpanded, setIsFeedsSectionExpanded] = useState(true)
   const [isBookmarkSectionExpanded, setIsBookmarkSectionExpanded] = useState(true)
-  const [isTagSectionExpanded, setIsTagSectionExpanded] = useState(true)
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
   const [isCreatingFolder, setIsCreatingFolder] = useState(false)
   const isCreatingFolderRef = useRef(false)
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null)
   const [createFolderType, setCreateFolderType] = useState<'feed' | 'bookmark'>('feed')
-
-  // Tag management
-  const [showCreateTagDialog, setShowCreateTagDialog] = useState(false)
-  const [editingTag, setEditingTag] = useState<TagWithCounts | null>(null)
-  const [deleteConfirmTag, setDeleteConfirmTag] = useState<TagWithCounts | null>(null)
-  const [isDeletingTag, setIsDeletingTag] = useState(false)
 
   // Add Feed dialog state
   const [showAddFeedDialog, setShowAddFeedDialog] = useState(false)
@@ -185,11 +179,10 @@ export function Layout() {
   const currentTab = searchParams.get('tab') || undefined
   const currentEntryId = searchParams.get('entry') || undefined
   const isReaderPage = location.pathname === '/reader'
-  const isSmartView = isReaderPage && currentView === 'smart'
   const isTodayBoardView = isReaderPage && currentView === 'today-board'
   const isMobileListMode = isReaderPage && !currentEntryId && !isTodayBoardView
-  const currentFilter: 'all' | 'unread' | 'smart' | 'read-later' =
-    currentTab === 'all' || currentTab === 'smart' || currentTab === 'read-later'
+  const currentFilter: 'all' | 'unread' | 'read-later' =
+    currentTab === 'all' || currentTab === 'read-later'
       ? currentTab
       : 'unread'
   const currentFilterLabel =
@@ -199,9 +192,7 @@ export function Layout() {
       ? '未读'
       : currentFilter === 'all'
         ? '全部'
-        : currentFilter === 'smart'
-          ? '智能'
-          : '稍后'
+        : '稍后'
   const filterIcon =
     isTodayBoardView ? (
       <CalendarDays className="h-3 w-3" />
@@ -209,14 +200,11 @@ export function Layout() {
       <Circle className="h-2.5 w-2.5 fill-current" />
     ) : currentFilter === 'all' ? (
       <Inbox className="h-3 w-3" />
-    ) : currentFilter === 'smart' ? (
-      <Sparkles className="h-3 w-3" />
     ) : (
       <Clock className="h-3 w-3" />
     )
   const isBookmarksPage = location.pathname === '/bookmarks'
   const currentBookmarkFolderId = isBookmarksPage ? searchParams.get('folder') : undefined
-  const currentBookmarkTagId = isBookmarksPage ? searchParams.get('tag') : undefined
 
   // Refresh sidebar data when authenticated user changes.
   // Do not depend on the full user object to avoid refetch storms when
@@ -228,8 +216,7 @@ export function Layout() {
     queryClient.invalidateQueries({ queryKey: ['subscriptions'] })
     fetchFolders('feed')
     fetchFolders('bookmark')
-    fetchTags()
-  }, [user?.id, queryClient, fetchFolders, fetchTags])
+  }, [user?.id, queryClient, fetchFolders])
 
   // Handle sidebar resize
   useEffect(() => {
@@ -274,7 +261,6 @@ export function Layout() {
     await logout()
     resetBookmarks()
     resetFolders()
-    resetTags()
     clearSubscriptionCache()
     queryClient.clear()
     navigate('/login')
@@ -296,24 +282,19 @@ export function Layout() {
     }
   }
 
-  const handleSmartViewSelect = () => {
-    navigate('/reader?view=smart')
-  }
-
   const handleTodayBoardViewSelect = () => {
     navigate('/reader?view=today-board')
   }
 
   const prefetchReaderData = async (feedId?: string, folderId?: string) => {
     const isReadLater = currentTab === 'read-later'
-    const isUnreadLike =
-      currentView !== 'today-board' && (currentTab === 'unread' || currentTab === 'smart' || !currentTab)
+    const isUnreadLike = currentView !== 'today-board' && (currentTab === 'unread' || !currentTab)
     const filters = {
       feed_id: feedId,
       folder_id: folderId,
       is_read: isUnreadLike ? false : undefined,
       read_later: isReadLater ? true : undefined,
-      view: currentView === 'smart' || currentTab === 'smart' ? ('smart' as const) : ('timeline' as const),
+      view: 'timeline' as const,
     }
 
     const listOptions = getInfiniteEntriesQueryOptions(filters)
@@ -381,14 +362,6 @@ export function Layout() {
     }
   }
 
-  const handleTagSelect = (tagId?: string) => {
-    if (tagId) {
-      navigate(`/bookmarks?tag=${tagId}`)
-    } else {
-      navigate('/bookmarks')
-    }
-  }
-
   const toggleBookmarkFolder = (folderId: string) => {
     setExpandedBookmarkFolders((prev) => {
       const next = new Set(prev)
@@ -399,17 +372,6 @@ export function Layout() {
       }
       return next
     })
-  }
-
-  const handleDeleteTagConfirm = async () => {
-    if (!deleteConfirmTag) return
-    setIsDeletingTag(true)
-    try {
-      await deleteTag(deleteConfirmTag.id)
-      setDeleteConfirmTag(null)
-    } finally {
-      setIsDeletingTag(false)
-    }
   }
 
   const handleImportClick = () => {
@@ -546,24 +508,40 @@ export function Layout() {
       <>
         {/* Logo */}
         <div
-          className={`border-border flex items-center justify-between border-b p-2 md:p-4 ${
+          className={`flex items-center justify-between p-2 md:p-4 ${
             isMacElectron ? 'md:pt-12' : ''
           }`}
+          style={{ borderBottom: '1px solid var(--digest-divider)' }}
         >
           <Link to="/" className="flex items-center gap-2 overflow-hidden md:gap-3">
-            <div className="from-primary-500 to-primary-600 shadow-primary/20 flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br shadow-lg md:h-9 md:w-9">
-              <Rss className="text-primary-foreground h-3.5 w-3.5 md:h-5 md:w-5" />
-            </div>
-            {isSidebarExpanded && (
-              <span className="font-display text-foreground text-base font-bold md:text-xl">
-                Glean
+            {isSidebarExpanded ? (
+              <span
+                className="text-base font-bold md:text-xl"
+                style={{
+                  fontFamily: "'Noto Serif SC', Georgia, serif",
+                  color: 'var(--digest-text)',
+                  letterSpacing: '-0.02em',
+                }}
+              >
+                <span style={{ color: 'var(--digest-accent)' }}>◆ </span>Glean
+              </span>
+            ) : (
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center text-base font-bold md:h-9 md:w-9"
+                style={{
+                  fontFamily: "'Noto Serif SC', Georgia, serif",
+                  color: 'var(--digest-accent)',
+                }}
+              >
+                ◆
               </span>
             )}
           </Link>
           {isMobileDrawer && (
             <button
               onClick={() => setIsMobileSidebarOpen(false)}
-              className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+              className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors"
+              style={{ color: 'var(--digest-text-secondary)' }}
               aria-label="Close sidebar"
             >
               <X className="h-4 w-4" />
@@ -575,7 +553,12 @@ export function Layout() {
         {!isMobileDrawer && (
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-            className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground absolute top-16 -right-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full border shadow-sm transition-colors md:flex"
+            className="absolute top-16 -right-3 z-10 hidden h-6 w-6 items-center justify-center rounded-full border shadow-sm transition-colors md:flex"
+            style={{
+              background: 'var(--digest-bg-card)',
+              borderColor: 'var(--digest-divider)',
+              color: 'var(--digest-text-secondary)',
+            }}
             aria-label={isSidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
           >
             <ChevronLeft
@@ -600,15 +583,16 @@ export function Layout() {
             }}
           >
             <div
-              className={`absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors ${
-                isResizing ? 'bg-primary' : 'hover:bg-border bg-transparent'
-              }`}
+              className="absolute inset-y-0 left-1/2 w-0.5 -translate-x-1/2 transition-colors"
+              style={{
+                background: isResizing ? 'var(--digest-accent)' : 'transparent',
+              }}
             />
           </button>
         )}
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-1.5 md:p-3">
+        <nav className="flex-1 overflow-y-auto p-1.5 md:p-3" style={{ color: 'var(--digest-text)' }}>
           <SidebarFeedsSection
             isSidebarOpen={isSidebarExpanded}
             isMobileSidebarOpen={isMobileDrawer}
@@ -625,9 +609,7 @@ export function Layout() {
             onFeedSelect={handleFeedSelect}
             onFeedHover={prefetchReaderData}
             onFolderHover={(folderId) => prefetchReaderData(undefined, folderId)}
-            onSmartViewSelect={handleSmartViewSelect}
             onTodayBoardViewSelect={handleTodayBoardViewSelect}
-            isSmartView={isSmartView}
             isTodayBoardView={isTodayBoardView}
             isReaderPage={isReaderPage}
             currentFeedId={currentFeedId}
@@ -644,10 +626,8 @@ export function Layout() {
           />
 
           <div
-            className={cn(
-              'border-border my-1.5 border-t md:my-3',
-              isMobileDrawer && 'my-2 border-dashed opacity-70'
-            )}
+            className={cn('my-1.5 border-t md:my-3', isMobileDrawer && 'my-2 border-dashed opacity-70')}
+            style={{ borderColor: 'var(--digest-divider)' }}
           />
 
           <SidebarBookmarksSection
@@ -659,32 +639,11 @@ export function Layout() {
             onSelectFolder={handleBookmarkFolderSelect}
             isBookmarksPage={isBookmarksPage}
             currentBookmarkFolderId={currentBookmarkFolderId || undefined}
-            currentBookmarkTagId={currentBookmarkTagId || undefined}
             bookmarkFolders={bookmarkFolders}
             expandedBookmarkFolders={expandedBookmarkFolders}
             toggleBookmarkFolder={toggleBookmarkFolder}
             onRenameFolder={updateFolder}
             onDeleteFolder={deleteFolder}
-          />
-
-          <div
-            className={cn(
-              'border-border my-1.5 border-t md:my-3',
-              isMobileDrawer && 'my-2 border-dashed opacity-70'
-            )}
-          />
-
-          <SidebarTagsSection
-            isSidebarOpen={isSidebarExpanded}
-            isMobileSidebarOpen={isMobileDrawer}
-            isTagSectionExpanded={isTagSectionExpanded}
-            onToggleTagSection={() => setIsTagSectionExpanded((prev) => !prev)}
-            tags={tags}
-            currentBookmarkTagId={currentBookmarkTagId || undefined}
-            onSelectTag={handleTagSelect}
-            onCreateTag={() => setShowCreateTagDialog(true)}
-            onEditTag={(tag) => setEditingTag(tag)}
-            onDeleteTag={(tag) => setDeleteConfirmTag(tag)}
           />
         </nav>
 
@@ -693,36 +652,102 @@ export function Layout() {
           isSidebarOpen={isSidebarExpanded}
           isMobileSidebarOpen={isMobileDrawer}
           isSettingsActive={location.pathname === '/settings'}
-          isDiscoverActive={location.pathname === '/discover'}
           onLogoutClick={() => setShowLogoutConfirm(true)}
         />
       </>
     )
   }
 
+  const digestVars = resolvedTheme === 'dark' ? DIGEST_DARK_VARS : DIGEST_LIGHT_VARS
+
+  if (isDigestTheme) {
+    return (
+      <div
+        className="min-h-screen w-screen"
+        style={{
+          ...digestVars,
+          background: 'var(--digest-bg)',
+          color: 'var(--digest-text)',
+          fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif",
+        }}
+      >
+        {isDigestSettings && (
+          <div
+            className="sticky top-0 z-20 flex h-12 items-center justify-between px-4 md:px-6"
+            style={{
+              background: 'var(--digest-bg)',
+              borderBottom: '1px solid var(--digest-divider)',
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => navigate('/reader')}
+              className="flex items-center gap-1.5 rounded-md px-2 py-1 text-sm transition-colors"
+              style={{ color: 'var(--digest-text-secondary)' }}
+              aria-label="Back to digest"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span>返回</span>
+            </button>
+            <span
+              className="text-base font-bold"
+              style={{
+                fontFamily: "'Noto Serif SC', Georgia, serif",
+                color: 'var(--digest-text)',
+                letterSpacing: '-0.02em',
+              }}
+            >
+              <span style={{ color: 'var(--digest-accent)' }}>◆ </span>Glean
+            </span>
+          </div>
+        )}
+        <Outlet />
+      </div>
+    )
+  }
+
   return (
-    <div className="bg-background flex h-screen flex-col md:flex-row">
+    <div
+      className="flex h-screen flex-col md:flex-row"
+      style={{
+        ...digestVars,
+        background: 'var(--digest-bg)',
+        color: 'var(--digest-text)',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif",
+      }}
+    >
       {/* Mobile Header - animate visibility when entering/leaving article reader */}
       <header
-        className={`border-border bg-card flex shrink-0 items-center justify-between border-b px-4 transition-all duration-300 ease-out md:hidden ${
+        className={`flex shrink-0 items-center justify-between px-4 transition-all duration-300 ease-out md:hidden ${
           isReadingArticle
             ? 'pointer-events-none h-0 min-h-0 translate-y-[-100%] opacity-0'
             : 'h-14 min-h-14 translate-y-0 opacity-100'
         }`}
+        style={{
+          background: 'color-mix(in srgb, var(--digest-bg) 88%, transparent)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          borderBottom: '1px solid var(--digest-divider)',
+        }}
       >
         <button
           onClick={() => setIsMobileSidebarOpen(true)}
-          className="text-muted-foreground hover:bg-accent hover:text-foreground flex h-10 w-10 items-center justify-center rounded-lg transition-colors"
+          className="flex h-10 w-10 items-center justify-center rounded-lg transition-colors"
+          style={{ color: 'var(--digest-text-secondary)' }}
           aria-label="Open sidebar"
         >
           <MenuIcon className="h-5 w-5" />
         </button>
         <Link to="/" className="flex items-center gap-2">
-          <div className="from-primary-500 to-primary-600 shadow-primary/20 flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br shadow-md">
-            <Rss className="text-primary-foreground h-4 w-4" />
-          </div>
-          <span className="font-display text-foreground min-w-0 flex-1 truncate text-lg font-bold">
-            {mobileHeaderTitle}
+          <span
+            className="min-w-0 flex-1 truncate text-lg font-bold"
+            style={{
+              fontFamily: "'Noto Serif SC', Georgia, serif",
+              color: 'var(--digest-text)',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            ◆ {mobileHeaderTitle}
           </span>
         </Link>
         {isMobileListMode ? (
@@ -811,21 +836,6 @@ export function Layout() {
                     全部
                   </DropdownMenuItem>
                   <DropdownMenuItem
-                    className={currentFilter === 'smart' ? 'bg-accent' : ''}
-                    onClick={() =>
-                      window.dispatchEvent(
-                        new CustomEvent('readerMobileListActions:setFilter', {
-                          detail: { filter: 'smart' },
-                        })
-                      )
-                    }
-                  >
-                    <span className="mr-2 inline-flex items-center">
-                      <Sparkles className="h-3.5 w-3.5" />
-                    </span>
-                    智能
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
                     className={currentFilter === 'read-later' ? 'bg-accent' : ''}
                     onClick={() =>
                       window.dispatchEvent(
@@ -859,16 +869,21 @@ export function Layout() {
       {/* Desktop Sidebar */}
       <aside
         ref={sidebarRef}
-        className={`border-border bg-card relative z-10 hidden flex-col border-r md:flex ${isResizing ? 'sidebar-no-transition' : 'sidebar-transition'}`}
+        className={`relative z-10 hidden flex-col border-r md:flex ${isResizing ? 'sidebar-no-transition' : 'sidebar-transition'}`}
         style={{
           width: isSidebarOpen ? `${sidebarWidth}px` : `${SIDEBAR_COLLAPSED_WIDTH}px`,
+          background: 'var(--digest-bg-sidebar)',
+          borderColor: 'var(--digest-divider)',
         }}
       >
         {renderSidebarContent(false)}
       </aside>
 
       {/* Main content */}
-      <main className="bg-background min-h-0 min-w-0 flex-1 overflow-auto">
+      <main
+        className="min-h-0 min-w-0 flex-1 overflow-auto"
+        style={{ background: 'var(--digest-bg)' }}
+      >
         <div key={location.pathname} className="page-transition h-full w-full">
           <Outlet />
         </div>
@@ -931,37 +946,6 @@ export function Layout() {
           </AlertDialogFooter>
         </AlertDialogPopup>
       </AlertDialog>
-
-      <CreateTagDialog
-        open={showCreateTagDialog}
-        onOpenChange={setShowCreateTagDialog}
-        onSubmit={async (data) => {
-          await createTag(data)
-          setShowCreateTagDialog(false)
-        }}
-      />
-
-      <EditTagDialog
-        open={!!editingTag}
-        onOpenChange={(open) => !open && setEditingTag(null)}
-        tag={editingTag}
-        onSubmit={async (data) => {
-          if (editingTag && data.name) {
-            await updateTag(editingTag.id, { name: data.name, color: data.color })
-            setEditingTag(null)
-          }
-        }}
-      />
-
-      <DeleteTagDialog
-        open={!!deleteConfirmTag}
-        tag={deleteConfirmTag}
-        isDeleting={isDeletingTag}
-        onConfirm={handleDeleteTagConfirm}
-        onOpenChange={(open) => {
-          if (!open) setDeleteConfirmTag(null)
-        }}
-      />
 
       <LogoutConfirmDialog
         open={showLogoutConfirm}

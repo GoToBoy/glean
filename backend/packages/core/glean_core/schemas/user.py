@@ -17,11 +17,6 @@ class UserSettings(BaseModel):
 
     read_later_days: int | None = None
     show_read_later_remaining: bool | None = None
-    reader_mode: Literal["legacy", "new"] | None = None
-    ranking_mode: Literal["time", "value", "mixed"] | None = None
-    recommendation_strength: Literal["off", "weak"] | None = None
-    explore_ratio: float | None = None
-    manual_only: bool | None = None
     translation_provider: Literal["google", "deepl", "openai", "mtran"] | None = None
     translation_target_language: Literal["zh-CN", "en"] | None = None
     list_translation_auto_enabled: bool | None = None
@@ -31,7 +26,6 @@ class UserSettings(BaseModel):
     translation_api_key: str | None = None
     translation_model: str | None = None
     translation_base_url: str | None = None
-    discovery_tavily_api_key: str | None = None
 
 
 class UserBase(BaseModel):

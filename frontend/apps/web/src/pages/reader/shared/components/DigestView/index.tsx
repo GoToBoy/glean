@@ -1,0 +1,678 @@
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { AlertCircle } from 'lucide-react'
+import { Alert, AlertTitle, AlertDescription, Skeleton } from '@glean/ui'
+import { useTranslation } from '@glean/i18n'
+import { entryService } from '@glean/api-client'
+import type { EntryWithState } from '@glean/types'
+import { ArticleReader, ArticleReaderSkeleton } from '@/components/ArticleReader'
+import { useEntry, useUpdateEntryState } from '@/hooks/useEntries'
+import { useListEntriesTranslation } from '@/hooks/useListEntriesTranslation'
+import { useAllSubscriptions } from '@/hooks/useSubscriptions'
+import { useFolders } from '@/hooks/useFolders'
+import { useSystemTime } from '@/hooks/useSystemTime'
+import { useThemeStore } from '@/stores/themeStore'
+import { useDigestSidebarStore } from '@/stores/digestSidebarStore'
+import { useDigestSettingsStore } from '@/stores/digestSettingsStore'
+import { DigestMasthead, DigestTopNav } from './DigestMasthead'
+import { DigestSection } from './DigestSection'
+import { DigestSidebar } from './DigestSidebar'
+import { DigestReadingList } from './DigestReadingList'
+import { AddFeedModal } from './AddFeedModal'
+import {
+  groupEntriesByFolder,
+  computeDigestStats,
+} from './digestHelpers'
+import { format, subDays, addDays } from 'date-fns'
+
+/** CSS custom properties for both light and dark modes */
+const DIGEST_LIGHT_VARS: Record<string, string> = {
+  '--digest-bg': '#FAF8F3',
+  '--digest-bg-card': '#FFFFFF',
+  '--digest-bg-hover': '#F1EDE2',
+  '--digest-bg-sidebar': '#F5F2EA',
+  '--digest-text': '#1A1A1A',
+  '--digest-text-secondary': '#5E5A52',
+  '--digest-text-tertiary': '#9A968C',
+  '--digest-divider': '#E5E0D2',
+  '--digest-divider-strong': '#B8B3A5',
+  '--digest-accent': '#B8312F',
+  '--digest-accent-soft': '#F5E6E5',
+}
+
+const DIGEST_DARK_VARS: Record<string, string> = {
+  '--digest-bg': '#161614',
+  '--digest-bg-card': '#1F1E1B',
+  '--digest-bg-hover': '#2A2925',
+  '--digest-bg-sidebar': '#1C1B18',
+  '--digest-text': '#F2EFE7',
+  '--digest-text-secondary': '#A8A498',
+  '--digest-text-tertiary': '#6E6B62',
+  '--digest-divider': '#2F2D28',
+  '--digest-divider-strong': '#4A4740',
+  '--digest-accent': '#E56B67',
+  '--digest-accent-soft': '#3A2523',
+}
+
+interface DigestViewProps {
+  date: string // YYYY-MM-DD
+  isMobile: boolean
+  onDateChange: (date: string) => void
+}
+
+/**
+ * Query key for digest entries.
+ */
+function digestQueryKey(date: string) {
+  return ['digest-entries', date] as const
+}
+
+export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
+  const { t } = useTranslation('digest')
+  const navigate = useNavigate()
+  const { data: systemTime } = useSystemTime()
+  const todayDate = systemTime?.current_date ?? format(new Date(), 'yyyy-MM-dd')
+  const { resolvedTheme } = useThemeStore()
+
+  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [focusedEntryId, setFocusedEntryId] = useState<string | null>(null)
+  const [addFeedOpen, setAddFeedOpen] = useState(false)
+  const [scrollProgress, setScrollProgress] = useState(0)
+
+  const { activePanel } = useDigestSidebarStore()
+  const isPanelOpen = !!activePanel
+  const { autoMarkRead } = useDigestSettingsStore()
+
+  const updateMutation = useUpdateEntryState()
+
+  // Fetch all entries for the day in one request
+  const {
+    data: entriesResponse,
+    isLoading,
+    error,
+  } = useQuery({
+    queryKey: digestQueryKey(date),
+    queryFn: ({ signal }) =>
+      entryService.getTodayEntries({ date, limit: 500 }, { signal }),
+    staleTime: 2 * 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    enabled: !!date,
+  })
+
+  const entries = useMemo(() => entriesResponse?.items ?? [], [entriesResponse])
+
+  // Folder data for grouping — TanStack Query fetches automatically on mount
+  const { folders } = useFolders('feed')
+  const { data: subscriptions = [] } = useAllSubscriptions()
+
+  // Group entries by folder
+  // NOTE: do NOT include `t` in deps — UI-language label lives in DigestSection.
+  // Otherwise every language toggle recomputes sections and ripples through
+  // flatEntries / observers / translations hook.
+  const sections = useMemo(
+    () => groupEntriesByFolder(entries, folders, subscriptions),
+    [entries, folders, subscriptions]
+  )
+
+  // Flat entry list for j/k keyboard navigation
+  const flatEntries = useMemo(() => sections.flatMap((s) => s.entries), [sections])
+
+  // Viewport-aware list translation — respects user's
+  // `list_translation_auto_enabled` + `translation_target_language` settings.
+  // Digest scrolls on window, so pass a null-bearing ref to use the document root.
+  const digestScrollRootRef = useRef<HTMLElement | null>(null)
+  const { translations, isLoading: isTranslating } = useListEntriesTranslation({
+    entries: flatEntries,
+    containerRef: digestScrollRootRef,
+  })
+
+  // Stats
+  const stats = useMemo(() => {
+    const base = computeDigestStats(entries)
+    return { ...base, topicCount: sections.length }
+  }, [entries, sections])
+
+  // Selected entry for article reader
+  const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId ?? '')
+
+  // Scroll-based reading progress bar
+  useEffect(() => {
+    const onScroll = () => {
+      const scrollEl = document.documentElement
+      const scrollTop = scrollEl.scrollTop || document.body.scrollTop
+      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight
+      setScrollProgress(maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0)
+    }
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
+
+  const handleCloseEntry = useCallback(() => {
+    setSelectedEntryId(null)
+    // Restore scroll to the focused card after closing
+    if (focusedEntryId) {
+      window.requestAnimationFrame(() => {
+        const el = document.querySelector(`[data-entry-id="${focusedEntryId}"]`)
+        el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+      })
+    }
+  }, [focusedEntryId])
+
+  const handleSelectEntry = useCallback(
+    (entry: EntryWithState) => {
+      setSelectedEntryId(entry.id)
+      setFocusedEntryId(entry.id)
+      // Auto-mark-read on open
+      if (autoMarkRead && !entry.is_read) {
+        void updateMutation.mutateAsync({
+          entryId: entry.id,
+          data: { is_read: true },
+        })
+      }
+    },
+    [autoMarkRead, updateMutation]
+  )
+
+  const handlePrevDay = useCallback(() => {
+    const [y, m, d] = date.split('-').map(Number)
+    const prev = subDays(new Date(y, m - 1, d), 1)
+    onDateChange(format(prev, 'yyyy-MM-dd'))
+  }, [date, onDateChange])
+
+  const handleNextDay = useCallback(() => {
+    const [y, m, d] = date.split('-').map(Number)
+    const next = addDays(new Date(y, m - 1, d), 1)
+    onDateChange(format(next, 'yyyy-MM-dd'))
+  }, [date, onDateChange])
+
+  const handleSelectFeed = useCallback(
+    (feedId: string) => {
+      const params = new URLSearchParams()
+      params.set('feed', feedId)
+      navigate(`/reader?${params.toString()}`)
+    },
+    [navigate]
+  )
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (
+        target.tagName === 'INPUT' ||
+        target.tagName === 'TEXTAREA' ||
+        target.isContentEditable
+      )
+        return
+
+      // When article reader is open: Escape closes; j/k switch articles in the left list
+      if (selectedEntryId) {
+        if (e.key === 'Escape') {
+          handleCloseEntry()
+          return
+        }
+        if (e.key === 'j' || e.key === 'k') {
+          e.preventDefault()
+          const currentIdx = flatEntries.findIndex((en) => en.id === selectedEntryId)
+          const nextIdx =
+            e.key === 'j'
+              ? Math.min(currentIdx + 1, flatEntries.length - 1)
+              : Math.max(currentIdx - 1, 0)
+          const nextEntry = flatEntries[nextIdx]
+          if (nextEntry && nextEntry.id !== selectedEntryId) {
+            setSelectedEntryId(nextEntry.id)
+            setFocusedEntryId(nextEntry.id)
+            window.requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-entry-id="${nextEntry.id}"]`)
+                ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            })
+          }
+        }
+        return
+      }
+
+      switch (e.key) {
+        case 'ArrowLeft':
+          handlePrevDay()
+          break
+        case 'ArrowRight':
+          if (date < todayDate) handleNextDay()
+          break
+
+        case 'j': {
+          // Focus next entry
+          e.preventDefault()
+          const currentIdx = focusedEntryId
+            ? flatEntries.findIndex((en) => en.id === focusedEntryId)
+            : -1
+          const nextIdx = Math.min(currentIdx + 1, flatEntries.length - 1)
+          const nextEntry = flatEntries[nextIdx]
+          if (nextEntry) {
+            setFocusedEntryId(nextEntry.id)
+            window.requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-entry-id="${nextEntry.id}"]`)
+                ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            })
+          }
+          break
+        }
+
+        case 'k': {
+          // Focus previous entry
+          e.preventDefault()
+          const currentIdx = focusedEntryId
+            ? flatEntries.findIndex((en) => en.id === focusedEntryId)
+            : flatEntries.length
+          const prevIdx = Math.max(currentIdx - 1, 0)
+          const prevEntry = flatEntries[prevIdx]
+          if (prevEntry) {
+            setFocusedEntryId(prevEntry.id)
+            window.requestAnimationFrame(() => {
+              document
+                .querySelector(`[data-entry-id="${prevEntry.id}"]`)
+                ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+            })
+          }
+          break
+        }
+
+        case 'o':
+        case 'Enter': {
+          // Open focused entry
+          if (focusedEntryId) {
+            const entry = flatEntries.find((en) => en.id === focusedEntryId)
+            if (entry) handleSelectEntry(entry)
+          }
+          break
+        }
+
+        case 's': {
+          // Toggle save-for-later on focused entry
+          if (focusedEntryId) {
+            const entry = flatEntries.find((en) => en.id === focusedEntryId)
+            if (entry) {
+              void updateMutation.mutateAsync({
+                entryId: entry.id,
+                data: { read_later: !entry.read_later },
+              })
+            }
+          }
+          break
+        }
+
+        case 'm': {
+          // Toggle read on focused entry
+          if (focusedEntryId) {
+            const entry = flatEntries.find((en) => en.id === focusedEntryId)
+            if (entry) {
+              void updateMutation.mutateAsync({
+                entryId: entry.id,
+                data: { is_read: !entry.is_read },
+              })
+            }
+          }
+          break
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [
+    date,
+    todayDate,
+    selectedEntryId,
+    focusedEntryId,
+    flatEntries,
+    handleCloseEntry,
+    handlePrevDay,
+    handleNextDay,
+    handleSelectEntry,
+    updateMutation,
+  ])
+
+  // Refs kept fresh each render so the observer callback never closes over stale values
+  const flatEntriesRef = useRef(flatEntries)
+  const autoMarkReadRef = useRef(autoMarkRead)
+  const mutateAsyncRef = useRef(updateMutation.mutateAsync)
+  useEffect(() => {
+    flatEntriesRef.current = flatEntries
+  })
+  useEffect(() => {
+    autoMarkReadRef.current = autoMarkRead
+  })
+  useEffect(() => {
+    mutateAsyncRef.current = updateMutation.mutateAsync
+  })
+
+  const mainRef = useRef<HTMLElement>(null)
+  const scrollTimersRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map())
+
+  // Stable key that only changes when the SET of entry IDs changes (not on is_read flips)
+  const entryIdsKey = flatEntries.map((e) => e.id).join(',')
+
+  useEffect(() => {
+    if (!autoMarkReadRef.current) return
+    // Don't observe cards while in reading mode — they're hidden and unreliable
+    if (selectedEntryId) return
+    const container = mainRef.current
+    if (!container) return
+    const observer = new IntersectionObserver(
+      (observations) => {
+        observations.forEach((obs) => {
+          const entryId = (obs.target as HTMLElement).dataset.entryId
+          if (!entryId) return
+          if (obs.isIntersecting) {
+            const timer = scrollTimersRef.current.get(entryId)
+            if (timer !== undefined) {
+              clearTimeout(timer)
+              scrollTimersRef.current.delete(entryId)
+            }
+          } else {
+            if (scrollTimersRef.current.has(entryId)) return
+            const timer = setTimeout(() => {
+              scrollTimersRef.current.delete(entryId)
+              const entry = flatEntriesRef.current.find((e) => e.id === entryId)
+              if (entry && !entry.is_read) {
+                void mutateAsyncRef.current({
+                  entryId: entry.id,
+                  data: { is_read: true },
+                })
+              }
+            }, 1000)
+            scrollTimersRef.current.set(entryId, timer)
+          }
+        })
+      },
+      { threshold: 0, root: null }
+    )
+    const els = container.querySelectorAll('[data-entry-id]')
+    els.forEach((el) => observer.observe(el))
+    return () => {
+      observer.disconnect()
+      scrollTimersRef.current.forEach((t) => clearTimeout(t))
+      scrollTimersRef.current.clear()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryIdsKey, selectedEntryId])
+
+  // Determine panel margin for desktop layout
+  const panelOffset = isPanelOpen && !isMobile ? 264 : 0
+
+  const digestVars = resolvedTheme === 'dark' ? DIGEST_DARK_VARS : DIGEST_LIGHT_VARS
+
+  return (
+    <div
+      className="flex min-h-full"
+      style={{ ...digestVars, background: 'var(--digest-bg)', color: 'var(--digest-text)' } as React.CSSProperties}
+    >
+      {/* Scroll progress bar — fixed at very top */}
+      <div
+        className="pointer-events-none fixed left-0 top-0 z-[100] h-0.5 transition-[width] duration-100"
+        style={{
+          width: `${scrollProgress}%`,
+          background: 'var(--digest-accent, #B8312F)',
+          right: isMobile ? 0 : `${panelOffset}px`,
+        }}
+      />
+
+      {/* Main content area */}
+      <div
+        className="flex min-w-0 flex-1 flex-col transition-[margin-right] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{
+          marginRight: isMobile ? 0 : `${panelOffset}px`,
+        }}
+      >
+        {/* Top nav */}
+        <DigestTopNav
+          date={date}
+          todayDate={todayDate}
+          onPrevDay={handlePrevDay}
+          onNextDay={handleNextDay}
+          onAddFeed={() => setAddFeedOpen(true)}
+          onDateChange={onDateChange}
+          todayAnchor={(() => {
+            const [y, m, d] = todayDate.split('-').map(Number)
+            return new Date(y, m - 1, d)
+          })()}
+          isTranslating={isTranslating}
+        />
+
+        {selectedEntryId ? (
+          /* Reading mode: split-pane (list | reader) */
+          <div className="flex min-h-0 flex-1">
+            {/* Left pane — compact entry list (hidden on narrow viewports) */}
+            {!isMobile && (
+              <aside
+                className="w-[420px] shrink-0 overflow-y-auto border-r"
+                style={{
+                  borderColor: 'var(--digest-divider, #E5E0D2)',
+                  background: 'var(--digest-bg-sidebar, #F5F2EA)',
+                  maxHeight: 'calc(100vh - 60px)',
+                }}
+              >
+                <DigestReadingList
+                  entries={flatEntries}
+                  selectedId={selectedEntryId}
+                  onSelect={handleSelectEntry}
+                  translations={translations}
+                />
+              </aside>
+            )}
+
+            {/* Right pane — article reader */}
+            <main
+              className="min-w-0 flex-1 overflow-y-auto"
+              style={{
+                background: 'var(--digest-bg-card, #FFFFFF)',
+                maxHeight: 'calc(100vh - 60px)',
+              }}
+            >
+              {isLoadingEntry && !selectedEntry ? (
+                <ArticleReaderSkeleton />
+              ) : selectedEntry ? (
+                <ArticleReader
+                  key={selectedEntry.id}
+                  entry={selectedEntry}
+                  onClose={handleCloseEntry}
+                  isFullscreen={false}
+                  onToggleFullscreen={() => undefined}
+                  showCloseButton
+                />
+              ) : null}
+            </main>
+          </div>
+        ) : (
+          <>
+            {/* Masthead */}
+            <DigestMasthead
+              stats={stats}
+              isLoading={isLoading}
+              topicCount={sections.length}
+            />
+
+            {/* Content */}
+            <main
+              ref={mainRef}
+              className="min-w-0 flex-1 px-[18px] pb-40 sm:px-6 md:px-8 lg:px-8 xl:px-12"
+            >
+              <div className="mx-auto max-w-[1600px]">
+                {error && (
+                  <div className="py-8">
+                    <Alert variant="error">
+                      <AlertCircle />
+                      <AlertTitle>{t('error.title')}</AlertTitle>
+                      <AlertDescription>{(error as Error).message}</AlertDescription>
+                    </Alert>
+                  </div>
+                )}
+
+                {isLoading && !error && <DigestLoadingSkeleton />}
+
+                {!isLoading && !error && entries.length === 0 && (
+                  <EmptyState
+                    date={date}
+                    onGoYesterday={handlePrevDay}
+                    headline={t('empty.headline')}
+                    description={t('empty.description', { date })}
+                    ctaLabel={t('empty.yesterday')}
+                  />
+                )}
+
+                {!isLoading &&
+                  sections.map((section) => (
+                    <DigestSection
+                      key={section.folderId ?? '__others__'}
+                      folderId={section.folderId}
+                      folderName={section.folderName}
+                      entries={section.entries}
+                      sourceCount={section.sourceCount}
+                      onSelectEntry={handleSelectEntry}
+                      isCompact={section.folderId === null}
+                      focusedEntryId={focusedEntryId}
+                      translations={translations}
+                    />
+                  ))}
+
+                {/* Bottom "yesterday" link */}
+                {!isLoading && entries.length > 0 && (
+                  <div
+                    className="mt-16 flex justify-center border-t py-8"
+                    style={{ borderColor: 'var(--digest-divider, #E5E0D2)' }}
+                  >
+                    <button
+                      onClick={handlePrevDay}
+                      className="text-sm transition-colors"
+                      style={{ color: 'var(--digest-text-tertiary, #9A968C)' }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = 'var(--digest-accent, #B8312F)'
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'var(--digest-text-tertiary, #9A968C)'
+                      }}
+                    >
+                      {t('empty.yesterday')}
+                    </button>
+                  </div>
+                )}
+
+                {/* Bottom padding for mobile tab bar */}
+                {isMobile && <div className="h-[120px]" />}
+              </div>
+            </main>
+          </>
+        )}
+      </div>
+
+      {/* Right sidebar */}
+      <DigestSidebar
+        onAddFeed={() => setAddFeedOpen(true)}
+        onSelectFeed={handleSelectFeed}
+        onSelectEntry={handleSelectEntry}
+        isMobile={isMobile}
+      />
+
+      {/* Mobile: full-width reader overlay (no left list on narrow viewports) */}
+      {selectedEntryId && isMobile && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col"
+          style={{ background: 'var(--digest-bg-card, #FFFFFF)' }}
+        >
+          {isLoadingEntry && !selectedEntry ? (
+            <ArticleReaderSkeleton />
+          ) : selectedEntry ? (
+            <ArticleReader
+              key={selectedEntry.id}
+              entry={selectedEntry}
+              onClose={handleCloseEntry}
+              isFullscreen={false}
+              onToggleFullscreen={() => undefined}
+              showCloseButton
+            />
+          ) : null}
+        </div>
+      )}
+
+      {/* Add Feed modal */}
+      <AddFeedModal open={addFeedOpen} onClose={() => setAddFeedOpen(false)} />
+    </div>
+  )
+}
+
+function DigestLoadingSkeleton() {
+  return (
+    <div>
+      {/* Section skeleton */}
+      <div className="mt-14">
+        <div
+          className="mb-3 flex items-center justify-between border-b-2 pb-3"
+          style={{ borderColor: 'var(--digest-text, #1A1A1A)' }}
+        >
+          <Skeleton className="h-7 w-36" />
+          <div className="flex gap-2">
+            <Skeleton className="h-6 w-14" />
+            <Skeleton className="h-6 w-10" />
+          </div>
+        </div>
+        <div
+          className="grid"
+          style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))' }}
+        >
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex flex-col gap-3 border-b border-r p-7"
+              style={{ borderColor: 'var(--digest-divider, #E5E0D2)' }}
+            >
+              <Skeleton className="h-3.5 w-24" />
+              <Skeleton className="h-6 w-full" />
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-4 w-1/2" />
+              <Skeleton className="mt-2 h-3 w-32" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function EmptyState({
+  onGoYesterday,
+  headline,
+  description,
+  ctaLabel,
+}: {
+  date: string
+  onGoYesterday: () => void
+  headline: string
+  description: string
+  ctaLabel: string
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <div
+        className="mb-4 text-5xl font-bold"
+        style={{ fontFamily: "'Noto Serif SC', serif", color: 'var(--digest-divider-strong, #B8B3A5)' }}
+      >
+        {headline}
+      </div>
+      <p className="mb-6 text-sm" style={{ color: 'var(--digest-text-tertiary, #9A968C)' }}>
+        {description}
+      </p>
+      <button
+        onClick={onGoYesterday}
+        className="rounded-md px-4 py-2 text-sm transition-colors"
+        style={{
+          border: '1px solid var(--digest-divider, #E5E0D2)',
+          color: 'var(--digest-text-secondary, #5E5A52)',
+        }}
+      >
+        {ctaLabel}
+      </button>
+    </div>
+  )
+}

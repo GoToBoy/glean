@@ -19,8 +19,6 @@ import {
   ChevronLeft,
   Menu as MenuIcon,
   Ellipsis,
-  ThumbsDown,
-  ThumbsUp,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { processHtmlContent } from '../lib/html'
@@ -42,9 +40,7 @@ import {
 } from '@glean/ui'
 import { toastManager } from '@glean/ui'
 import { ArticleOutline } from './ArticleOutline'
-import { PreferenceButtons } from './EntryActions/PreferenceButtons'
 import { useViewportTranslation } from '../hooks/useViewportTranslation'
-import { useEndOfArticleFeedbackPrompt } from '../hooks/useEndOfArticleFeedbackPrompt'
 import { useMobileBarsVisibility } from '../hooks/useMobileBarsVisibility'
 import { useAuthStore } from '../stores/authStore'
 import { useArticlePageMetadata } from '../hooks/useArticlePageMetadata'
@@ -172,7 +168,7 @@ function useMobileCloseGestures(
 /**
  * Standalone article reader component.
  *
- * Displays article content with actions like like, bookmark, mark read, etc.
+ * Displays article content with actions like archive, mark read, and translation.
  * Can be used in the reader page or as a slide-out panel in bookmarks.
  */
 export function ArticleReader({
@@ -206,7 +202,6 @@ export function ArticleReader({
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const [isSubmittingFeedback, setIsSubmittingFeedback] = useState(false)
   const [needsPreChoice, setNeedsPreChoice] = useState(false)
   const [translatePreUnknown, setTranslatePreUnknown] = useState(false)
   const [translatedTitle, setTranslatedTitle] = useState<string | null>(null)
@@ -254,12 +249,6 @@ export function ArticleReader({
     onClose
   )
   const [translationLoadingPhase, setTranslationLoadingPhase] = useState<'idle' | 'start' | 'settled'>('idle')
-  const { showPrompt, dismissPrompt } = useEndOfArticleFeedbackPrompt({
-    entryId: entry.id,
-    isLiked: entry.is_liked,
-    content: displayContent,
-    scrollContainerRef,
-  })
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -440,20 +429,6 @@ export function ArticleReader({
     }
   }
 
-  const handlePromptFeedback = async (liked: boolean) => {
-    if (isSubmittingFeedback) return
-    setIsSubmittingFeedback(true)
-    try {
-      await updateMutation.mutateAsync({
-        entryId: entry.id,
-        data: { is_liked: liked },
-      })
-      dismissPrompt()
-    } finally {
-      setIsSubmittingFeedback(false)
-    }
-  }
-
   const handleOpenExternal = useCallback(() => {
     window.open(entry.url, '_blank', 'noopener,noreferrer')
   }, [entry.url])
@@ -524,7 +499,7 @@ export function ArticleReader({
       {/* Desktop Header */}
       {!isMobile && (
         <div className="border-border bg-card border-b px-6 py-4">
-          <div className="mb-3 flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
             <h1 className="font-display text-foreground text-2xl leading-tight font-bold">
               {entry.title}
             </h1>
@@ -559,7 +534,7 @@ export function ArticleReader({
           </div>
 
           {showTranslation && translatedTitle && (
-            <p className="text-primary/85 mb-3 text-base leading-relaxed font-medium">
+            <p className="text-primary/85 text-base leading-relaxed font-medium">
               {translatedTitle}
             </p>
           )}
@@ -628,8 +603,6 @@ export function ArticleReader({
               </Button>
             )}
 
-            <PreferenceButtons entry={entry} />
-
             <Button
               variant="ghost"
               size="sm"
@@ -676,7 +649,7 @@ export function ArticleReader({
               onTouchEnd={closeGestureHandlers.onTouchEnd}
             >
               <div
-                className={`px-4 py-6 sm:px-6 sm:py-8 ${!isMobile ? 'mx-auto max-w-3xl' : 'max-w-3xl'}`}
+                className={`px-4 py-6 sm:px-8 sm:py-8 ${!isMobile ? 'mx-auto max-w-5xl' : 'max-w-3xl'}`}
               >
                 {/* Mobile: Author and date at top of content */}
                 {isMobile && (entry.author || entry.published_at) && (
@@ -686,23 +659,6 @@ export function ArticleReader({
                     {entry.published_at && (
                       <span>{format(new Date(entry.published_at), 'MMM d, yyyy')}</span>
                     )}
-                  </div>
-                )}
-
-                {/* Sentence translation banner */}
-                {canTranslate && showTranslation && (
-                  <div className="border-primary/20 bg-primary/5 mb-4 flex items-center justify-between rounded-lg border px-4 py-2">
-                    <span className="text-muted-foreground text-xs">
-                      {isTranslationBusy
-                        ? t('translation.translatingVisible')
-                        : t('translation.sentenceMode')}
-                    </span>
-                    <button
-                      onClick={toggleTranslation}
-                      className="text-primary text-xs font-medium hover:underline"
-                    >
-                      {t('translation.hideTranslation')}
-                    </button>
                   </div>
                 )}
 
@@ -759,40 +715,6 @@ export function ArticleReader({
                   </div>
                 )}
 
-                {showPrompt && (
-                  <div className="border-border bg-card mt-6 rounded-xl border p-4">
-                    <div className="mb-3 flex items-start justify-between gap-3">
-                      <p className="text-foreground text-sm font-medium">{t('feedback.title')}</p>
-                      <button
-                        onClick={dismissPrompt}
-                        className="text-muted-foreground hover:text-foreground text-xs"
-                      >
-                        {t('feedback.later')}
-                      </button>
-                    </div>
-                    <p className="text-muted-foreground mb-3 text-xs">{t('feedback.description')}</p>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePromptFeedback(true)}
-                        disabled={isSubmittingFeedback}
-                      >
-                        <ThumbsUp className="h-4 w-4" />
-                        {t('actions.like')}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePromptFeedback(false)}
-                        disabled={isSubmittingFeedback}
-                      >
-                        <ThumbsDown className="h-4 w-4" />
-                        {t('actions.dislike')}
-                      </Button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -913,10 +835,6 @@ export function ArticleReader({
                   </span>
                 </button>
 
-                <div className="border-border rounded-lg border p-1.5">
-                  <PreferenceButtons entry={entry} mobileStyle />
-                </div>
-
                 <button
                   onClick={handleToggleBookmark}
                   disabled={isBookmarking}
@@ -953,7 +871,7 @@ export function ArticleReaderSkeleton() {
     <div className="bg-background flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* Header */}
       <div className="border-border bg-card border-b px-6 py-4">
-        <div className="mb-3 flex items-start justify-between gap-4">
+        <div className="flex items-start justify-between gap-4">
           {/* Title skeleton */}
           <div className="flex-1 space-y-2">
             <Skeleton className="h-8 w-full" />

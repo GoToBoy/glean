@@ -2,7 +2,6 @@
   "filters": {
     "all": "全部",
     "unread": "未读",
-    "smart": "智能",
     "readLater": "稍后阅读"
   },
   "actions": {
@@ -23,14 +22,10 @@
     "openOriginalAutoOpened": "该网站禁止嵌入显示，已为你自动外链打开。",
     "openExternally": "外链打开",
     "more": "更多",
-    "moreDescription": "翻译、归档和偏好操作",
+    "moreDescription": "翻译、稍后阅读和归档操作",
     "close": "关闭",
     "fullscreen": "进入全屏",
     "exitFullscreen": "退出全屏",
-    "like": "喜欢",
-    "liked": "已喜欢",
-    "dislike": "不喜欢",
-    "disliked": "已标记不喜欢",
     "archiveFailed": "归档失败",
     "translationIncomplete": "译文未能补齐完成。"
   },
@@ -52,13 +47,6 @@
       "next": "下一页",
       "previous": "上一页"
     }
-  },
-  "smart": {
-    "title": "智能列表",
-    "description": "按您的偏好排序",
-    "limitedMode": "简化智能模式",
-    "enableVectorizationHint": "启用向量化后，可获得基于内容相似度的 AI 推荐。",
-    "goToSettings": "前往设置"
   },
   "todayBoard": {
     "title": "今日收录",
@@ -102,8 +90,6 @@
     "bilingualMode": "双语对照：{{language}}",
     "failed": "翻译失败",
     "retry": "重试",
-    "sentenceMode": "逐句翻译已启用",
-    "translatingVisible": "正在翻译当前可视内容",
     "hideTranslation": "隐藏翻译",
     "preToggleTitle": "检测到预格式化内容",
     "preToggleDesc": "部分内容可能是命令或日志，是否翻译？",
@@ -111,7 +97,7 @@
   },
   "feedback": {
     "title": "帮助优化推荐？",
-    "description": "如果这篇文章对你有帮助，给个快速反馈可优化智能列表。",
+    "description": "如果这篇文章对你有帮助，给个快速反馈可帮助后续推荐更准确。",
     "later": "稍后"
   }
 }

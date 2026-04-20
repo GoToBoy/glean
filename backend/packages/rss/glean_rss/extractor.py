@@ -4,13 +4,15 @@ Full-text content extractor.
 Uses readability-lxml (Mozilla's Readability algorithm) to extract main content from web pages.
 """
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import os
 from contextlib import suppress
 from dataclasses import dataclass
-from typing import Any, cast
+from typing import TYPE_CHECKING, cast
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -18,12 +20,12 @@ from bs4 import BeautifulSoup
 from bs4.element import NavigableString, Tag
 from readability import Document
 
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, Playwright, Route
+
 try:
-    from playwright.async_api import Browser, Playwright, Route, async_playwright
+    from playwright.async_api import async_playwright
 except ImportError:  # pragma: no cover - exercised in environments without Playwright installed
-    Browser = Any  # type: ignore[assignment]
-    Playwright = Any  # type: ignore[assignment]
-    Route = Any  # type: ignore[assignment]
     async_playwright = None
 
 # Minimum content length threshold for successful extraction.
@@ -175,8 +177,9 @@ async def _get_browser() -> Browser:
         if _browser_instance is not None and _browser_instance.is_connected():
             return _browser_instance
 
-        _playwright_instance = await async_playwright().start()
-        _browser_instance = await _playwright_instance.chromium.launch(
+        pw = await async_playwright().start()
+        _playwright_instance = pw
+        _browser_instance = await pw.chromium.launch(
             headless=True,
             args=[
                 "--disable-dev-shm-usage",
@@ -465,6 +468,8 @@ async def fetch_and_extract_fulltext(url: str) -> ExtractionResult | None:
     Returns:
         Structured extraction result or None if all strategies fail.
     """
+    http_is_client_error = False
+    http_looks_like_shell = False
     http_result = await _fetch_html_http(url)
     if http_result is None:
         if not _is_browser_extraction_enabled():

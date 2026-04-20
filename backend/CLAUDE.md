@@ -10,14 +10,14 @@ For general project information, see [../CLAUDE.md](../CLAUDE.md).
 backend/
 ├── apps/
 │   ├── api/           # FastAPI REST API (port 8000)
-│   │   └── routers/   # auth, feeds, entries, bookmarks, folders, tags, admin, preference
+│   │   └── routers/   # auth, feeds, entries, bookmarks, folders, admin, system
 │   └── worker/        # arq background worker (Redis queue)
-│       └── tasks/     # feed_fetcher, bookmark_metadata, cleanup, embedding_worker, preference_worker
+│       └── tasks/     # feed_fetcher, bookmark_metadata, cleanup, embedding_worker
 ├── packages/
 │   ├── database/      # SQLAlchemy models + Alembic migrations
 │   ├── core/          # Business logic and domain services
 │   ├── rss/           # RSS/Atom feed parsing
-│   └── vector/        # Vector embeddings & preference learning (M3)
+│   └── vector/        # Vector embeddings and scoring helpers
 ```
 
 **Dependency Flow**: `api` → `core` → `database` ← `rss` ← `worker`, `vector` → `database`

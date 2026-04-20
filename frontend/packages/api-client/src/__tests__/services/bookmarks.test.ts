@@ -38,14 +38,6 @@ describe('BookmarkService', () => {
     expect(mockClient.get).toHaveBeenCalledWith('/bookmarks?folder_id=f1')
   })
 
-  it('should get bookmarks with multiple tag_ids', async () => {
-    vi.mocked(mockClient.get).mockResolvedValue({ items: [], total: 0, page: 1, pages: 0, per_page: 20 })
-
-    await service.getBookmarks({ tag_ids: ['t1', 't2'] })
-
-    expect(mockClient.get).toHaveBeenCalledWith('/bookmarks?tag_ids=t1&tag_ids=t2')
-  })
-
   it('should get bookmarks with search and sort', async () => {
     vi.mocked(mockClient.get).mockResolvedValue({ items: [], total: 0, page: 1, pages: 0, per_page: 20 })
 
@@ -112,23 +104,4 @@ describe('BookmarkService', () => {
     expect(result).toEqual(bookmark)
   })
 
-  it('should add a tag to a bookmark', async () => {
-    const bookmark = { id: 'b1', tags: [{ id: 't1' }] }
-    vi.mocked(mockClient.post).mockResolvedValue(bookmark)
-
-    const result = await service.addTag('b1', 't1')
-
-    expect(mockClient.post).toHaveBeenCalledWith('/bookmarks/b1/tags', { tag_id: 't1' })
-    expect(result).toEqual(bookmark)
-  })
-
-  it('should remove a tag from a bookmark', async () => {
-    const bookmark = { id: 'b1', tags: [] }
-    vi.mocked(mockClient.delete).mockResolvedValue(bookmark)
-
-    const result = await service.removeTag('b1', 't1')
-
-    expect(mockClient.delete).toHaveBeenCalledWith('/bookmarks/b1/tags/t1')
-    expect(result).toEqual(bookmark)
-  })
 })

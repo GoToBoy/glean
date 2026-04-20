@@ -16,21 +16,16 @@ class UserEntry(Base, TimestampMixin):
     """
     User-specific entry state model.
 
-    Tracks read status, likes, and other user-specific data
-    for each entry a user has interacted with.
-
-    Note: Preference scores are calculated in real-time via Milvus vector search,
-    not stored in this table.
+    Tracks read status and other user-specific data for each entry a user has
+    interacted with.
 
     Attributes:
         id: Unique record identifier (UUID).
         user_id: User reference.
         entry_id: Entry reference.
         is_read: Whether user has read the entry.
-        is_liked: User's like status (True/False/None).
         read_later: Whether marked for later reading.
         read_at: Timestamp when marked as read.
-        liked_at: Timestamp when liked/disliked.
     """
 
     __tablename__ = "user_entries"
@@ -54,7 +49,6 @@ class UserEntry(Base, TimestampMixin):
 
     # User state
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_liked: Mapped[bool | None] = mapped_column(Boolean)
     read_later: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Read later expiration (M2)
@@ -62,14 +56,10 @@ class UserEntry(Base, TimestampMixin):
 
     # Timestamps
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    liked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     user = relationship("User", back_populates="user_entries")
     entry = relationship("Entry", back_populates="user_entries")
-    user_entry_tags = relationship(
-        "UserEntryTag", back_populates="user_entry", cascade="all, delete-orphan"
-    )
 
     # Constraints: One record per user-entry pair
     __table_args__ = (UniqueConstraint("user_id", "entry_id", name="uq_user_entry"),)

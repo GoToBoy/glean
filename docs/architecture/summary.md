@@ -42,7 +42,7 @@ glean/
 
 - API entrypoint: `backend/apps/api/glean_api/main.py`
 - Router modules:
-  - `auth`, `feeds`, `entries`, `bookmarks`, `folders`, `tags`
+  - `auth`, `feeds`, `entries`, `bookmarks`, `folders`
   - `preference`, `admin`, `system`, `api_tokens`
 - Service layer (domain logic):
   - `backend/packages/core/glean_core/services/`
@@ -62,7 +62,7 @@ glean/
   - Lazy loads pages (`Reader`, `Subscriptions`, `Bookmarks`, `Preference`, `Settings`, auth pages).
 - State model:
   - Server state: TanStack Query
-  - Client state: Zustand stores (`authStore`, `themeStore`, `languageStore`, `uiStore`, etc.)
+  - Client state: Zustand stores (`authStore`, `themeStore`, `languageStore`, etc.)
 - Shared frontend packages:
   - API SDK, shared UI components, i18n resources, logging, shared types.
 
@@ -82,7 +82,7 @@ Default Docker Compose deployment includes:
 
 - Shared-entry model: article content is globally stored; user-specific read/like/read-later state is separated.
 - Async background processing: expensive/non-blocking workloads are executed by worker tasks.
-- Optional vector pipeline: embedding + preference scoring enriches smart recommendation views.
+- Optional vector pipeline: embedding + preference scoring supports personalization features outside the core reader flow.
 - Frontend optimistic updates: entry state changes are reflected quickly in UI while server sync completes.
 
 ## 7. Canonical References

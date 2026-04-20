@@ -132,16 +132,10 @@ class PgVectorClient:
         # Drop the HNSW index first (required before changing column type)
         await self.db.execute(text("DROP INDEX IF EXISTS ix_entry_embeddings_vec"))
 
-        # Set dimension on both tables (table must be empty for this to succeed)
+        # Set dimension on the entry embeddings table (table must be empty for this to succeed)
         await self.db.execute(
             text(
                 f"ALTER TABLE entry_embeddings"
-                f" ALTER COLUMN embedding TYPE {target_type}"
-            )
-        )
-        await self.db.execute(
-            text(
-                f"ALTER TABLE user_preference_vectors"
                 f" ALTER COLUMN embedding TYPE {target_type}"
             )
         )
@@ -191,7 +185,6 @@ class PgVectorClient:
         This is the pgvector equivalent of dropping and recreating Milvus collections.
         """
         await self.db.execute(text("DELETE FROM entry_embeddings"))
-        await self.db.execute(text("DELETE FROM user_preference_vectors"))
         await self.db.flush()
 
         # Re-dimension the columns and rebuild the HNSW index for the new model
@@ -202,7 +195,7 @@ class PgVectorClient:
             await self._set_model_signature(sig)
 
         await self.db.flush()
-        logger.info("Cleared all pgvector embeddings and preferences")
+        logger.info("Cleared all pgvector embeddings")
 
     # ------------------------------------------------------------------
     # Entry embedding operations
@@ -327,70 +320,5 @@ class PgVectorClient:
         await self.db.execute(
             text("DELETE FROM entry_embeddings WHERE entry_id = :entry_id"),
             {"entry_id": entry_id},
-        )
-        await self.db.flush()
-
-    # ------------------------------------------------------------------
-    # User preference vector operations
-    # ------------------------------------------------------------------
-
-    async def upsert_user_preference(
-        self,
-        user_id: str,
-        vector_type: str,
-        embedding: list[float],
-        sample_count: float,
-        updated_at: int,
-    ) -> None:
-        """Insert or update user preference vector."""
-        pref_id = f"{user_id}_{vector_type}"
-        vec_str = self._format_vector(embedding)
-
-        await self.db.execute(
-            text(
-                "INSERT INTO user_preference_vectors"
-                " (id, user_id, vector_type, embedding, sample_count, updated_at)"
-                " VALUES (:id, :user_id, :vector_type, CAST(:embedding AS vector),"
-                "         :sample_count, :updated_at)"
-                " ON CONFLICT (id) DO UPDATE SET"
-                "   embedding    = CAST(EXCLUDED.embedding AS vector),"
-                "   sample_count = EXCLUDED.sample_count,"
-                "   updated_at   = EXCLUDED.updated_at"
-            ),
-            {
-                "id": pref_id,
-                "user_id": user_id,
-                "vector_type": vector_type,
-                "embedding": vec_str,
-                "sample_count": sample_count,
-                "updated_at": updated_at,
-            },
-        )
-        await self.db.flush()
-
-    async def get_user_preferences(self, user_id: str) -> dict[str, dict[str, Any]]:
-        """Get all preference vectors for a user."""
-        result = await self.db.execute(
-            text(
-                "SELECT vector_type, embedding::text, sample_count, updated_at"
-                " FROM user_preference_vectors"
-                " WHERE user_id = :user_id"
-            ),
-            {"user_id": user_id},
-        )
-        prefs: dict[str, dict[str, Any]] = {}
-        for row in result.fetchall():
-            prefs[row[0]] = {
-                "embedding": self._parse_vector(row[1]),
-                "sample_count": row[2],
-                "updated_at": row[3],
-            }
-        return prefs
-
-    async def delete_user_preferences(self, user_id: str) -> None:
-        """Delete all preference vectors for a user."""
-        await self.db.execute(
-            text("DELETE FROM user_preference_vectors WHERE user_id = :user_id"),
-            {"user_id": user_id},
         )
         await self.db.flush()

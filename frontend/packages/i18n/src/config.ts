@@ -11,6 +11,7 @@ import bookmarksEn from './locales/en/bookmarks.json'
 import feedsEn from './locales/en/feeds.json'
 import uiEn from './locales/en/ui.json'
 import adminEn from './locales/en/admin.json'
+import digestEn from './locales/en/digest.json'
 
 // Import all Chinese translations
 import commonZh from './locales/zh-CN/common.json'
@@ -21,6 +22,7 @@ import bookmarksZh from './locales/zh-CN/bookmarks.json'
 import feedsZh from './locales/zh-CN/feeds.json'
 import uiZh from './locales/zh-CN/ui.json'
 import adminZh from './locales/zh-CN/admin.json'
+import digestZh from './locales/zh-CN/digest.json'
 
 const resources = {
   en: {
@@ -32,6 +34,7 @@ const resources = {
     feeds: feedsEn,
     ui: uiEn,
     admin: adminEn,
+    digest: digestEn,
   },
   'zh-CN': {
     common: commonZh,
@@ -42,6 +45,7 @@ const resources = {
     feeds: feedsZh,
     ui: uiZh,
     admin: adminZh,
+    digest: digestZh,
   },
 } as const
 
@@ -52,7 +56,7 @@ i18next
     resources,
     fallbackLng: 'en',
     defaultNS: 'common',
-    ns: ['common', 'auth', 'settings', 'reader', 'bookmarks', 'feeds', 'ui', 'admin'],
+    ns: ['common', 'auth', 'settings', 'reader', 'bookmarks', 'feeds', 'ui', 'admin', 'digest'],
 
     // Language detection order
     detection: {

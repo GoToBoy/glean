@@ -119,36 +119,6 @@ export function useBookmarks() {
     []
   )
 
-  const addTag = useCallback(
-    async (bookmarkId: string, tagId: string): Promise<Bookmark | null> => {
-      try {
-        const bookmark = await bookmarkService.addTag(bookmarkId, tagId)
-        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
-        return bookmark
-      } catch (err) {
-        setError('Failed to add tag')
-        logger.error('Failed to add tag to bookmark:', err)
-        return null
-      }
-    },
-    []
-  )
-
-  const removeTag = useCallback(
-    async (bookmarkId: string, tagId: string): Promise<Bookmark | null> => {
-      try {
-        const bookmark = await bookmarkService.removeTag(bookmarkId, tagId)
-        setBookmarks((prev) => prev.map((b) => (b.id === bookmarkId ? bookmark : b)))
-        return bookmark
-      } catch (err) {
-        setError('Failed to remove tag')
-        logger.error('Failed to remove tag from bookmark:', err)
-        return null
-      }
-    },
-    []
-  )
-
   return {
     bookmarks,
     pagination,
@@ -161,7 +131,5 @@ export function useBookmarks() {
     deleteBookmark,
     addFolder,
     removeFolder,
-    addTag,
-    removeTag,
   }
 }

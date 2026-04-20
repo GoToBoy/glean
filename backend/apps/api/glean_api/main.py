@@ -30,13 +30,10 @@ from .routers import (
     api_tokens,
     auth,
     bookmarks,
-    discover,
     entries,
     feeds,
     folders,
-    preference,
     system,
-    tags,
 )
 
 # Initialize logging system
@@ -75,10 +72,7 @@ def get_oss_routers() -> list[RouterConfig]:
         (admin.router, "/api/admin", ["Admin"]),
         (ai.router, "/api/ai", ["AI Integration"]),
         (bookmarks.router, "/api/bookmarks", ["Bookmarks"]),
-        (discover.router, "/api/discover", ["Discover"]),
         (folders.router, "/api/folders", ["Folders"]),
-        (tags.router, "/api/tags", ["Tags"]),
-        (preference.router, "/api/preference", ["Preference"]),
         (system.router, "/api/system", ["System"]),
         (api_tokens.router, "/api/tokens", ["API Tokens"]),
     ]

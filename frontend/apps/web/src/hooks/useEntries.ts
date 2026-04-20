@@ -1,6 +1,6 @@
 import { useQuery, useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { entryService } from '@glean/api-client'
-import type { UpdateEntryStateRequest, EntryWithState } from '@glean/types'
+import type { EntryListResponse, UpdateEntryStateRequest, EntryWithState } from '@glean/types'
 import { subscriptionKeys } from './useSubscriptions'
 
 type UpdateEntryStateVariables = {
@@ -26,17 +26,20 @@ export interface EntryFilters {
   feed_id?: string
   folder_id?: string
   is_read?: boolean
-  is_liked?: boolean
   read_later?: boolean
   collected_after?: string
   collected_before?: string
   collected_date?: string
   page?: number
   per_page?: number
-  view?: 'timeline' | 'smart' | 'today-board'
+  view?: 'timeline' | 'today-board'
 }
 
 export type InfiniteEntryFilters = Omit<EntryFilters, 'page'>
+
+type InfiniteEntryQueryOptions = {
+  enabled?: boolean
+}
 
 function getPagedEntryFilters(
   { per_page: _perPage, ...filters }: InfiniteEntryFilters = {},
@@ -46,7 +49,10 @@ function getPagedEntryFilters(
   return { ...filters, page, per_page: perPage }
 }
 
-export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
+export function getInfiniteEntriesQueryOptions(
+  filters?: InfiniteEntryFilters,
+  options: InfiniteEntryQueryOptions = {}
+) {
   const perPage = filters?.per_page ?? 20
   const isTodayBoard = filters?.view === 'today-board'
 
@@ -78,6 +84,7 @@ export function getInfiniteEntriesQueryOptions(filters?: InfiniteEntryFilters) {
     staleTime: 45 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
+    enabled: options.enabled ?? true,
   }
 }
 
@@ -97,8 +104,11 @@ export function useEntries(filters?: EntryFilters) {
 /**
  * Hook to fetch entries with infinite scroll support.
  */
-export function useInfiniteEntries(filters?: InfiniteEntryFilters) {
-  return useInfiniteQuery(getInfiniteEntriesQueryOptions(filters))
+export function useInfiniteEntries(
+  filters?: InfiniteEntryFilters,
+  options: InfiniteEntryQueryOptions = {}
+) {
+  return useInfiniteQuery(getInfiniteEntriesQueryOptions(filters, options))
 }
 
 /**
@@ -153,6 +163,19 @@ export function useUpdateEntryState() {
           })),
         }
       })
+
+      queryClient.setQueriesData<EntryListResponse>(
+        { queryKey: ['digest-entries'] },
+        (oldData) => {
+          if (!oldData) return oldData
+          return {
+            ...oldData,
+            items: oldData.items.map((item) =>
+              item.id === variables.entryId ? { ...item, ...updatedEntry } : item
+            ),
+          }
+        }
+      )
 
       // Invalidate subscription queries to update unread counts
       // This is needed for accurate sidebar counts

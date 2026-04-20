@@ -5,14 +5,11 @@ import type {
   Bookmark,
   User,
   Folder,
-  Tag,
-  TagWithCounts,
   FolderTreeNode,
   EntryWithState,
   Subscription,
   TokenResponse,
   BookmarkFolderSimple,
-  BookmarkTagSimple,
 } from '@glean/types'
 import { FeedStatus } from '@glean/types'
 
@@ -49,7 +46,6 @@ export const createMockBookmark = (overrides: Partial<Bookmark> = {}): Bookmark 
   content: null,
   snapshot_status: 'done',
   folders: [],
-  tags: [],
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z',
   ...overrides,
@@ -78,24 +74,6 @@ export const createMockFolderTreeNode = (
   ...overrides,
 })
 
-export const createMockTag = (overrides: Partial<Tag> = {}): Tag => ({
-  id: 't1',
-  user_id: 'user-1',
-  name: 'Test Tag',
-  color: null,
-  created_at: '2024-01-01T00:00:00Z',
-  ...overrides,
-})
-
-export const createMockTagWithCounts = (
-  overrides: Partial<TagWithCounts> = {},
-): TagWithCounts => ({
-  ...createMockTag(),
-  bookmark_count: 0,
-  entry_count: 0,
-  ...overrides,
-})
-
 export const createMockEntry = (overrides: Partial<EntryWithState> = {}): EntryWithState => ({
   id: 'e1',
   feed_id: 'feed-1',
@@ -108,7 +86,6 @@ export const createMockEntry = (overrides: Partial<EntryWithState> = {}): EntryW
   published_at: '2024-01-01T00:00:00Z',
   created_at: '2024-01-01T00:00:00Z',
   is_read: false,
-  is_liked: null,
   read_later: false,
   read_later_until: null,
   read_at: null,
@@ -116,8 +93,6 @@ export const createMockEntry = (overrides: Partial<EntryWithState> = {}): EntryW
   bookmark_id: null,
   feed_title: 'Test Feed',
   feed_icon_url: null,
-  preference_score: null,
-  debug_info: null,
   ...overrides,
 })
 
@@ -158,14 +133,5 @@ export const createMockBookmarkFolder = (
 ): BookmarkFolderSimple => ({
   id: 'f1',
   name: 'Test Folder',
-  ...overrides,
-})
-
-export const createMockBookmarkTag = (
-  overrides: Partial<BookmarkTagSimple> = {},
-): BookmarkTagSimple => ({
-  id: 't1',
-  name: 'Test Tag',
-  color: null,
   ...overrides,
 })

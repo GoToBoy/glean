@@ -13,11 +13,7 @@ const RegisterPage = lazy(() => import('./pages/RegisterPage'))
 const ReaderRoute = lazy(() => import('./pages/reader/ReaderRoute'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 const SubscriptionsPage = lazy(() => import('./pages/SubscriptionsPage'))
-// M2 pages
 const BookmarksPage = lazy(() => import('./pages/BookmarksPage'))
-// M3 pages
-const PreferencePage = lazy(() => import('./pages/PreferencePage'))
-const DiscoverPage = lazy(() => import('./pages/DiscoverPage'))
 // Auth callback
 const AuthCallbackPage = lazy(() => import('./pages/AuthCallbackPage'))
 
@@ -64,8 +60,6 @@ function App() {
     const preload = () => {
       void import('./pages/BookmarksPage')
       void import('./pages/SettingsPage')
-      void import('./pages/PreferencePage')
-      void import('./pages/DiscoverPage')
     }
 
     const win = window as Window & {
@@ -107,12 +101,10 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="/reader?view=smart&tab=unread" replace />} />
+          <Route index element={<Navigate to="/reader?tab=unread" replace />} />
           <Route path="reader" element={<ReaderRoute />} />
           <Route path="subscriptions" element={<SubscriptionsPage />} />
           <Route path="bookmarks" element={<BookmarksPage />} />
-          <Route path="preference" element={<PreferencePage />} />
-          <Route path="discover" element={<DiscoverPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
 

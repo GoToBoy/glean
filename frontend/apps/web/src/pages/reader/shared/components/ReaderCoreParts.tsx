@@ -9,7 +9,6 @@ import {
   Loader2,
   Inbox,
   Timer,
-  Sparkles,
   ChevronDown,
 } from 'lucide-react'
 import { stripHtmlTags } from '../../../../lib/html'
@@ -119,7 +118,6 @@ export function EntryListItem({
   style,
   showFeedInfo = false,
   showReadLaterRemaining = false,
-  showPreferenceScore = false,
   hideReadStatusIndicator = false,
   hideReadLaterIndicator = false,
   translatedTitle,
@@ -133,7 +131,6 @@ export function EntryListItem({
   style?: React.CSSProperties
   showFeedInfo?: boolean
   showReadLaterRemaining?: boolean
-  showPreferenceScore?: boolean
   hideReadStatusIndicator?: boolean
   hideReadLaterIndicator?: boolean
   translatedTitle?: string
@@ -222,22 +219,6 @@ export function EntryListItem({
               )}
 
               <div className="ml-auto flex items-center gap-1.5">
-                {showPreferenceScore &&
-                  entry.preference_score !== null &&
-                  entry.preference_score !== undefined && (
-                    <span
-                      className={`flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[9px] font-medium tabular-nums ${
-                        entry.preference_score >= 70
-                          ? 'bg-green-500/10 text-green-500'
-                          : entry.preference_score >= 50
-                            ? 'bg-amber-500/10 text-amber-500'
-                            : 'bg-muted text-muted-foreground'
-                      }`}
-                      title={`Preference score: ${entry.preference_score.toFixed(0)}%`}
-                    >
-                      {entry.preference_score.toFixed(0)}%
-                    </span>
-                  )}
                 {!hideReadLaterIndicator && entry.read_later && !showReadLaterRemaining && (
                   <Clock className="text-primary h-3.5 w-3.5" />
                 )}
@@ -295,11 +276,9 @@ function FilterTab({
 export function FilterDropdownMenu({
   filterType,
   onFilterChange,
-  isSmartView,
 }: {
   filterType: FilterType
   onFilterChange: (type: FilterType) => void
-  isSmartView: boolean
 }) {
   const { t } = useTranslation('reader')
 
@@ -309,8 +288,6 @@ export function FilterDropdownMenu({
         return <Inbox className="h-4 w-4" />
       case 'unread':
         return <div className="h-2 w-2 rounded-full bg-current" />
-      case 'smart':
-        return <Sparkles className="h-4 w-4" />
       case 'read-later':
         return <Clock className="h-4 w-4" />
     }
@@ -322,16 +299,12 @@ export function FilterDropdownMenu({
         return t('filters.all')
       case 'unread':
         return t('filters.unread')
-      case 'smart':
-        return t('filters.smart')
       case 'read-later':
         return t('filters.readLater')
     }
   }
 
-  const availableFilters: FilterType[] = isSmartView
-    ? ['unread', 'all']
-    : ['all', 'unread', 'smart', 'read-later']
+  const availableFilters: FilterType[] = ['all', 'unread', 'read-later']
 
   return (
     <DropdownMenu>
@@ -500,12 +473,6 @@ export function ReaderFilterTabs({
         onClick={() => onFilterChange('unread')}
         icon={<div className="h-2 w-2 rounded-full bg-current" />}
         label={t('filters.unread')}
-      />
-      <FilterTab
-        active={filterType === 'smart'}
-        onClick={() => onFilterChange('smart')}
-        icon={<Sparkles className="h-3.5 w-3.5" />}
-        label={t('filters.smart')}
       />
       <FilterTab
         active={filterType === 'read-later'}

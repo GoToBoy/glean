@@ -24,7 +24,6 @@ function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
     published_at: overrides.published_at ?? null,
     created_at: overrides.created_at ?? '2026-04-10T02:00:00.000Z',
     is_read: overrides.is_read ?? false,
-    is_liked: overrides.is_liked ?? null,
     read_later: overrides.read_later ?? false,
     read_later_until: overrides.read_later_until ?? null,
     triage_state: overrides.triage_state,
@@ -38,8 +37,6 @@ function makeEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
     bookmark_id: overrides.bookmark_id ?? null,
     feed_title: overrides.feed_title ?? 'Feed title',
     feed_icon_url: overrides.feed_icon_url ?? null,
-    preference_score: overrides.preference_score ?? null,
-    debug_info: overrides.debug_info ?? null,
   }
 }
 

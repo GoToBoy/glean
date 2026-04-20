@@ -62,7 +62,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
         }
 
         try:
-            import torch
+            import torch  # type: ignore[import-not-found]  # optional runtime dep
 
             # Check CUDA
             if torch.cuda.is_available():
@@ -96,7 +96,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
             True if device works, False otherwise.
         """
         try:
-            import torch
+            import torch  # type: ignore[import-not-found]  # optional runtime dep
 
             # Create a small test tensor and try operations
             if device == "cuda" and torch.cuda.is_available():
@@ -126,7 +126,9 @@ class SentenceTransformerProvider(EmbeddingProvider):
         Returns:
             Tuple of (loaded model, actual device used).
         """
-        from sentence_transformers import SentenceTransformer
+        from sentence_transformers import (  # type: ignore[import-not-found]  # optional runtime dep
+            SentenceTransformer,
+        )
 
         # Device fallback order
         devices_to_try = []
@@ -193,7 +195,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
         if self._model is None:
             try:
-                import sentence_transformers  # noqa: F401
+                import sentence_transformers  # noqa: F401  # type: ignore[import-not-found]  # optional runtime dep
             except ImportError:
                 raise ImportError(
                     "sentence-transformers is not installed. "
@@ -280,6 +282,10 @@ class SentenceTransformerProvider(EmbeddingProvider):
 
         return self._model
 
+    def get_model(self) -> Any:
+        """Public accessor — load and return the Sentence Transformer model."""
+        return self._get_model()
+
     async def generate_embedding(self, text: str) -> tuple[list[float], dict[str, Any]]:
         """Generate embedding for a single text."""
         loop = asyncio.get_event_loop()
@@ -358,7 +364,7 @@ class SentenceTransformerProvider(EmbeddingProvider):
         with _model_lock:
             for cache_key in list(_model_cache.keys()):
                 try:
-                    import torch
+                    import torch  # type: ignore[import-not-found]  # optional runtime dep
 
                     cached = _model_cache[cache_key]
                     device = cached.get("device", "cpu")

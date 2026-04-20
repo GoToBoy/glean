@@ -7,6 +7,7 @@ Background tasks for fetching and parsing RSS feeds.
 import asyncio
 import json
 import math
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib.parse import urlparse
@@ -108,7 +109,7 @@ async def _load_scheduled_feeds(
                 (Feed.next_fetch_at.is_(None)) | (Feed.next_fetch_at <= now_utc),
             )
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     result = await session.execute(select(Feed).where(Feed.status == FeedStatus.ACTIVE))
     active_feeds = result.scalars().all()
@@ -127,13 +128,6 @@ async def _load_scheduled_feeds(
             eligible_feeds.append(feed)
 
     return eligible_feeds
-
-
-def _is_rsshub_url(url: str | None) -> bool:
-    """Return True when the URL points at an RSSHub host."""
-    if not isinstance(url, str) or not url:
-        return False
-    return "rsshub" in urlparse(url).netloc.lower()
 
 
 def _feed_uses_rsshub(feed: Feed) -> bool:
@@ -294,7 +288,7 @@ def _is_duplicate_feed_guid_exception(error: Exception) -> bool:
     return "uq_feed_guid" in error_text and "duplicate key value" in error_text
 
 
-def _pick_existing_entry_for_backfill(existing_entries: list[Entry]) -> Entry | None:
+def _pick_existing_entry_for_backfill(existing_entries: Sequence[Entry]) -> Entry | None:
     """Return one deterministic existing entry that still needs content backfill."""
     for entry in existing_entries:
         if should_backfill_entry(

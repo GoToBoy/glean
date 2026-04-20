@@ -102,7 +102,7 @@ All pages are `React.lazy()` loaded with a common `<Suspense>` boundary:
 | `/bookmarks`       | BookmarksPage      |
 | `/preference`      | PreferencePage     |
 
-The default route `/` redirects to `/reader?view=smart&tab=unread`.
+The default route `/` redirects to `/reader?tab=unread`.
 
 ### 2.4 Three-Column Layout (ReaderPage)
 
@@ -398,7 +398,7 @@ This is the critical user journey — from clicking an entry to reading content:
 Entry state changes (read, like, bookmark) use optimistic cache updates — the TanStack Query cache is patched immediately before the API response, preventing the entry from disappearing from filtered lists (e.g., marking read while viewing "unread" tab).
 
 ### 5.2 Entry Position Stability
-When a selected entry is marked read/liked and filtered out of the current list, a ref (`selectedEntryOriginalDataRef`) preserves its original position data. The entry is re-inserted at its correct position using either `preference_score` (smart view) or `published_at` (timeline view).
+When a selected entry is marked read/liked and filtered out of the current list, a ref (`selectedEntryOriginalDataRef`) preserves its original position data. The entry is re-inserted at its correct position using `published_at` for the remaining reader flows.
 
 ### 5.3 Debounced Preference Updates
 Like/dislike signals use Redis SET NX with 30s TTL to prevent rapid preference model updates. Only the first signal in a 30-second window triggers a worker task.

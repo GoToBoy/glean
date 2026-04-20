@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
 import { useLanguageStore } from '../stores/languageStore'
@@ -9,7 +10,6 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
-  Compass,
   Loader2,
   Eye,
   Sun,
@@ -35,7 +35,6 @@ import {
   Switch,
 } from '@glean/ui'
 import { SubscriptionsTab } from '../components/tabs/SubscriptionsTab'
-import { PreferenceTab } from '../components/tabs/PreferenceTab'
 import { APITokensTab } from '../components/tabs/APITokensTab'
 import { TranslationTab } from '../components/tabs/TranslationTab'
 import { AIIntegrationTab } from '../components/tabs/AIIntegrationTab'
@@ -53,6 +52,29 @@ export default function SettingsPage() {
   const { language, setLanguage } = useLanguageStore()
   const [isSaving, setIsSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const VALID_TABS = [
+    'profile',
+    'read-later',
+    'appearance',
+    'translation',
+    'manage-feeds',
+    'api-tokens',
+    'ai-integration',
+  ] as const
+  const tabParam = searchParams.get('tab')
+  const activeTab = VALID_TABS.includes(tabParam as (typeof VALID_TABS)[number])
+    ? (tabParam as (typeof VALID_TABS)[number])
+    : 'profile'
+  const handleTabChange = (value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value === 'profile') {
+      next.delete('tab')
+    } else {
+      next.set('tab', value)
+    }
+    setSearchParams(next, { replace: true })
+  }
 
   // Read later expiration options
   const READ_LATER_OPTIONS = [
@@ -65,16 +87,6 @@ export default function SettingsPage() {
   // Get current read_later_days from user settings, default to 7
   const currentReadLaterDays = user?.settings?.read_later_days ?? 7
   const showReadLaterRemaining = user?.settings?.show_read_later_remaining ?? true
-  const currentReaderMode = user?.settings?.reader_mode ?? 'legacy'
-  const currentRankingMode = user?.settings?.ranking_mode ?? 'time'
-  const currentRecommendationStrength = user?.settings?.recommendation_strength ?? 'weak'
-  const currentExploreRatio = user?.settings?.explore_ratio ?? 0.2
-  const currentManualOnly = user?.settings?.manual_only ?? false
-  const currentDiscoveryTavilyApiKey = user?.settings?.discovery_tavily_api_key ?? ''
-  const [discoveryTavilyApiKey, setDiscoveryTavilyApiKey] = useState(currentDiscoveryTavilyApiKey)
-  const [isSavingDiscoveryKey, setIsSavingDiscoveryKey] = useState(false)
-  const [discoveryKeySaved, setDiscoveryKeySaved] = useState(false)
-
   const handleReadLaterDaysChange = async (days: number) => {
     setIsSaving(true)
     setSaveSuccess(false)
@@ -100,20 +112,6 @@ export default function SettingsPage() {
       // Error is handled by the store
     } finally {
       setIsSaving(false)
-    }
-  }
-
-  const handleSaveDiscoveryTavilyKey = async () => {
-    setIsSavingDiscoveryKey(true)
-    setDiscoveryKeySaved(false)
-    try {
-      await updateSettings({ discovery_tavily_api_key: discoveryTavilyApiKey.trim() })
-      setDiscoveryKeySaved(true)
-      setTimeout(() => setDiscoveryKeySaved(false), 2000)
-    } catch {
-      // Error is handled by the store
-    } finally {
-      setIsSavingDiscoveryKey(false)
     }
   }
 
@@ -396,145 +394,7 @@ export default function SettingsPage() {
     )
   }
 
-  const ReaderModeContent = () => (
-    <div className="space-y-6">
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t('readerMode.modeLabel')}</Label>
-        <Select
-          value={currentReaderMode}
-          onValueChange={(value) =>
-            void updateSettings({ reader_mode: value as 'legacy' | 'new' })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue>
-              {currentReaderMode === 'new'
-                ? t('readerMode.modeOptions.new')
-                : t('readerMode.modeOptions.legacy')}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="legacy">{t('readerMode.modeOptions.legacy')}</SelectItem>
-            <SelectItem value="new">{t('readerMode.modeOptions.new')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t('readerMode.rankingLabel')}</Label>
-        <Select
-          value={currentRankingMode}
-          onValueChange={(value) =>
-            void updateSettings({ ranking_mode: value as 'time' | 'value' | 'mixed' })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue>
-              {currentRankingMode === 'time'
-                ? t('readerMode.rankingOptions.time')
-                : currentRankingMode === 'value'
-                  ? t('readerMode.rankingOptions.value')
-                  : t('readerMode.rankingOptions.mixed')}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="time">{t('readerMode.rankingOptions.time')}</SelectItem>
-            <SelectItem value="value">{t('readerMode.rankingOptions.value')}</SelectItem>
-            <SelectItem value="mixed">{t('readerMode.rankingOptions.mixed')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t('readerMode.recommendationLabel')}</Label>
-        <Select
-          value={currentRecommendationStrength}
-          onValueChange={(value) =>
-            void updateSettings({ recommendation_strength: value as 'off' | 'weak' })
-          }
-        >
-          <SelectTrigger>
-            <SelectValue>
-              {currentRecommendationStrength === 'off'
-                ? t('readerMode.recommendationOptions.off')
-                : t('readerMode.recommendationOptions.weak')}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="off">{t('readerMode.recommendationOptions.off')}</SelectItem>
-            <SelectItem value="weak">{t('readerMode.recommendationOptions.weak')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t('readerMode.exploreRatioLabel')}</Label>
-        <Select
-          value={String(currentExploreRatio)}
-          onValueChange={(value) => void updateSettings({ explore_ratio: Number(value) })}
-        >
-          <SelectTrigger>
-            <SelectValue>{Math.round(currentExploreRatio * 100)}%</SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="0.1">10%</SelectItem>
-            <SelectItem value="0.15">15%</SelectItem>
-            <SelectItem value="0.2">20%</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="border-border/50 from-muted/30 to-muted/10 ring-border/20 rounded-xl border bg-gradient-to-br p-5 ring-1">
-        <div className="flex items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <Label className="text-foreground block text-sm font-medium">
-              {t('readerMode.manualOnlyLabel')}
-            </Label>
-            <p className="text-muted-foreground text-xs">
-              {t('readerMode.manualOnlyDesc')}
-            </p>
-          </div>
-          <Switch
-            checked={currentManualOnly}
-            onCheckedChange={(checked) => void updateSettings({ manual_only: checked })}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label className="text-sm font-medium">{t('readerMode.discoveryApiKeyLabel')}</Label>
-        <p className="text-muted-foreground text-xs">{t('readerMode.discoveryApiKeyDesc')}</p>
-        <input
-          type="password"
-          value={discoveryTavilyApiKey}
-          onChange={(e) => setDiscoveryTavilyApiKey(e.target.value)}
-          placeholder={t('readerMode.discoveryApiKeyPlaceholder')}
-          className="border-border/50 bg-muted/30 text-foreground placeholder:text-muted-foreground/50 focus:ring-primary/30 focus:border-primary/50 w-full rounded-xl border px-4 py-3 text-sm transition-all focus:ring-2 focus:outline-none"
-        />
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={handleSaveDiscoveryTavilyKey}
-            disabled={
-              isSavingDiscoveryKey ||
-              isLoading ||
-              discoveryTavilyApiKey === currentDiscoveryTavilyApiKey
-            }
-          >
-            {isSavingDiscoveryKey && <Loader2 className="mr-2 h-4 w-4" />}
-            {t('common:actions.save')}
-          </Button>
-          {discoveryKeySaved && (
-            <span className="flex items-center gap-1.5 text-sm text-green-600">
-              <CheckCircle className="h-4 w-4" />
-              {t('readerMode.discoveryApiKeySaved')}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-
-  const settingsRootClass = 'h-full'
+  const settingsRootClass = 'h-full w-full px-4 py-6 md:px-8 md:py-8'
   const settingsFrameClass =
     'min-h-0 flex-1 overflow-hidden border bg-card/50 shadow-xl backdrop-blur-sm'
   const tabsRailClass =
@@ -550,7 +410,12 @@ export default function SettingsPage() {
     <div className={settingsRootClass}>
       <div className="flex h-full flex-col">
         <div className={settingsFrameClass}>
-          <Tabs defaultValue="profile" orientation="vertical" className="h-full w-full">
+          <Tabs
+            value={activeTab}
+            onValueChange={handleTabChange}
+            orientation="vertical"
+            className="h-full w-full"
+          >
             <div className="flex h-full w-full flex-1 flex-col md:flex-row">
               <div className={tabsRailClass}>
                 <TabsList variant="underline" className={tabsListClass}>
@@ -566,10 +431,6 @@ export default function SettingsPage() {
                     <Sun className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.appearance')}</span>
                   </TabsTab>
-                  <TabsTab value="reader-mode" className={tabsTabClass}>
-                    <Compass className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
-                    <span className="text-[10px] md:text-sm">{t('tabs.reader')}</span>
-                  </TabsTab>
                   <TabsTab value="translation" className={tabsTabClass}>
                     <Languages className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.translation')}</span>
@@ -577,10 +438,6 @@ export default function SettingsPage() {
                   <TabsTab value="manage-feeds" className={tabsTabClass}>
                     <ListChecks className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
                     <span className="text-[10px] md:text-sm">{t('tabs.manageFeeds')}</span>
-                  </TabsTab>
-                  <TabsTab value="preferences" className={tabsTabClass}>
-                    <Sparkles className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
-                    <span className="text-[10px] md:text-sm">{t('tabs.preferences')}</span>
                   </TabsTab>
                   <TabsTab value="api-tokens" className={tabsTabClass}>
                     <Key className="h-5 w-5 shrink-0 md:h-4 md:w-4" />
@@ -664,25 +521,6 @@ export default function SettingsPage() {
                   <TranslationTab />
                 </TabsPanel>
 
-                <TabsPanel value="reader-mode" className={panelClass}>
-                  <div className={panelHeaderClass}>
-                    <div className="mb-2 flex items-center gap-3">
-                      <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
-                        <Compass className="text-primary h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="font-display text-foreground text-2xl font-semibold">
-                          {t('readerMode.title')}
-                        </h2>
-                        <p className="text-muted-foreground text-sm">
-                          {t('readerMode.desc')}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                  <ReaderModeContent />
-                </TabsPanel>
-
                 <TabsPanel
                   value="manage-feeds"
                   className="flex h-full w-full min-w-0 flex-col overflow-hidden"
@@ -690,23 +528,6 @@ export default function SettingsPage() {
                   <div className="min-h-0 w-full flex-1 p-4">
                     <SubscriptionsTab />
                   </div>
-                </TabsPanel>
-
-                <TabsPanel value="preferences" className={panelClass}>
-                  <div className={panelHeaderClass}>
-                    <div className="mb-2 flex items-center gap-3">
-                      <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-xl ring-1">
-                        <Sparkles className="text-primary h-5 w-5" />
-                      </div>
-                      <div>
-                        <h2 className="font-display text-foreground text-2xl font-semibold">
-                          {t('preferences.title')}
-                        </h2>
-                        <p className="text-muted-foreground text-sm">{t('preferences.desc')}</p>
-                      </div>
-                    </div>
-                  </div>
-                  <PreferenceTab />
                 </TabsPanel>
 
                 <TabsPanel value="api-tokens" className={panelClass}>

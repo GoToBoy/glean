@@ -9,7 +9,7 @@ from glean_core.schemas.config import EmbeddingConfig as EmbeddingConfigSchema
 from glean_core.schemas.config import VectorizationStatus
 from glean_core.services import TypedConfigService
 from glean_core.services.system_config_service import SystemConfigService
-from glean_database.models import Entry, UserPreferenceStats
+from glean_database.models import Entry
 from glean_database.session import get_session_context
 from glean_vector.clients.pgvector_client import PgVectorClient
 from glean_vector.config import EmbeddingConfig as EmbeddingSettings
@@ -27,7 +27,7 @@ async def rebuild_embeddings(
     Steps:
       1) Load embedding config (payload passed or system config / env fallback)
       2) Update status to REBUILDING
-      3) Clear pgvector tables (drop all embeddings + preferences)
+      3) Clear pgvector embedding tables
       4) Mark all entries pending
       5) Enqueue embedding jobs in batches
       6) Enqueue user preference rebuild jobs
@@ -69,7 +69,7 @@ async def rebuild_embeddings(
         )
         dimension = settings.dimension
 
-        # Clear all pgvector embeddings and preferences, update model signature
+        # Clear all pgvector embeddings and update model signature
         # NOTE: This is a point of no return - old embeddings are gone after this.
         vector_client = PgVectorClient(session)
         await vector_client.recreate_collections(dimension, settings.provider, settings.model)
@@ -93,18 +93,8 @@ async def rebuild_embeddings(
 
         logger.info(f"Enqueued {len(entry_ids)} embedding jobs")
 
-        # Enqueue user preference rebuild jobs for all users with preference data
-        users_result = await session.execute(select(UserPreferenceStats.user_id).distinct())
-        user_ids = [row[0] for row in users_result.all()]
-
-        for user_id in user_ids:
-            await redis.enqueue_job("rebuild_user_preference", user_id=user_id)
-
-        logger.info(f"Enqueued {len(user_ids)} preference rebuild jobs")
-
         return {
             "success": True,
             "queued_entries": len(entry_ids),
-            "queued_preferences": len(user_ids),
             "dimension": dimension,
         }

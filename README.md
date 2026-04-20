@@ -18,9 +18,8 @@ Glean is a self-hosted RSS reader and personal knowledge management tool for hig
 
 - RSS/Atom subscriptions with nested folders, OPML import/export, and per-feed refresh state.
 - RSSHub support with admin-configured conversion, auto-fallback, and manual RSSHub-path subscription.
-- Discover workflow for finding new sources and converting candidates into subscriptions.
 - Immersive bilingual reading with persisted translation cache and multiple translation providers.
-- **Today Board** for grouped per-feed daily ingestion views with one-click "Mark All Read" and smart collapsible sections.
+- **Today Board** for grouped per-feed daily ingestion views with one-click "Mark All Read" and collapsible sections.
 - **Advanced Article Acquisition**: Layered pipeline using Playwright-enabled browser fallback for RSS sources that are summary-only or protected by anti-bot challenges (e.g., OpenAI News).
 - Bookmarks, tags, read-later, folder organization, and responsive desktop/mobile reader flows.
 - **Interactive Reading**: Support for keyboard navigation (j/k), inline original article view with iframe fallback, and cross-device list anchor persistence.
@@ -37,9 +36,8 @@ The intended primary branch is `personal-main`, which serves as this repo's rele
 
 - **Vector Stack Migration**: Transitioned from Milvus to `pgvector` (PostgreSQL), simplifying the architecture and reducing operational overhead.
 - **Advanced Translation System**: End-to-end translation pipeline with multiple providers (including MTranServer), sentence-level bilingual rendering, and persistent caching.
-- **Discover + RSSHub Flow**: Integrated discovery service for finding new sources with automatic RSSHub fallback and conversion rules.
 - **Behavioral Signals & Ranking**: Implicit feedback event tracking to provide a data foundation for future personalized ranking and recommendation features.
-- **Today Board**: Grouped per-feed daily ingestion view with one-click "Mark All Read" and smart collapsible sections.
+- **Today Board**: Grouped per-feed daily ingestion view with one-click "Mark All Read" and collapsible sections.
 
 ### Systemic Optimizations
 

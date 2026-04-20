@@ -11,9 +11,29 @@ import type {
 } from '@glean/types'
 import { useCallback, useRef } from 'react'
 
-const SUBSCRIPTIONS_CACHE_KEY = 'glean_subscriptions_cache'
-const SUBSCRIPTIONS_ETAG_KEY = 'glean_subscriptions_etag'
+const SUBSCRIPTIONS_CACHE_KEY = 'glean_subscriptions_cache_v2'
+const SUBSCRIPTIONS_ETAG_KEY = 'glean_subscriptions_etag_v2'
 const ENTRIES_QUERY_KEY = ['entries'] as const
+
+// One-time cleanup of legacy cache keys from prior schema versions.
+// Old caches may have stale shape (e.g. missing folder_id) and, combined
+// with ETag 304 responses, cause subscriptions to render incorrectly.
+try {
+  localStorage.removeItem('glean_subscriptions_cache')
+  localStorage.removeItem('glean_subscriptions_etag')
+} catch {
+  // ignore (e.g. SSR / storage disabled)
+}
+
+function isValidSubscriptionArray(value: unknown): value is Subscription[] {
+  if (!Array.isArray(value)) return false
+  return value.every(
+    (item) =>
+      item !== null &&
+      typeof item === 'object' &&
+      'feed_id' in (item as Record<string, unknown>)
+  )
+}
 
 function invalidateEntriesCache(queryClient: ReturnType<typeof useQueryClient>) {
   // Feed refresh runs asynchronously in the worker queue.
@@ -114,7 +134,18 @@ export function useAllSubscriptions() {
         } else {
           // Data unchanged (304), use cached data
           if (cachedData) {
-            return JSON.parse(cachedData) as Subscription[]
+            try {
+              const parsed = JSON.parse(cachedData) as unknown
+              if (isValidSubscriptionArray(parsed)) {
+                return parsed
+              }
+            } catch {
+              // fallthrough to discard
+            }
+            // Malformed/stale shape — discard and force fresh fetch next time
+            localStorage.removeItem(SUBSCRIPTIONS_CACHE_KEY)
+            localStorage.removeItem(SUBSCRIPTIONS_ETAG_KEY)
+            etagRef.current = null
           }
           // No cached data available, return empty array
           return []
@@ -122,7 +153,14 @@ export function useAllSubscriptions() {
       } catch (error) {
         // On error, try to return cached data
         if (cachedData) {
-          return JSON.parse(cachedData) as Subscription[]
+          try {
+            const parsed = JSON.parse(cachedData) as unknown
+            if (isValidSubscriptionArray(parsed)) {
+              return parsed
+            }
+          } catch {
+            // fallthrough
+          }
         }
         throw error
       }
@@ -132,10 +170,16 @@ export function useAllSubscriptions() {
       const cachedData = localStorage.getItem(SUBSCRIPTIONS_CACHE_KEY)
       if (cachedData) {
         try {
-          return JSON.parse(cachedData) as Subscription[]
+          const parsed = JSON.parse(cachedData) as unknown
+          if (isValidSubscriptionArray(parsed)) {
+            return parsed
+          }
         } catch {
           return undefined
         }
+        // Malformed shape — discard so the query refetches fresh
+        localStorage.removeItem(SUBSCRIPTIONS_CACHE_KEY)
+        localStorage.removeItem(SUBSCRIPTIONS_ETAG_KEY)
       }
       return undefined
     },

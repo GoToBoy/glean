@@ -31,43 +31,27 @@ class EmbeddingConfig(BaseSettings):
     rate_limit_providers: dict[str, int] = {}
 
 
-class PreferenceConfig(BaseSettings):
-    """Preference calculation configuration."""
+class MilvusConfig(BaseSettings):
+    """Milvus vector database configuration."""
 
     model_config = SettingsConfigDict(
-        env_prefix="PREFERENCE_",
+        env_prefix="MILVUS_",
         env_file=str(_env_file) if _env_file.exists() else None,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    default_score: float = 50.0
-    confidence_threshold: int = 10
-    like_weight: float = 1.0
-    bookmark_weight: float = 0.7
-    source_boost_max: float = 5.0
-    author_boost_max: float = 3.0
-
-
-class ScoreConfig(BaseSettings):
-    """Score calculation configuration."""
-
-    model_config = SettingsConfigDict(
-        env_prefix="SCORE_",
-        env_file=str(_env_file) if _env_file.exists() else None,
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    recommend_threshold: float = 70.0
-    low_interest_threshold: float = 40.0
-    cache_ttl: int = 3600
+    host: str = "localhost"
+    port: int = 19530
+    user: str | None = None
+    password: str | None = None
+    entries_collection: str = "glean_entries"
+    prefs_collection: str = "glean_user_preferences"
 
 
 # Global config instances
 embedding_config = EmbeddingConfig()
-preference_config = PreferenceConfig()
-score_config = ScoreConfig()
+milvus_config = MilvusConfig()
 
 
 def embedding_config_from_settings(data: dict[str, Any]) -> EmbeddingConfig:

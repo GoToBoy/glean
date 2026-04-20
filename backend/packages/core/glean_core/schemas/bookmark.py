@@ -24,7 +24,6 @@ class BookmarkCreate(BaseModel):
     title: str | None = Field(None, max_length=500)
     excerpt: str | None = None
     folder_ids: list[str] = []
-    tag_ids: list[str] = []
 
     @model_validator(mode="after")
     def validate_source(self) -> "BookmarkCreate":
@@ -51,16 +50,6 @@ class BookmarkFolderSimple(BaseModel):
     name: str
 
 
-class BookmarkTagSimple(BaseModel):
-    """Simple tag info for bookmark response."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: str
-    name: str
-    color: str | None = None
-
-
 class BookmarkResponse(BaseModel):
     """Response schema for a single bookmark."""
 
@@ -75,7 +64,6 @@ class BookmarkResponse(BaseModel):
     content: str | None  # Full article content (HTML) for in-app reading
     snapshot_status: str
     folders: list[BookmarkFolderSimple] = []
-    tags: list[BookmarkTagSimple] = []
     created_at: datetime
     updated_at: datetime
 
@@ -94,9 +82,3 @@ class BookmarkFolderRequest(BaseModel):
     """Schema for adding a folder to a bookmark."""
 
     folder_id: str
-
-
-class BookmarkTagRequest(BaseModel):
-    """Schema for adding a tag to a bookmark."""
-
-    tag_id: str

@@ -23,7 +23,6 @@ from .tasks import (
     embedding_rebuild,
     embedding_worker,
     feed_fetcher,
-    preference_worker,
     subscription_cleanup,
     translation,
 )
@@ -124,9 +123,6 @@ def get_oss_functions() -> list[TaskFunction]:
         embedding_worker.validate_and_rebuild_embeddings,
         embedding_worker.download_embedding_model,
         embedding_rebuild.rebuild_embeddings,
-        # M3: Preference tasks
-        preference_worker.update_user_preference,
-        preference_worker.rebuild_user_preference,
         # Subscription cleanup
         subscription_cleanup.cleanup_orphan_embeddings,
         # Translation

@@ -38,14 +38,11 @@ class EntryResponse(BaseModel):
     created_at: datetime
     # User-specific fields (from UserEntry)
     is_read: bool = False
-    is_liked: bool | None = None
     read_later: bool = False
     read_later_until: datetime | None = None
     read_at: datetime | None = None
     is_bookmarked: bool = False
     bookmark_id: str | None = None
-    # Preference score for recommendations (M3)
-    preference_score: float | None = None
     # Feed info for display in aggregated views
     feed_title: str | None = None
     feed_icon_url: str | None = None
@@ -65,7 +62,6 @@ class UpdateEntryStateRequest(BaseModel):
     """Update entry state request."""
 
     is_read: bool | None = None
-    is_liked: bool | None = None
     read_later: bool | None = None
     # Days until read-later expires (0 = never expire)
     read_later_days: int | None = None

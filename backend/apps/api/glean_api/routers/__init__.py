@@ -10,13 +10,10 @@ from . import (
     api_tokens,
     auth,
     bookmarks,
-    discover,
     entries,
     feeds,
     folders,
-    preference,
     system,
-    tags,
 )
 
 __all__ = [
@@ -27,11 +24,7 @@ __all__ = [
     "ai",
     # M2 routers
     "folders",
-    "tags",
     "bookmarks",
-    "discover",
-    # M3 routers
-    "preference",
     "system",
     # MCP routers
     "api_tokens",

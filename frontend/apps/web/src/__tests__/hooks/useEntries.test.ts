@@ -16,6 +16,7 @@ import {
   entryKeys,
   getInfiniteEntriesQueryOptions,
   useEntries,
+  useInfiniteEntries,
   useEntry,
   useUpdateEntryState,
   useMarkAllRead,
@@ -71,6 +72,27 @@ describe('getInfiniteEntriesQueryOptions', () => {
       },
       { signal }
     )
+    expect(entryService.getEntries).not.toHaveBeenCalled()
+  })
+
+  it('can hold the today-board query until the server date is ready', async () => {
+    vi.clearAllMocks()
+    const { wrapper } = createQueryWrapper()
+
+    renderHook(
+      () =>
+        useInfiniteEntries(
+          {
+            view: 'today-board',
+            per_page: 500,
+          },
+          { enabled: false }
+        ),
+      { wrapper }
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(entryService.getTodayEntries).not.toHaveBeenCalled()
     expect(entryService.getEntries).not.toHaveBeenCalled()
   })
 })
@@ -169,6 +191,35 @@ describe('useUpdateEntryState', () => {
     expect(queryClient.setQueryData).toHaveBeenCalled()
     // Should invalidate subscriptions for unread counts
     expect(queryClient.invalidateQueries).toHaveBeenCalled()
+  })
+
+  it('updates cached digest entries after state changes', async () => {
+    const updatedEntry = createMockEntry({ id: 'e1', is_read: true })
+    vi.mocked(entryService.updateEntryState).mockResolvedValue(updatedEntry)
+    const { wrapper, queryClient } = createQueryWrapper()
+    queryClient.setQueryData(['digest-entries', '2026-04-19'], {
+      items: [createMockEntry({ id: 'e1', is_read: false }), createMockEntry({ id: 'e2' })],
+      total: 2,
+      page: 1,
+      total_pages: 1,
+      per_page: 500,
+    })
+
+    const { result } = renderHook(() => useUpdateEntryState(), { wrapper })
+
+    await result.current.mutateAsync({ entryId: 'e1', data: { is_read: true } })
+
+    expect(
+      queryClient
+        .getQueryData<{ items: Array<{ id: string; is_read: boolean }> }>([
+          'digest-entries',
+          '2026-04-19',
+        ])
+        ?.items.map((entry) => [entry.id, entry.is_read])
+    ).toEqual([
+      ['e1', true],
+      ['e2', false],
+    ])
   })
 
   it('can update entry detail without updating cached entry lists', async () => {

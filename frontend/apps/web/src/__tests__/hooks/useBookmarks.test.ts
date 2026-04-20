@@ -9,8 +9,6 @@ vi.mock('@glean/api-client', () => ({
     deleteBookmark: vi.fn(),
     addFolder: vi.fn(),
     removeFolder: vi.fn(),
-    addTag: vi.fn(),
-    removeTag: vi.fn(),
   },
 }))
 
@@ -20,7 +18,7 @@ vi.mock('@glean/logger', () => ({
 
 import { useBookmarks } from '@/hooks/useBookmarks'
 import { bookmarkService } from '@glean/api-client'
-import { createMockBookmark, createMockBookmarkFolder, createMockBookmarkTag } from '../helpers/mockData'
+import { createMockBookmark, createMockBookmarkFolder } from '../helpers/mockData'
 
 const mockBookmark = createMockBookmark({ id: 'b1', url: 'https://example.com', title: 'Test' })
 
@@ -204,50 +202,4 @@ describe('useBookmarks', () => {
     expect(result.current.bookmarks[0].folders).toEqual([])
   })
 
-  it('should add tag to bookmark', async () => {
-    vi.mocked(bookmarkService.getBookmarks).mockResolvedValue({
-      items: [mockBookmark],
-      total: 1,
-      page: 1,
-      pages: 1,
-      per_page: 20,
-    })
-    const updated = { ...mockBookmark, tags: [createMockBookmarkTag({ id: 't1' })] }
-    vi.mocked(bookmarkService.addTag).mockResolvedValue(updated)
-
-    const { result } = renderHook(() => useBookmarks())
-
-    await act(async () => {
-      await result.current.fetchBookmarks()
-    })
-
-    await act(async () => {
-      await result.current.addTag('b1', 't1')
-    })
-
-    expect(result.current.bookmarks[0].tags).toEqual([createMockBookmarkTag({ id: 't1' })])
-  })
-
-  it('should remove tag from bookmark', async () => {
-    vi.mocked(bookmarkService.getBookmarks).mockResolvedValue({
-      items: [{ ...mockBookmark, tags: [createMockBookmarkTag({ id: 't1' })] }],
-      total: 1,
-      page: 1,
-      pages: 1,
-      per_page: 20,
-    })
-    vi.mocked(bookmarkService.removeTag).mockResolvedValue({ ...mockBookmark, tags: [] })
-
-    const { result } = renderHook(() => useBookmarks())
-
-    await act(async () => {
-      await result.current.fetchBookmarks()
-    })
-
-    await act(async () => {
-      await result.current.removeTag('b1', 't1')
-    })
-
-    expect(result.current.bookmarks[0].tags).toEqual([])
-  })
 })

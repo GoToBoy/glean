@@ -40,7 +40,6 @@ async def test_user_entry(db_session: AsyncSession, test_user, test_entries):
         user_id=test_user.id,
         entry_id=test_entries[0].id,
         is_read=True,
-        is_liked=False,
         read_later=False,
     )
     db_session.add(user_entry)
@@ -252,19 +251,6 @@ class TestUpdateEntryState:
         assert data["ingested_at"] is not None
 
     @pytest.mark.asyncio
-    async def test_mark_entry_as_liked(self, client: AsyncClient, auth_headers, test_entries):
-        """Test marking an entry as liked."""
-        entry_id = test_entries[0].id
-        response = await client.patch(
-            f"/api/entries/{entry_id}", headers=auth_headers, json={"is_liked": True}
-        )
-
-        assert response.status_code == 200
-        data = response.json()
-
-        assert data["is_liked"] is True
-
-    @pytest.mark.asyncio
     async def test_mark_entry_for_read_later(self, client: AsyncClient, auth_headers, test_entries):
         """Test marking an entry for read later."""
         entry_id = test_entries[0].id
@@ -284,14 +270,13 @@ class TestUpdateEntryState:
         response = await client.patch(
             f"/api/entries/{entry_id}",
             headers=auth_headers,
-            json={"is_read": True, "is_liked": True, "read_later": False},
+            json={"is_read": True, "read_later": False},
         )
 
         assert response.status_code == 200
         data = response.json()
 
         assert data["is_read"] is True
-        assert data["is_liked"] is True
         assert data["read_later"] is False
 
     @pytest.mark.asyncio
@@ -346,24 +331,3 @@ class TestMarkAllRead:
         response = await client.post("/api/entries/mark-all-read")
 
         assert response.status_code == 401
-
-
-class TestFeedbackSummary:
-    """Test explicit feedback summary endpoint."""
-
-    @pytest.mark.asyncio
-    async def test_feedback_summary(self, client: AsyncClient, auth_headers, test_entries):
-        """Feedback summary should return recent explicit count."""
-        entry_id = test_entries[0].id
-        await client.patch(
-            f"/api/entries/{entry_id}",
-            headers=auth_headers,
-            json={"is_liked": True},
-        )
-
-        response = await client.get("/api/entries/feedback-summary?days=7", headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert "recent_explicit_feedback_count" in data
-        assert data["recent_explicit_feedback_count"] >= 1

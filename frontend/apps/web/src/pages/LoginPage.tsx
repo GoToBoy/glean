@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
-import { Rss, AlertCircle, Sparkles, Server } from 'lucide-react'
-import { Button, Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
+import { AlertCircle, Server } from 'lucide-react'
+import { Input, Label, Alert, AlertTitle, AlertDescription } from '@glean/ui'
 import { useTranslation } from '@glean/i18n'
 import { ApiConfigDialog } from '../components/ApiConfigDialog'
 import { OIDCLoginButton } from '../components/auth/OIDCLoginButton'
+import { useThemeStore } from '../stores/themeStore'
+import { DIGEST_LIGHT_VARS, DIGEST_DARK_VARS } from '../styles/digestTokens'
 
 /**
  * Login page.
@@ -17,14 +19,16 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { login, isLoading, error, clearError } = useAuthStore()
+  const { resolvedTheme } = useThemeStore()
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [validationError, setValidationError] = useState('')
 
-  const from =
-    (location.state as { from?: { pathname: string } })?.from?.pathname ||
-    '/reader?view=smart&tab=unread'
+  const fromLocation = (location.state as { from?: { pathname: string; search?: string } })?.from
+  const from = fromLocation
+    ? `${fromLocation.pathname}${fromLocation.search ?? ''}`
+    : '/reader?tab=unread'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -45,47 +49,56 @@ export default function LoginPage() {
   }
 
   const displayError = validationError || error
+  const themeVars = resolvedTheme === 'dark' ? DIGEST_DARK_VARS : DIGEST_LIGHT_VARS
 
   return (
-    <div className="bg-background relative flex min-h-screen items-center justify-center overflow-hidden px-4">
-      {/* Background decorations */}
-      <div className="bg-pattern absolute inset-0" />
-      <div className="bg-primary/10 absolute -top-48 -left-48 h-96 w-96 rounded-full blur-3xl" />
-      <div className="bg-secondary/10 absolute -right-48 -bottom-48 h-96 w-96 rounded-full blur-3xl" />
-
-      {/* Grid pattern overlay */}
-      <div
-        className="absolute inset-0 opacity-[0.02]"
-        style={{
-          backgroundImage: `linear-gradient(hsl(var(--foreground)) 1px, transparent 1px),
-                           linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)`,
-          backgroundSize: '60px 60px',
-        }}
-      />
-
-      <div className="animate-fade-in relative z-10 w-full max-w-md">
+    <div
+      className="relative flex min-h-screen items-center justify-center overflow-hidden px-4"
+      style={{
+        ...themeVars,
+        background: 'var(--digest-bg)',
+        color: 'var(--digest-text)',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC', sans-serif",
+      }}
+    >
+      <div className="relative z-10 w-full max-w-sm">
         {/* Logo and title */}
         <div className="mb-8 text-center">
-          <div className="mb-6 flex justify-center">
-            <div className="relative">
-              <div className="animate-pulse-glow absolute inset-0 rounded-2xl" />
-              <div className="from-primary-500 to-primary-600 shadow-primary/30 relative flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br shadow-lg">
-                <Rss className="text-primary-foreground h-10 w-10" />
-              </div>
-            </div>
+          <div
+            className="mb-3 text-5xl font-bold"
+            style={{
+              fontFamily: "'Noto Serif SC', Georgia, serif",
+              color: 'var(--digest-text)',
+              letterSpacing: '-0.02em',
+            }}
+          >
+            <span style={{ color: 'var(--digest-accent)' }}>◆ </span>Glean
           </div>
-          <h1 className="font-display text-foreground text-4xl font-bold tracking-tight">
-            {t('login.title')}
-          </h1>
-          <p className="text-muted-foreground mt-3 flex items-center justify-center gap-2">
-            <Sparkles className="text-primary h-4 w-4" />
-            <span>{t('login.subtitle')}</span>
+          <p
+            className="text-sm"
+            style={{ color: 'var(--digest-text-tertiary)', letterSpacing: '0.06em' }}
+          >
+            {t('login.subtitle')}
           </p>
         </div>
 
-        {/* Login form */}
-        <div className="glass rounded-2xl p-8 shadow-xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Login card */}
+        <div
+          className="rounded-[14px] p-8"
+          style={{
+            background: 'var(--digest-bg-card)',
+            boxShadow: 'var(--digest-shadow-lg)',
+            border: '1px solid var(--digest-divider)',
+          }}
+        >
+          <h2
+            className="mb-6 text-xl font-semibold"
+            style={{ color: 'var(--digest-text)', fontFamily: "'Noto Serif SC', Georgia, serif" }}
+          >
+            {t('login.title')}
+          </h2>
+
+          <form onSubmit={handleSubmit} className="space-y-5">
             {/* Error message */}
             {displayError && (
               <Alert variant="error">
@@ -96,8 +109,12 @@ export default function LoginPage() {
             )}
 
             {/* Email field */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground text-sm font-medium">
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="email"
+                className="text-sm font-medium"
+                style={{ color: 'var(--digest-text-secondary)' }}
+              >
                 {t('login.email')}
               </Label>
               <Input
@@ -107,13 +124,25 @@ export default function LoginPage() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
                 disabled={isLoading}
-                className="focus-within:ring-primary w-full transition-all duration-200"
+                className="w-full transition-all duration-200"
+                style={
+                  {
+                    '--tw-ring-color': 'var(--digest-accent)',
+                    borderColor: 'var(--digest-divider)',
+                    background: 'var(--digest-bg)',
+                    color: 'var(--digest-text)',
+                  } as React.CSSProperties
+                }
               />
             </div>
 
             {/* Password field */}
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-foreground text-sm font-medium">
+            <div className="space-y-1.5">
+              <Label
+                htmlFor="password"
+                className="text-sm font-medium"
+                style={{ color: 'var(--digest-text-secondary)' }}
+              >
                 {t('login.password')}
               </Label>
               <Input
@@ -124,26 +153,53 @@ export default function LoginPage() {
                 placeholder={t('login.password')}
                 disabled={isLoading}
                 className="w-full transition-all duration-200"
+                style={
+                  {
+                    '--tw-ring-color': 'var(--digest-accent)',
+                    borderColor: 'var(--digest-divider)',
+                    background: 'var(--digest-bg)',
+                    color: 'var(--digest-text)',
+                  } as React.CSSProperties
+                }
               />
             </div>
 
             {/* Submit button */}
-            <Button
+            <button
               type="submit"
               disabled={isLoading}
-              className="btn-glow w-full py-3 text-base font-semibold transition-all duration-300"
+              className="w-full rounded-[7px] py-2.5 text-sm font-semibold transition-opacity duration-150 disabled:opacity-60"
+              style={{
+                background: 'var(--digest-accent)',
+                color: '#FFFFFF',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '0.85'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '1'
+              }}
             >
               {isLoading ? t('login.signingIn') : t('login.signIn')}
-            </Button>
+            </button>
           </form>
 
           {/* OAuth divider */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
-              <div className="border-border w-full border-t" />
+              <div className="w-full border-t" style={{ borderColor: 'var(--digest-divider)' }} />
             </div>
             <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-card text-muted-foreground px-2">Or continue with</span>
+              <span
+                className="px-2"
+                style={{
+                  background: 'var(--digest-bg-card)',
+                  color: 'var(--digest-text-tertiary)',
+                  letterSpacing: '0.08em',
+                }}
+              >
+                Or continue with
+              </span>
             </div>
           </div>
 
@@ -151,29 +207,50 @@ export default function LoginPage() {
           <OIDCLoginButton />
 
           {/* Register link */}
-          <div className="mt-8 text-center">
-            <div className="relative">
+          <div className="mt-6">
+            <div className="relative mb-4">
               <div className="absolute inset-0 flex items-center">
-                <div className="border-border w-full border-t" />
+                <div className="w-full border-t" style={{ borderColor: 'var(--digest-divider)' }} />
               </div>
               <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-card text-muted-foreground px-2">{t('login.noAccount')}</span>
+                <span
+                  className="px-2"
+                  style={{
+                    background: 'var(--digest-bg-card)',
+                    color: 'var(--digest-text-tertiary)',
+                    letterSpacing: '0.08em',
+                  }}
+                >
+                  {t('login.noAccount')}
+                </span>
               </div>
             </div>
-            <Link
-              to="/register"
-              className="text-primary hover:bg-primary/10 mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-            >
-              {t('register.createAccount')}
-              <span aria-hidden="true">→</span>
-            </Link>
+            <div className="text-center">
+              <Link
+                to="/register"
+                className="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors duration-150"
+                style={{ color: 'var(--digest-accent)' }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = 'var(--digest-accent-soft)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = 'transparent'
+                }}
+              >
+                {t('register.createAccount')}
+                <span aria-hidden="true">→</span>
+              </Link>
+            </div>
           </div>
 
           {/* Server configuration - Electron only */}
           {window.electronAPI?.isElectron && (
-            <div className="border-border mt-6 flex justify-center border-t pt-6">
+            <div className="mt-6 flex justify-center border-t pt-6" style={{ borderColor: 'var(--digest-divider)' }}>
               <ApiConfigDialog>
-                <button className="text-muted-foreground hover:text-foreground inline-flex items-center gap-2 text-xs transition-colors">
+                <button
+                  className="inline-flex items-center gap-2 text-xs transition-colors duration-150"
+                  style={{ color: 'var(--digest-text-tertiary)' }}
+                >
                   <Server className="h-3.5 w-3.5" />
                   {t('config.configureServer')}
                 </button>
@@ -183,7 +260,7 @@ export default function LoginPage() {
         </div>
 
         {/* Footer */}
-        <p className="text-muted-foreground mt-8 text-center text-sm">
+        <p className="mt-8 text-center text-xs" style={{ color: 'var(--digest-text-tertiary)' }}>
           Glean — Your personal knowledge sanctuary
         </p>
       </div>

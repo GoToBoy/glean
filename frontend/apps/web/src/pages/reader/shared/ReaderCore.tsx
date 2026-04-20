@@ -10,14 +10,12 @@ import {
 } from '../../../hooks/useEntries'
 import { useAllSubscriptions } from '../../../hooks/useSubscriptions'
 import { entryService } from '@glean/api-client'
-import { useVectorizationStatus } from '../../../hooks/useVectorizationStatus'
 import { useAIIntegrationStatus, useAITodaySummary } from '../../../hooks/useAIIntegration'
 import { ArticleReader, ArticleReaderSkeleton } from '../../../components/ArticleReader'
 import { useAuthStore } from '../../../stores/authStore'
-import { useUIStore } from '../../../stores/uiStore'
 import { useTranslation } from '@glean/i18n'
 import type { EntryWithState, TranslationTargetLanguage } from '@glean/types'
-import { Loader2, AlertCircle, Sparkles, Info, Inbox, Languages } from 'lucide-react'
+import { Loader2, AlertCircle, Inbox, Languages } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription, cn } from '@glean/ui'
 import { useReaderController, type FilterType } from './useReaderController'
 import {
@@ -26,15 +24,15 @@ import {
   EntryListItem,
   MarkAllReadButton,
   EntryListItemSkeleton,
-  ReaderSmartTabs,
   ReaderFilterTabs,
 } from './components/ReaderCoreParts'
 import { TodayBoard } from './components/TodayBoard'
+import { DigestView } from './components/DigestView'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
 import { buildTodayBoardEntries } from './todayBoard'
 
-const FILTER_ORDER: FilterType[] = ['all', 'unread', 'smart', 'read-later']
+const FILTER_ORDER: FilterType[] = ['all', 'unread', 'read-later']
 const ENTRY_ROW_ESTIMATED_HEIGHT = 144
 const VIRTUALIZATION_THRESHOLD = 80
 const VIRTUALIZATION_OVERSCAN = 8
@@ -73,8 +71,8 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     selectedFolderId,
     entryIdFromUrl,
     viewParam,
-    isSmartView,
     isTodayBoardView,
+    isDigestView,
     filterType,
     setFilterType,
     selectedEntryId,
@@ -84,15 +82,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     todayBoardTodayDate,
     recentTodayBoardDates,
     setTodayBoardDate,
+    digestDate,
+    setDigestDate,
   } = useReaderController()
   const { user } = useAuthStore()
-  const { showPreferenceScore } = useUIStore()
   const { data: subscriptions = [] } = useAllSubscriptions()
-
-  // Check vectorization status for Smart view
-  const { data: vectorizationStatus } = useVectorizationStatus()
-  const isVectorizationEnabled =
-    vectorizationStatus?.enabled && vectorizationStatus?.status === 'idle'
   const { data: aiIntegrationStatus } = useAIIntegrationStatus()
   const userAIIntegrationEnabled = user?.settings?.ai_integration_enabled ?? false
   const aiIntegrationEnabled = (aiIntegrationStatus?.enabled ?? false) && userAIIntegrationEnabled
@@ -101,11 +95,9 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const [todayBoardAIView, setTodayBoardAIView] = useState<'list' | 'summary'>('list')
   const todayBoardAIViewDefaultKeyRef = useRef<string | null>(null)
 
-  // Store the original position data of the selected entry when it was first clicked
-  // This ensures the entry stays in its original position even after like/dislike/bookmark actions
+  // Store the original position data of the selected entry when it was first clicked.
   const selectedEntryOriginalDataRef = useRef<{
     id: string
-    preferenceScore: number | null
     publishedAt: string | null
   } | null>(null)
 
@@ -113,11 +105,11 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const prevViewRef = useRef<{
     feedId: string | undefined
     folderId: string | undefined
-    view: 'timeline' | 'smart' | 'today-board'
+    view: 'timeline' | 'today-board' | 'digest'
   }>({
     feedId: selectedFeedId,
     folderId: selectedFolderId,
-    view: isTodayBoardView ? 'today-board' : isSmartView ? 'smart' : 'timeline',
+    view: isTodayBoardView ? 'today-board' : 'timeline',
   })
   const [entriesWidth, setEntriesWidth] = useState(() => {
     const saved = localStorage.getItem('glean:entriesWidth')
@@ -176,8 +168,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     [queryClient]
   )
 
-  // Computed value: whether we're using smart sorting (by preference score vs timeline)
-  const usesSmartSorting = isSmartView || filterType === 'smart'
   const getFilterParams = () => {
     if (isTodayBoardView) {
       return { collected_date: todayBoardDate || undefined, per_page: 500 }
@@ -185,10 +175,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
     switch (filterType) {
       case 'unread':
-        return { is_read: false }
-      case 'smart':
-        // Smart filter shows unread items with smart sorting (via line 148: view='smart')
-        // Difference from 'unread': smart uses preference score sorting, unread uses timeline
         return { is_read: false }
       case 'read-later':
         return { read_later: true }
@@ -204,16 +190,17 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
-  } = useInfiniteEntries({
-    feed_id: selectedFeedId,
-    folder_id: selectedFolderId,
-    ...getFilterParams(),
-    // The 'view' parameter differentiates 'smart' from 'unread' filters:
-    // - 'smart': sorted by preference_score (descending)
-    // - 'timeline': sorted by published_at (descending)
-    // Both 'smart' and 'unread' filters use is_read: false, but differ in sort order
-    view: isTodayBoardView ? 'today-board' : usesSmartSorting ? 'smart' : 'timeline',
-  })
+  } = useInfiniteEntries(
+    {
+      feed_id: selectedFeedId,
+      folder_id: selectedFolderId,
+      ...getFilterParams(),
+      view: isTodayBoardView ? 'today-board' : 'timeline',
+    },
+    {
+      enabled: !isTodayBoardView || !!todayBoardDate,
+    }
+  )
 
   const rawEntries = useMemo(
     () => entriesData?.pages.flatMap((page) => page.items) ?? [],
@@ -280,7 +267,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId || '')
 
   const visibleEntries = useMemo(() => {
-    const isUnreadScoped = filterType === 'unread' || filterType === 'smart'
+    const isUnreadScoped = filterType === 'unread'
     if (!isUnreadScoped) return rawEntries
 
     return rawEntries.filter((entry) => !entry.is_read || entry.id === selectedEntryId)
@@ -647,20 +634,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     translateListEntries,
   ])
 
-  // Reset filter when switching to smart view (default to unread)
-  useEffect(() => {
-    const prev = prevViewRef.current
-
-    // When entering smart view, default to 'unread' filter
-    if (isSmartView && prev.view !== 'smart') {
-      setFilterType('unread')
-    }
-    // When leaving smart view, reset to 'all' filter
-    else if (!isSmartView && prev.view === 'smart') {
-      setFilterType('all')
-    }
-  }, [isSmartView, setFilterType])
-
   // Trigger animation on view change (Smart <-> Feed/Folder/All)
   // Also reset selected entry when switching views to prevent stale entries
   useEffect(() => {
@@ -671,7 +644,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
   useEffect(() => {
     const prev = prevViewRef.current
-    const currentViewMode = isTodayBoardView ? 'today-board' : isSmartView ? 'smart' : 'timeline'
+    const currentViewMode = isTodayBoardView ? 'today-board' : 'timeline'
     const viewChanged =
       prev.feedId !== selectedFeedId ||
       prev.folderId !== selectedFolderId ||
@@ -687,16 +660,7 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
 
       void queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
 
-      // Determine slide direction based on view change
-      // Smart view slides from left, others slide from right
-      if (currentViewMode === 'smart' && prev.view !== 'smart') {
-        setSlideDirection('left')
-      } else if (prev.view === 'smart' && currentViewMode !== 'smart') {
-        setSlideDirection('right')
-      } else {
-        // Feed to feed change - use right direction
-        setSlideDirection('right')
-      }
+      setSlideDirection('right')
 
       // Update ref
       prevViewRef.current = {
@@ -711,7 +675,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [
     selectedFeedId,
     selectedFolderId,
-    isSmartView,
     isTodayBoardView,
     entryIdFromUrl,
     clearSelectedEntry,
@@ -796,12 +759,10 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       selectEntry(entry.id)
     }
 
-    // Save the original position data when first selecting an entry
-    // This ensures the entry stays in place even after like/dislike/bookmark actions
+    // Save the original position data when first selecting an entry.
     if (selectedEntryOriginalDataRef.current?.id !== entry.id) {
       selectedEntryOriginalDataRef.current = {
         id: entry.id,
-        preferenceScore: entry.preference_score,
         publishedAt: entry.published_at,
       }
     }
@@ -856,6 +817,16 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
       window.removeEventListener('readerMobileListActions:setFilter', onSetFilter)
     }
   }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (isDigestView) {
+    return (
+      <DigestView
+        date={digestDate}
+        isMobile={isMobile}
+        onDateChange={setDigestDate}
+      />
+    )
+  }
 
   if (isTodayBoardView) {
     return (
@@ -996,86 +967,47 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
             {/* Filters */}
             {!isMobile && (
               <div className="border-border bg-card border-b px-3 py-2">
-                <>
-                  {isSmartView && !selectedFeedId && !selectedFolderId ? (
-                    /* Smart view header + filters */
-                    <div className="space-y-2">
-                      {/* Smart Header */}
-                      <div className="bg-primary/5 animate-fade-in flex min-w-0 items-center gap-2 rounded-lg px-3 py-1">
-                        <Sparkles className="text-primary h-4 w-4 animate-pulse" />
-                        <span className="text-primary text-sm font-medium">{t('smart.title')}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {t('smart.description')}
-                        </span>
-                      </div>
-                      {/* Filter tabs for Smart view */}
-                      <div className="bg-muted/50 @container flex min-w-0 items-center gap-1 rounded-lg p-1">
-                        <ReaderSmartTabs
-                          filterType={filterType}
-                          onFilterChange={handleFilterChange}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    /* Regular view filters */
-                    <div className="flex items-center gap-2">
-                      {/* Filter tabs */}
-                      <div className="bg-muted/50 @container flex min-w-0 flex-1 items-center gap-1 rounded-lg p-1">
-                        <ReaderFilterTabs
-                          filterType={filterType}
-                          onFilterChange={handleFilterChange}
-                        />
-                      </div>
-
-                      <button
-                        onClick={() => setIsListTranslationActive((v) => !v)}
-                        title={
-                          isListTranslationLoading
-                            ? t('translation.translating')
-                            : isListTranslationActive
-                              ? t('translation.hideTranslation')
-                              : t('translation.translate')
-                        }
-                        aria-label={
-                          isListTranslationLoading
-                            ? t('translation.translating')
-                            : isListTranslationActive
-                              ? t('translation.hideTranslation')
-                              : t('translation.translate')
-                        }
-                        className={cn(
-                          'list-translation-toggle hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
-                          isListTranslationActive ? 'text-primary' : 'text-muted-foreground',
-                          isListTranslationLoading && 'list-translation-toggle-loading',
-                          listTranslationLoadingPhase === 'start' &&
-                            'list-translation-toggle-loading-start',
-                          listTranslationLoadingPhase === 'settled' &&
-                            'list-translation-toggle-loading-settled'
-                        )}
-                      >
-                        <span className="list-translation-toggle__icon-wrap">
-                          <span className="list-translation-toggle__ring" aria-hidden="true" />
-                          <Languages className="list-translation-toggle__icon h-4 w-4" />
-                        </span>
-                      </button>
-
-                      {/* Mark all read button */}
-                      <MarkAllReadButton feedId={selectedFeedId} folderId={selectedFolderId} />
-                    </div>
-                  )}
-                </>
-              </div>
-            )}
-
-            {/* Smart view banner when vectorization is disabled */}
-            {isSmartView && !isVectorizationEnabled && (
-              <div className="border-border bg-muted/30 border-b px-3 py-2">
-                <div className="flex items-start gap-2 text-sm">
-                  <Info className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-foreground font-medium">{t('smart.limitedMode')}</p>
-                    <p className="text-muted-foreground">{t('smart.enableVectorizationHint')}</p>
+                <div className="flex items-center gap-2">
+                  <div className="bg-muted/50 @container flex min-w-0 flex-1 items-center gap-1 rounded-lg p-1">
+                    <ReaderFilterTabs
+                      filterType={filterType}
+                      onFilterChange={handleFilterChange}
+                    />
                   </div>
+
+                  <button
+                    onClick={() => setIsListTranslationActive((v) => !v)}
+                    title={
+                      isListTranslationLoading
+                        ? t('translation.translating')
+                        : isListTranslationActive
+                          ? t('translation.hideTranslation')
+                          : t('translation.translate')
+                    }
+                    aria-label={
+                      isListTranslationLoading
+                        ? t('translation.translating')
+                        : isListTranslationActive
+                          ? t('translation.hideTranslation')
+                          : t('translation.translate')
+                    }
+                    className={cn(
+                      'list-translation-toggle hover:bg-muted flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-colors',
+                      isListTranslationActive ? 'text-primary' : 'text-muted-foreground',
+                      isListTranslationLoading && 'list-translation-toggle-loading',
+                      listTranslationLoadingPhase === 'start' &&
+                        'list-translation-toggle-loading-start',
+                      listTranslationLoadingPhase === 'settled' &&
+                        'list-translation-toggle-loading-settled'
+                    )}
+                  >
+                    <span className="list-translation-toggle__icon-wrap">
+                      <span className="list-translation-toggle__ring" aria-hidden="true" />
+                      <Languages className="list-translation-toggle__icon h-4 w-4" />
+                    </span>
+                  </button>
+
+                  <MarkAllReadButton feedId={selectedFeedId} folderId={selectedFolderId} />
                 </div>
               </div>
             )}
@@ -1150,7 +1082,6 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
                           filterType === 'read-later' &&
                           (user?.settings?.show_read_later_remaining ?? true)
                         }
-                        showPreferenceScore={usesSmartSorting && showPreferenceScore}
                         hideReadStatusIndicator={isMobile}
                         hideReadLaterIndicator={isMobile}
                         translatedTitle={

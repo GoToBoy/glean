@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
-from typing import TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlparse
 
 from sqlalchemy import inspect as sa_inspect
@@ -29,7 +29,7 @@ class FeedFetchSummary(TypedDict):
     retry_minutes: int | None
 
 
-JsonObject = Mapping[str, object]
+JsonObject = Mapping[str, Any]
 
 FEED_FETCH_STAGE_SEQUENCE = [
     "queue_wait",
@@ -68,8 +68,8 @@ def _with_progress_metrics(
     metrics_json: JsonObject | None,
     *,
     now: datetime,
-) -> dict[str, object]:
-    payload: dict[str, object] = dict(metrics_json or {})
+) -> dict[str, Any]:
+    payload: dict[str, Any] = dict(metrics_json or {})
     payload["last_progress_at"] = now.isoformat()
     return payload
 
@@ -419,7 +419,7 @@ async def finalize_feed_fetch_run(
     run.finished_at = now
     run.predicted_start_at = run.predicted_start_at or run.started_at or now
     run.predicted_finish_at = now
-    run.summary_json = summary_json
+    run.summary_json = dict(summary_json) if summary_json is not None else None
     run.error_message = error_message if run_status == "error" else None
 
     await _flush_run(session, run, stage_events)
@@ -562,7 +562,7 @@ async def _load_stage_duration_estimates(
             .limit(10)
             .options(selectinload(FeedFetchRun.stage_events))
         )
-        history_runs = same_feed_result.scalars().all()
+        history_runs = list(same_feed_result.scalars().all())
 
     if len(history_runs) < 3 and run.profile_key:
         profile_result = await session.execute(
@@ -577,7 +577,7 @@ async def _load_stage_duration_estimates(
             .limit(10)
             .options(selectinload(FeedFetchRun.stage_events))
         )
-        history_runs = profile_result.scalars().all()
+        history_runs = list(profile_result.scalars().all())
 
     return _summarize_stage_duration_history(history_runs)
 

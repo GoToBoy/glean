@@ -1,7 +1,7 @@
 """
 Bookmark service.
 
-Handles bookmark CRUD operations and folder/tag associations.
+Handles bookmark CRUD operations and folder associations.
 """
 
 from math import ceil
@@ -11,22 +11,19 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from glean_core import RedisKeys, get_logger
+from glean_core import get_logger
 from glean_core.schemas.bookmark import (
     BookmarkCreate,
     BookmarkFolderSimple,
     BookmarkListResponse,
     BookmarkResponse,
-    BookmarkTagSimple,
     BookmarkUpdate,
 )
 from glean_database.models import (
     Bookmark,
     BookmarkFolder,
-    BookmarkTag,
     Entry,
     Folder,
-    Tag,
 )
 from glean_rss import strip_html_tags
 
@@ -53,7 +50,6 @@ class BookmarkService:
         page: int = 1,
         per_page: int = 20,
         folder_id: str | None = None,
-        tag_ids: list[str] | None = None,
         search: str | None = None,
         sort: str = "created_at",
         order: str = "desc",
@@ -66,7 +62,6 @@ class BookmarkService:
             page: Page number (1-based).
             per_page: Items per page.
             folder_id: Filter by folder.
-            tag_ids: Filter by tags (intersection).
             search: Search in title.
             sort: Sort field (created_at or title).
             order: Sort order (asc or desc).
@@ -82,14 +77,6 @@ class BookmarkService:
             base_query = base_query.join(BookmarkFolder).where(
                 BookmarkFolder.folder_id == folder_id
             )
-
-        # Filter by tags (intersection)
-        if tag_ids:
-            for tag_id in tag_ids:
-                subquery = (
-                    select(BookmarkTag.bookmark_id).where(BookmarkTag.tag_id == tag_id).subquery()
-                )
-                base_query = base_query.where(Bookmark.id.in_(select(subquery)))
 
         # Search
         if search:
@@ -108,7 +95,6 @@ class BookmarkService:
         query = (
             base_query.options(
                 selectinload(Bookmark.bookmark_folders).selectinload(BookmarkFolder.folder),
-                selectinload(Bookmark.bookmark_tags).selectinload(BookmarkTag.tag),
             )
             .order_by(order_column)
             .offset((page - 1) * per_page)
@@ -125,10 +111,6 @@ class BookmarkService:
                 BookmarkFolderSimple(id=bf.folder.id, name=bf.folder.name)
                 for bf in bookmark.bookmark_folders
             ]
-            tags = [
-                BookmarkTagSimple(id=bt.tag.id, name=bt.tag.name, color=bt.tag.color)
-                for bt in bookmark.bookmark_tags
-            ]
             items.append(
                 BookmarkResponse(
                     id=bookmark.id,
@@ -140,7 +122,6 @@ class BookmarkService:
                     content=bookmark.content,
                     snapshot_status=bookmark.snapshot_status,
                     folders=folders,
-                    tags=tags,
                     created_at=bookmark.created_at,
                     updated_at=bookmark.updated_at,
                 )
@@ -173,7 +154,6 @@ class BookmarkService:
             .where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id)
             .options(
                 selectinload(Bookmark.bookmark_folders).selectinload(BookmarkFolder.folder),
-                selectinload(Bookmark.bookmark_tags).selectinload(BookmarkTag.tag),
             )
         )
         result = await self.session.execute(stmt)
@@ -186,10 +166,6 @@ class BookmarkService:
             BookmarkFolderSimple(id=bf.folder.id, name=bf.folder.name)
             for bf in bookmark.bookmark_folders
         ]
-        tags = [
-            BookmarkTagSimple(id=bt.tag.id, name=bt.tag.name, color=bt.tag.color)
-            for bt in bookmark.bookmark_tags
-        ]
 
         return BookmarkResponse(
             id=bookmark.id,
@@ -201,7 +177,6 @@ class BookmarkService:
             content=bookmark.content,
             snapshot_status=bookmark.snapshot_status,
             folders=folders,
-            tags=tags,
             created_at=bookmark.created_at,
             updated_at=bookmark.updated_at,
         )
@@ -289,42 +264,7 @@ class BookmarkService:
             if folder_result.scalar_one_or_none():
                 self.session.add(BookmarkFolder(bookmark_id=bookmark.id, folder_id=folder_id))
 
-        # Add tags
-        for tag_id in data.tag_ids:
-            # Verify tag exists and belongs to user
-            tag_stmt = select(Tag).where(Tag.id == tag_id, Tag.user_id == user_id)
-            tag_result = await self.session.execute(tag_stmt)
-            if tag_result.scalar_one_or_none():
-                self.session.add(BookmarkTag(bookmark_id=bookmark.id, tag_id=tag_id))
-
         await self.session.commit()
-
-        # Queue preference update task if this is an entry bookmark (M3)
-        if entry_id and self.redis_pool:
-            try:
-                # Debounce: Check if we recently queued bookmark signal for this entry
-                debounce_key = RedisKeys.pref_update_debounce(user_id, entry_id, "bookmark")
-
-                # Try to set the key only if it doesn't exist (NX)
-                was_set = await self.redis_pool.set(
-                    debounce_key,
-                    "1",
-                    ex=RedisKeys.PREF_UPDATE_DEBOUNCE_TTL,
-                    nx=True,  # SET if not exists
-                )
-
-                # Only queue if key was newly set (not debounced)
-                if was_set:
-                    await self.redis_pool.enqueue_job(
-                        "update_user_preference",
-                        user_id=user_id,
-                        entry_id=entry_id,
-                        signal_type="bookmark",
-                    )
-            except Exception as e:
-                # Don't fail the request if task queueing fails
-                logger.warning(f"Failed to queue preference update: {e}")
-                pass
 
         # Return with associations
         return await self.get_bookmark(bookmark.id, user_id), needs_metadata_fetch
@@ -437,70 +377,6 @@ class BookmarkService:
         bf = result.scalar_one_or_none()
         if bf:
             await self.session.delete(bf)
-            await self.session.commit()
-
-        return await self.get_bookmark(bookmark_id, user_id)
-
-    async def add_tag(self, bookmark_id: str, user_id: str, tag_id: str) -> BookmarkResponse:
-        """
-        Add a tag to a bookmark.
-
-        Args:
-            bookmark_id: Bookmark identifier.
-            user_id: User identifier for authorization.
-            tag_id: Tag identifier.
-
-        Returns:
-            Updated bookmark response.
-
-        Raises:
-            ValueError: If bookmark/tag not found or unauthorized.
-        """
-        await self._get_bookmark_or_raise(bookmark_id, user_id)
-
-        # Verify tag exists and belongs to user
-        tag_stmt = select(Tag).where(Tag.id == tag_id, Tag.user_id == user_id)
-        tag_result = await self.session.execute(tag_stmt)
-        if not tag_result.scalar_one_or_none():
-            raise ValueError("Tag not found")
-
-        # Check if already exists
-        existing_stmt = select(BookmarkTag).where(
-            BookmarkTag.bookmark_id == bookmark_id,
-            BookmarkTag.tag_id == tag_id,
-        )
-        existing_result = await self.session.execute(existing_stmt)
-        if not existing_result.scalar_one_or_none():
-            self.session.add(BookmarkTag(bookmark_id=bookmark_id, tag_id=tag_id))
-            await self.session.commit()
-
-        return await self.get_bookmark(bookmark_id, user_id)
-
-    async def remove_tag(self, bookmark_id: str, user_id: str, tag_id: str) -> BookmarkResponse:
-        """
-        Remove a tag from a bookmark.
-
-        Args:
-            bookmark_id: Bookmark identifier.
-            user_id: User identifier for authorization.
-            tag_id: Tag identifier.
-
-        Returns:
-            Updated bookmark response.
-
-        Raises:
-            ValueError: If bookmark not found or unauthorized.
-        """
-        await self._get_bookmark_or_raise(bookmark_id, user_id)
-
-        stmt = select(BookmarkTag).where(
-            BookmarkTag.bookmark_id == bookmark_id,
-            BookmarkTag.tag_id == tag_id,
-        )
-        result = await self.session.execute(stmt)
-        bt = result.scalar_one_or_none()
-        if bt:
-            await self.session.delete(bt)
             await self.session.commit()
 
         return await self.get_bookmark(bookmark_id, user_id)

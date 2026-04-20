@@ -20,7 +20,6 @@ function createEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
     published_at: '2026-04-05T12:34:56.000Z',
     created_at: '2026-04-05T12:34:56.000Z',
     is_read: false,
-    is_liked: null,
     read_later: false,
     read_later_until: null,
     read_at: null,
@@ -28,8 +27,6 @@ function createEntry(overrides: Partial<EntryWithState> = {}): EntryWithState {
     bookmark_id: null,
     feed_title: 'Example Feed',
     feed_icon_url: null,
-    preference_score: null,
-    debug_info: null,
     ...overrides,
   }
 }

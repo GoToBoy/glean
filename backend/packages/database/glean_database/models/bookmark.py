@@ -63,9 +63,6 @@ class Bookmark(Base, TimestampMixin):
     bookmark_folders = relationship(
         "BookmarkFolder", back_populates="bookmark", cascade="all, delete-orphan"
     )
-    bookmark_tags = relationship(
-        "BookmarkTag", back_populates="bookmark", cascade="all, delete-orphan"
-    )
 
     # Constraints: Either entry_id or url must be provided
     # Unique constraint: one bookmark per user per entry (when entry_id is set)

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, waitFor, act } from '@testing-library/react'
+import { createQueryWrapper } from '../helpers/queryWrapper'
 
 vi.mock('@glean/api-client', () => ({
   folderService: {
@@ -25,10 +26,11 @@ describe('useFolders', () => {
   })
 
   it('should return initial state', () => {
-    const { result } = renderHook(() => useFolders())
+    vi.mocked(folderService.getFolders).mockResolvedValue({ folders: [] })
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
 
     expect(result.current.folders).toEqual([])
-    expect(result.current.loading).toBe(false)
     expect(result.current.error).toBeNull()
   })
 
@@ -36,26 +38,25 @@ describe('useFolders', () => {
     const folders = [createMockFolderTreeNode({ id: 'f1', name: 'News' })]
     vi.mocked(folderService.getFolders).mockResolvedValue({ folders })
 
-    const { result } = renderHook(() => useFolders('feed'))
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders('feed'), { wrapper })
 
-    await act(async () => {
-      await result.current.fetchFolders()
+    await waitFor(() => {
+      expect(result.current.folders).toEqual(folders)
     })
 
-    expect(result.current.folders).toEqual(folders)
     expect(folderService.getFolders).toHaveBeenCalledWith('feed')
   })
 
   it('should set error on fetch failure', async () => {
     vi.mocked(folderService.getFolders).mockRejectedValue(new Error('fail'))
 
-    const { result } = renderHook(() => useFolders())
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
 
-    await act(async () => {
-      await result.current.fetchFolders()
+    await waitFor(() => {
+      expect(result.current.error).toBe('Failed to load folders')
     })
-
-    expect(result.current.error).toBe('Failed to load folders')
   })
 
   it('should create a folder and refresh', async () => {
@@ -63,7 +64,10 @@ describe('useFolders', () => {
     vi.mocked(folderService.createFolder).mockResolvedValue(folder)
     vi.mocked(folderService.getFolders).mockResolvedValue({ folders: [] })
 
-    const { result } = renderHook(() => useFolders())
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
 
     let created: unknown
     await act(async () => {
@@ -78,7 +82,10 @@ describe('useFolders', () => {
     vi.mocked(folderService.updateFolder).mockResolvedValue(folder)
     vi.mocked(folderService.getFolders).mockResolvedValue({ folders: [] })
 
-    const { result } = renderHook(() => useFolders())
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
 
     let updated: unknown
     await act(async () => {
@@ -92,7 +99,10 @@ describe('useFolders', () => {
     vi.mocked(folderService.deleteFolder).mockResolvedValue(undefined)
     vi.mocked(folderService.getFolders).mockResolvedValue({ folders: [] })
 
-    const { result } = renderHook(() => useFolders())
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
 
     let deleted: unknown
     await act(async () => {
@@ -107,7 +117,10 @@ describe('useFolders', () => {
     vi.mocked(folderService.moveFolder).mockResolvedValue(folder)
     vi.mocked(folderService.getFolders).mockResolvedValue({ folders: [] })
 
-    const { result } = renderHook(() => useFolders())
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(() => useFolders(), { wrapper })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
 
     let moved: unknown
     await act(async () => {

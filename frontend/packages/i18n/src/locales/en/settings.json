@@ -5,9 +5,7 @@
     "profile": "Profile",
     "readLater": "Read Later",
     "appearance": "Appearance",
-    "reader": "Reader",
     "manageFeeds": "Manage Feeds",
-    "preferences": "Preferences",
     "apiTokens": "API Tokens",
     "aiIntegration": "AI",
     "translation": "Translation"
@@ -56,33 +54,6 @@
       "auto": "Auto",
       "autoDesc": "Follow your system preference"
     }
-  },
-  "readerMode": {
-    "title": "Reader Mode",
-    "desc": "Configure Legacy/New mode and recommendation controls.",
-    "modeLabel": "Reader Mode",
-    "modeOptions": {
-      "legacy": "Legacy",
-      "new": "New (Unified)"
-    },
-    "rankingLabel": "Ranking Mode",
-    "rankingOptions": {
-      "time": "Time",
-      "value": "Value per minute",
-      "mixed": "Mixed"
-    },
-    "recommendationLabel": "Recommendation Strength",
-    "recommendationOptions": {
-      "off": "Off",
-      "weak": "Weak"
-    },
-    "exploreRatioLabel": "Explore Ratio",
-    "manualOnlyLabel": "Only Manual Subscriptions",
-    "manualOnlyDesc": "Disable discovery/recommendation and keep pure manual RSS.",
-    "discoveryApiKeyLabel": "Discovery Search API Key (Tavily)",
-    "discoveryApiKeyDesc": "Optional per-account key used by Discover Sources. Leave empty to use server default.",
-    "discoveryApiKeyPlaceholder": "tvly-...",
-    "discoveryApiKeySaved": "Discovery search key saved"
   },
   "manageFeeds": {
     "title": "Manage Feeds",
@@ -257,60 +228,6 @@
     "unsubscribeDescription": "Are you sure you want to unsubscribe from this feed? This action cannot be undone.",
     "cancel": "Cancel",
     "importing": "Importing subscriptions..."
-  },
-  "preferences": {
-    "title": "Preferences",
-    "desc": "Manage your content preferences and smart filters",
-    "rebuildModel": "Rebuild Model",
-    "rebuilding": "Rebuilding...",
-    "showPreferenceScores": "Show Preference Scores",
-    "showPreferenceScoresDesc": "Display relevance scores in the Smart feed",
-    "autoMarkReadOnScroll": "Auto Mark Read While Scrolling",
-    "autoMarkReadOnScrollDesc": "Automatically mark entries as read after you scroll past them.",
-    "autoMarkReadThreshold": "Mark as read after",
-    "failedToLoad": "Failed to load preferences",
-    "totalInteractions": "Total Interactions",
-    "acrossAllFeeds": "Across all your feeds",
-    "likedItems": "Liked Items",
-    "dislikedItems": "Disliked Items",
-    "modelStrength": "Model Strength",
-    "basedOnInteractionCount": "Based on interaction count",
-    "recentActivity": "Recent Activity",
-    "lastModelTraining": "Last Model Training",
-    "totalBookmarks": "Total Bookmarks",
-    "topSources": "Top Sources",
-    "topSourcesDesc": "Feeds with highest affinity",
-    "topAuthors": "Top Authors",
-    "topAuthorsDesc": "Authors with highest affinity",
-    "rebuildConfirmTitle": "Rebuild Preference Model?",
-    "rebuildConfirmDesc": "This will retrain your personal recommendation model using all your historical interactions. This process may take a few minutes to complete.",
-    "cancel": "Cancel",
-    "strength": {
-      "strong": "Strong",
-      "moderate": "Moderate",
-      "weak": "Weak",
-      "none": "None"
-    },
-    "ofInteractions": "% of interactions",
-    "stats": {
-      "liked": "Liked articles",
-      "disliked": "Disliked articles",
-      "bookmarked": "Bookmarked articles",
-      "modelStrength": "Model Strength",
-      "modelStrengthDesc": "Based on your feedback history",
-      "lastUpdated": "Last updated: {{date}}"
-    },
-    "displaySettings": {
-      "title": "Display Settings",
-      "desc": "Customize how preferences are shown",
-      "showScore": "Show Preference Score",
-      "showScoreDesc": "Display recommendation scores on Smart list entries"
-    },
-    "rebuildHint": "Rebuild your preference model from all historical feedback",
-    "empty": {
-      "title": "No preference data yet",
-      "description": "Start liking or disliking articles to build your preference model"
-    }
   },
   "translation": {
     "title": "Translation",

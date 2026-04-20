@@ -26,7 +26,6 @@ from glean_database.models import (
     FeedSourceType,
     Subscription,
     UserEntry,
-    UserPreferenceStats,
 )
 
 # Sentinel for unset values
@@ -418,9 +417,8 @@ class FeedService:
 
         This method:
         1. Deletes the user's UserEntry records for entries in this feed
-        2. Removes feed affinity from UserPreferenceStats
-        3. Deletes the subscription
-        4. If no other users subscribe to the feed, deletes the feed and its entries
+        2. Deletes the subscription
+        3. If no other users subscribe to the feed, deletes the feed and its entries
 
         Args:
             subscription_id: Subscription identifier.
@@ -453,36 +451,14 @@ class FeedService:
         )
         await self.session.execute(delete_user_entries_stmt)
 
-        # 2. Remove feed affinity from UserPreferenceStats
-        await self._remove_feed_affinity(user_id, feed_id)
-
-        # 3. Delete the subscription
+        # 2. Delete the subscription
         await self.session.delete(subscription)
 
-        # 4. Check if feed has any other subscribers
+        # 3. Check if feed has any other subscribers
         orphaned_feed_id, entry_ids = await self._cleanup_orphan_feed(feed_id)
 
         await self.session.commit()
         return orphaned_feed_id, entry_ids
-
-    async def _remove_feed_affinity(self, user_id: str, feed_id: str) -> None:
-        """
-        Remove a feed from user's source_affinity in UserPreferenceStats.
-
-        Args:
-            user_id: User identifier.
-            feed_id: Feed identifier to remove.
-        """
-        result = await self.session.execute(
-            select(UserPreferenceStats).where(UserPreferenceStats.user_id == user_id)
-        )
-        stats = result.scalar_one_or_none()
-
-        if stats and stats.source_affinity and feed_id in stats.source_affinity:
-            # Create a copy and remove the feed
-            new_affinity = dict(stats.source_affinity)
-            del new_affinity[feed_id]
-            stats.source_affinity = new_affinity
 
     async def _cleanup_orphan_feed(self, feed_id: str) -> tuple[str | None, list[str]]:
         """
@@ -630,10 +606,7 @@ class FeedService:
                 )
                 await self.session.execute(delete_user_entries_stmt)
 
-                # 2. Remove feed affinity from UserPreferenceStats
-                await self._remove_feed_affinity(user_id, feed_id)
-
-                # 3. Delete the subscription
+                # 2. Delete the subscription
                 await self.session.delete(subscription)
                 deleted_count += 1
 
@@ -643,7 +616,7 @@ class FeedService:
             else:
                 failed_count += 1
 
-        # 4. Check and cleanup orphan feeds
+        # 3. Check and cleanup orphan feeds
         orphaned_feeds: dict[str, list[str]] = {}
         for feed_id in feeds_to_check:
             orphaned_feed_id, entry_ids = await self._cleanup_orphan_feed(feed_id)

@@ -14,15 +14,10 @@ export interface BilingualSegment {
 export function renderBilingualSegmentsHtml(segments: BilingualSegment[]): string {
   const htmlParts: string[] = []
 
-  segments.forEach(({ original, translated }, index) => {
-    if (index > 0) {
-      htmlParts.push('<br />')
-    }
-
+  segments.forEach(({ original, translated }) => {
     htmlParts.push(`<span class="glean-original-sentence">${escapeHtml(original)}</span>`)
 
     if (translated.trim()) {
-      htmlParts.push('<br />')
       htmlParts.push(
         `<span class="glean-translated-sentence">${escapeHtml(translated.trim())}</span>`,
       )

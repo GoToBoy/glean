@@ -1,14 +1,15 @@
 """Tests for RSS parser."""
 
+import pytest
+
 from glean_rss.parser import (
     MIN_FULL_CONTENT_TEXT_LENGTH,
     ParsedEntry,
-    parse_feed,
     _extract_text_content,
     _get_favicon_url,
     _looks_like_full_content,
+    parse_feed,
 )
-import pytest
 
 
 class TestFaviconURL:

@@ -18,8 +18,6 @@ interface BookmarkState {
   deleteBookmark: (id: string) => Promise<boolean>
   addFolder: (bookmarkId: string, folderId: string) => Promise<Bookmark | null>
   removeFolder: (bookmarkId: string, folderId: string) => Promise<Bookmark | null>
-  addTag: (bookmarkId: string, tagId: string) => Promise<Bookmark | null>
-  removeTag: (bookmarkId: string, tagId: string) => Promise<Bookmark | null>
   setFilters: (filters: BookmarkListParams) => void
   reset: () => void
 }
@@ -118,34 +116,6 @@ export const useBookmarkStore = create<BookmarkState>((set, get) => ({
     } catch (err) {
       set({ error: 'Failed to remove folder' })
       logger.error('Failed to remove folder:', err)
-      return null
-    }
-  },
-
-  addTag: async (bookmarkId, tagId) => {
-    try {
-      const bookmark = await bookmarkService.addTag(bookmarkId, tagId)
-      set((state) => ({
-        bookmarks: state.bookmarks.map((b) => (b.id === bookmarkId ? bookmark : b)),
-      }))
-      return bookmark
-    } catch (err) {
-      set({ error: 'Failed to add tag' })
-      logger.error('Failed to add tag:', err)
-      return null
-    }
-  },
-
-  removeTag: async (bookmarkId, tagId) => {
-    try {
-      const bookmark = await bookmarkService.removeTag(bookmarkId, tagId)
-      set((state) => ({
-        bookmarks: state.bookmarks.map((b) => (b.id === bookmarkId ? bookmark : b)),
-      }))
-      return bookmark
-    } catch (err) {
-      set({ error: 'Failed to remove tag' })
-      logger.error('Failed to remove tag:', err)
       return null
     }
   },

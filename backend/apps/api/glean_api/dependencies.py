@@ -20,13 +20,10 @@ from glean_core.services import (
     APITokenService,
     AuthService,
     BookmarkService,
-    DiscoveryService,
     EntryService,
     FeedService,
     FolderService,
-    PreferenceService,
     SystemConfigService,
-    TagService,
     TranslationService,
     TypedConfigService,
     UserService,
@@ -221,13 +218,6 @@ def get_feed_service(session: Annotated[AsyncSession, Depends(get_session)]) -> 
     return FeedService(session)
 
 
-def get_discovery_service(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> DiscoveryService:
-    """Get discovery service instance."""
-    return DiscoveryService(session)
-
-
 async def get_entry_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
@@ -258,67 +248,12 @@ def get_folder_service(
     return FolderService(session)
 
 
-def get_tag_service(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> TagService:
-    """Get tag service instance."""
-    return TagService(session)
-
-
 async def get_bookmark_service(
     session: Annotated[AsyncSession, Depends(get_session)],
     redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
 ) -> BookmarkService:
     """Get bookmark service instance."""
     return BookmarkService(session, redis_pool)
-
-
-# M3 service dependencies
-async def get_preference_service(
-    session: Annotated[AsyncSession, Depends(get_session)],
-    redis_pool: Annotated[ArqRedis, Depends(get_redis_pool)],
-) -> PreferenceService:
-    """Get preference service instance."""
-    return PreferenceService(session, redis_pool)
-
-
-async def get_score_service(
-    session: Annotated[AsyncSession, Depends(get_session)],
-) -> object | None:
-    """
-    Get score service instance for real-time preference scoring.
-
-    Returns:
-    - ScoreService if vectorization is enabled and pgvector is available
-    - SimpleScoreService if vectorization is disabled
-    - None if there's an error
-    """
-    from glean_core.schemas.config import EmbeddingConfig, VectorizationStatus
-    from glean_core.services import SimpleScoreService, TypedConfigService
-
-    # Check if vectorization is enabled
-    config_service = TypedConfigService(session)
-    config = await config_service.get(EmbeddingConfig)
-
-    if not config.enabled or config.status not in (
-        VectorizationStatus.IDLE,
-        VectorizationStatus.REBUILDING,
-    ):
-        # Vectorization disabled - use simple scoring
-        return SimpleScoreService(session)
-
-    # Vectorization enabled - use pgvector scoring
-    try:
-        from glean_vector.clients.pgvector_client import PgVectorClient
-        from glean_vector.services.score_service import ScoreService
-
-        vector_client = PgVectorClient(session)
-        await vector_client.ensure_collections(config.dimension, config.provider, config.model)
-
-        return ScoreService(db_session=session, milvus_client=vector_client)
-    except Exception:
-        # pgvector not available, fall back to simple scoring
-        return SimpleScoreService(session)
 
 
 async def get_translation_service(

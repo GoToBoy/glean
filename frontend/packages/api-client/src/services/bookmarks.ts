@@ -10,7 +10,6 @@ export interface BookmarkListParams {
   page?: number
   per_page?: number
   folder_id?: string
-  tag_ids?: string[]
   search?: string
   sort?: 'created_at' | 'title'
   order?: 'asc' | 'desc'
@@ -19,7 +18,7 @@ export interface BookmarkListParams {
 /**
  * Bookmarks API service.
  *
- * Handles bookmark CRUD and folder/tag associations.
+ * Handles bookmark CRUD and folder associations.
  */
 export class BookmarkService {
   constructor(private client: ApiClient) {}
@@ -32,9 +31,6 @@ export class BookmarkService {
     if (params.page) searchParams.set('page', String(params.page))
     if (params.per_page) searchParams.set('per_page', String(params.per_page))
     if (params.folder_id) searchParams.set('folder_id', params.folder_id)
-    if (params.tag_ids?.length) {
-      params.tag_ids.forEach((id) => searchParams.append('tag_ids', id))
-    }
     if (params.search) searchParams.set('search', params.search)
     if (params.sort) searchParams.set('sort', params.sort)
     if (params.order) searchParams.set('order', params.order)
@@ -87,21 +83,5 @@ export class BookmarkService {
    */
   async removeFolder(bookmarkId: string, folderId: string): Promise<Bookmark> {
     return this.client.delete<Bookmark>(`/bookmarks/${bookmarkId}/folders/${folderId}`)
-  }
-
-  /**
-   * Add a tag to a bookmark.
-   */
-  async addTag(bookmarkId: string, tagId: string): Promise<Bookmark> {
-    return this.client.post<Bookmark>(`/bookmarks/${bookmarkId}/tags`, {
-      tag_id: tagId,
-    })
-  }
-
-  /**
-   * Remove a tag from a bookmark.
-   */
-  async removeTag(bookmarkId: string, tagId: string): Promise<Bookmark> {
-    return this.client.delete<Bookmark>(`/bookmarks/${bookmarkId}/tags/${tagId}`)
   }
 }
