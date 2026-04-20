@@ -99,7 +99,9 @@
     "estimatedReading": "预计阅读",
     "progress": "{{unread}} 待读 / {{total}} 全部",
     "todayDate": "今日 · {{month}}月{{day}}日",
-    "date": "{{month}}月{{day}}日"
+    "date": "{{month}}月{{day}}日",
+    "clearFilter": "全部",
+    "backToDigest": "今日视图"
   },
   "topnav": {
     "prevDay": "前一天 (←)",
@@ -124,7 +126,8 @@
     "expand": "展开",
     "collapse": "折叠",
     "viewAll": "查看全部 {{count}} 篇 ↓",
-    "otherFolder": "其他"
+    "otherFolder": "其他",
+    "readTail": "已读 {{count}} 篇"
   },
   "card": {
     "unknownSource": "未知来源",

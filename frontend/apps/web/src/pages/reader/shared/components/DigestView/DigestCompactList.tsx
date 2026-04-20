@@ -73,6 +73,7 @@ function CompactItem({ entry, onSelect, isFocused = false, translation }: Compac
         borderColor: 'var(--digest-divider, #E5E0D2)',
         background: isFocused ? 'var(--digest-bg-hover, #F1EDE2)' : undefined,
         boxShadow: isFocused ? 'inset 3px 0 0 var(--digest-accent, #B8312F)' : undefined,
+        opacity: entry.is_read ? 0.75 : 1,
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'

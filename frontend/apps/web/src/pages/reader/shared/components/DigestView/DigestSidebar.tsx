@@ -1,4 +1,6 @@
 import { Rss, Bookmark, Settings, X } from 'lucide-react'
+import { useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from '@glean/i18n'
 import { useDigestSidebarStore } from '../../../../../stores/digestSidebarStore'
 import type { DigestSidebarPanel } from '../../../../../stores/digestSidebarStore'
@@ -9,7 +11,6 @@ import type { EntryWithState } from '@glean/types'
 
 interface DigestSidebarProps {
   onAddFeed: () => void
-  onSelectFeed?: (feedId: string) => void
   onSelectEntry: (entry: EntryWithState) => void
   isMobile?: boolean
 }
@@ -18,12 +19,71 @@ const PANEL_WIDTH = 264 // sidebar-expanded - sidebar-collapsed = 320-56
 
 export function DigestSidebar({
   onAddFeed,
-  onSelectFeed,
   onSelectEntry,
   isMobile = false,
 }: DigestSidebarProps) {
   const { t } = useTranslation('digest')
   const { activePanel, togglePanel, setActivePanel } = useDigestSidebarStore()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedFeedId = searchParams.get('feed')
+  const selectedFolderId = searchParams.get('folder')
+
+  const handleSelectFeed = useCallback(
+    (feedId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('feed', feedId)
+          next.delete('folder')
+          next.delete('entry')
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams]
+  )
+
+  const handleSelectFolder = useCallback(
+    (folderId: string) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('folder', folderId)
+          next.delete('feed')
+          next.delete('entry')
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams]
+  )
+
+  const handleClearStreamScope = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('feed')
+        next.delete('folder')
+        next.delete('entry')
+        return next
+      },
+      { replace: false }
+    )
+  }, [setSearchParams])
+
+  // When the "Feeds" activity rail button is clicked while a feed/folder stream is active,
+  // clear the scope — this returns the user to the digest.
+  const handleActivityButtonClick = useCallback(
+    (id: Exclude<DigestSidebarPanel, null>) => {
+      if (id === 'feeds' && (selectedFeedId || selectedFolderId)) {
+        handleClearStreamScope()
+      }
+      togglePanel(id)
+    },
+    [handleClearStreamScope, selectedFeedId, selectedFolderId, togglePanel]
+  )
 
   const activityButtons: {
     id: Exclude<DigestSidebarPanel, null>
@@ -49,7 +109,7 @@ export function DigestSidebar({
           {activityButtons.map((btn) => (
             <button
               key={btn.id}
-              onClick={() => togglePanel(btn.id)}
+              onClick={() => handleActivityButtonClick(btn.id)}
               className="relative flex h-10 w-10 items-center justify-center rounded-lg transition-colors"
               style={{
                 color:
@@ -96,7 +156,10 @@ export function DigestSidebar({
             <PanelContent
               activePanel={activePanel}
               onAddFeed={onAddFeed}
-              onSelectFeed={onSelectFeed}
+              onSelectFeed={handleSelectFeed}
+              onSelectFolder={handleSelectFolder}
+              selectedFeedId={selectedFeedId}
+              selectedFolderId={selectedFolderId}
               onSelectEntry={onSelectEntry}
             />
           </div>
@@ -123,7 +186,10 @@ export function DigestSidebar({
           <PanelContent
             activePanel={activePanel}
             onAddFeed={onAddFeed}
-            onSelectFeed={onSelectFeed}
+            onSelectFeed={handleSelectFeed}
+            onSelectFolder={handleSelectFolder}
+            selectedFeedId={selectedFeedId}
+            selectedFolderId={selectedFolderId}
             onSelectEntry={onSelectEntry}
           />
         )}
@@ -175,16 +241,30 @@ function PanelContent({
   activePanel,
   onAddFeed,
   onSelectFeed,
+  onSelectFolder,
+  selectedFeedId,
+  selectedFolderId,
   onSelectEntry,
 }: {
   activePanel: Exclude<DigestSidebarPanel, null>
   onAddFeed: () => void
   onSelectFeed?: (feedId: string) => void
+  onSelectFolder?: (folderId: string) => void
+  selectedFeedId?: string | null
+  selectedFolderId?: string | null
   onSelectEntry: (entry: EntryWithState) => void
 }) {
   switch (activePanel) {
     case 'feeds':
-      return <FeedsPanel onAddFeed={onAddFeed} onSelectFeed={onSelectFeed} />
+      return (
+        <FeedsPanel
+          onAddFeed={onAddFeed}
+          onSelectFeed={onSelectFeed}
+          onSelectFolder={onSelectFolder}
+          selectedFeedId={selectedFeedId}
+          selectedFolderId={selectedFolderId}
+        />
+      )
     case 'saved':
       return <SavedPanel onSelectEntry={onSelectEntry} />
     case 'settings':

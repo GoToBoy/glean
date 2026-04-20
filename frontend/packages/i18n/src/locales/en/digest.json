@@ -99,7 +99,9 @@
     "estimatedReading": "est. reading",
     "progress": "{{unread}} unread / {{total}} total",
     "todayDate": "Today · {{month}}/{{day}}",
-    "date": "{{month}}/{{day}}"
+    "date": "{{month}}/{{day}}",
+    "clearFilter": "All",
+    "backToDigest": "Today"
   },
   "topnav": {
     "prevDay": "Previous day (←)",
@@ -124,7 +126,8 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "viewAll": "View all {{count}} ↓",
-    "otherFolder": "Other"
+    "otherFolder": "Other",
+    "readTail": "{{count}} read"
   },
   "card": {
     "unknownSource": "Unknown source",

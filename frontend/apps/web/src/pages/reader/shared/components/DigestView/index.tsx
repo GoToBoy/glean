@@ -1,5 +1,4 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { AlertCircle } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription, Skeleton } from '@glean/ui'
@@ -61,16 +60,8 @@ interface DigestViewProps {
   onDateChange: (date: string) => void
 }
 
-/**
- * Query key for digest entries.
- */
-function digestQueryKey(date: string) {
-  return ['digest-entries', date] as const
-}
-
 export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   const { t } = useTranslation('digest')
-  const navigate = useNavigate()
   const { data: systemTime } = useSystemTime()
   const todayDate = systemTime?.current_date ?? format(new Date(), 'yyyy-MM-dd')
   const { resolvedTheme } = useThemeStore()
@@ -92,9 +83,15 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
     isLoading,
     error,
   } = useQuery({
-    queryKey: digestQueryKey(date),
+    queryKey: ['digest-entries', date],
     queryFn: ({ signal }) =>
-      entryService.getTodayEntries({ date, limit: 500 }, { signal }),
+      entryService.getTodayEntries(
+        {
+          date,
+          limit: 500,
+        },
+        { signal }
+      ),
     staleTime: 2 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
     refetchOnWindowFocus: false,
@@ -107,14 +104,18 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   const { folders } = useFolders('feed')
   const { data: subscriptions = [] } = useAllSubscriptions()
 
-  // Group entries by folder
+  // Group entries by folder (the only strategy DigestView uses).
   // NOTE: do NOT include `t` in deps — UI-language label lives in DigestSection.
-  // Otherwise every language toggle recomputes sections and ripples through
-  // flatEntries / observers / translations hook.
-  const sections = useMemo(
-    () => groupEntriesByFolder(entries, folders, subscriptions),
-    [entries, folders, subscriptions]
-  )
+  const sections = useMemo(() => {
+    const grouped = groupEntriesByFolder(entries, folders, subscriptions)
+    // Push fully-read sections to the bottom while preserving relative order.
+    // Array.prototype.sort is stable in modern JS engines.
+    return [...grouped].sort((a, b) => {
+      const aAllRead = a.entries.length > 0 && a.entries.every((e) => e.is_read)
+      const bAllRead = b.entries.length > 0 && b.entries.every((e) => e.is_read)
+      return Number(aAllRead) - Number(bAllRead)
+    })
+  }, [entries, folders, subscriptions])
 
   // Flat entry list for j/k keyboard navigation
   const flatEntries = useMemo(() => sections.flatMap((s) => s.entries), [sections])
@@ -150,27 +151,48 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   }, [])
 
   const handleCloseEntry = useCallback(() => {
+    const closingId = selectedEntryId
     setSelectedEntryId(null)
-    // Restore scroll to the focused card after closing
-    if (focusedEntryId) {
+    // Ensure the just-viewed entry is marked read on close so it moves into the
+    // read group. Opening alone only marks read when `autoMarkRead` is enabled,
+    // which leaves manually-opened entries in the unread group after close.
+    if (closingId) {
+      const entry = flatEntries.find((e) => e.id === closingId)
+      if (entry && !entry.is_read) {
+        void updateMutation.mutateAsync({
+          entryId: entry.id,
+          data: { is_read: true },
+        })
+      }
+    }
+    const targetId = focusedEntryId ?? closingId
+    if (targetId) {
       window.requestAnimationFrame(() => {
-        const el = document.querySelector(`[data-entry-id="${focusedEntryId}"]`)
-        el?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+        const el =
+          document.getElementById(`digest-card-${targetId}`) ??
+          document.querySelector(`[data-entry-id="${targetId}"]`)
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       })
     }
-  }, [focusedEntryId])
+  }, [focusedEntryId, selectedEntryId, flatEntries, updateMutation])
 
   const handleSelectEntry = useCallback(
     (entry: EntryWithState) => {
       setSelectedEntryId(entry.id)
       setFocusedEntryId(entry.id)
-      // Auto-mark-read on open
       if (autoMarkRead && !entry.is_read) {
         void updateMutation.mutateAsync({
           entryId: entry.id,
           data: { is_read: true },
         })
       }
+      // Scroll the clicked card into view so it stays visible when the reader opens.
+      window.requestAnimationFrame(() => {
+        const el =
+          document.getElementById(`digest-card-${entry.id}`) ??
+          document.querySelector(`[data-entry-id="${entry.id}"]`)
+        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
     },
     [autoMarkRead, updateMutation]
   )
@@ -186,15 +208,6 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
     const next = addDays(new Date(y, m - 1, d), 1)
     onDateChange(format(next, 'yyyy-MM-dd'))
   }, [date, onDateChange])
-
-  const handleSelectFeed = useCallback(
-    (feedId: string) => {
-      const params = new URLSearchParams()
-      params.set('feed', feedId)
-      navigate(`/reader?${params.toString()}`)
-    },
-    [navigate]
-  )
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -525,15 +538,17 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
                 {!isLoading &&
                   sections.map((section) => (
                     <DigestSection
-                      key={section.folderId ?? '__others__'}
-                      folderId={section.folderId}
-                      folderName={section.folderName}
+                      key={`${section.groupKind}:${section.groupId ?? '__others__'}`}
+                      groupId={section.groupId}
+                      groupName={section.groupName}
+                      groupKind={section.groupKind}
                       entries={section.entries}
                       sourceCount={section.sourceCount}
                       onSelectEntry={handleSelectEntry}
-                      isCompact={section.folderId === null}
+                      isCompact={section.groupKind === 'folder' && section.groupId === null}
                       focusedEntryId={focusedEntryId}
                       translations={translations}
+                      hideHeader={section.groupKind === 'all'}
                     />
                   ))}
 
@@ -570,7 +585,6 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
       {/* Right sidebar */}
       <DigestSidebar
         onAddFeed={() => setAddFeedOpen(true)}
-        onSelectFeed={handleSelectFeed}
         onSelectEntry={handleSelectEntry}
         isMobile={isMobile}
       />

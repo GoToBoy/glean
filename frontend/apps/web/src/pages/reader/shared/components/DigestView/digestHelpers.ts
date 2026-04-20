@@ -1,10 +1,25 @@
 import type { EntryWithState, FolderTreeNode, Subscription } from '@glean/types'
 
+export type GroupStrategy = 'folder' | 'feed' | 'none'
+export type GroupKind = 'folder' | 'feed' | 'all'
+
 export interface DigestSection {
+  /** @deprecated use groupId */
   folderId: string | null
+  /** @deprecated use groupName */
   folderName: string
+  groupId: string | null
+  groupKind: GroupKind
+  groupName: string
   entries: EntryWithState[]
   sourceCount: number
+}
+
+export interface GroupEntriesContext {
+  folders: FolderTreeNode[]
+  subscriptions: Subscription[]
+  /** Optional label for the "Others" folder bucket. Defaults to empty string (caller i18n's it). */
+  otherLabel?: string
 }
 
 export interface DigestStats {
@@ -30,6 +45,78 @@ export function estimateReadingMinutes(entry: EntryWithState): number {
   const cjkCount = (text.match(/[\u4e00-\u9fff\u3040-\u30ff]/g) ?? []).length
   const minutes = wordCount / 300 + cjkCount / 500
   return Math.max(1, Math.ceil(minutes))
+}
+
+/**
+ * Generalized grouping. `strategy`:
+ *   - 'folder' → group by top-level folder (current default)
+ *   - 'feed'   → group by feed_id
+ *   - 'none'   → single group containing all entries
+ */
+export function groupEntries(
+  entries: EntryWithState[],
+  strategy: GroupStrategy,
+  ctx: GroupEntriesContext
+): DigestSection[] {
+  if (strategy === 'none') {
+    if (entries.length === 0) return []
+    const sorted = [...entries].sort((a, b) => {
+      const aTime = a.published_at ? new Date(a.published_at).getTime() : 0
+      const bTime = b.published_at ? new Date(b.published_at).getTime() : 0
+      return bTime - aTime
+    })
+    const sourceFeedIds = new Set(sorted.map((e) => e.feed_id))
+    return [
+      {
+        folderId: null,
+        folderName: '',
+        groupId: null,
+        groupKind: 'all',
+        groupName: '',
+        entries: sorted,
+        sourceCount: sourceFeedIds.size,
+      },
+    ]
+  }
+
+  if (strategy === 'feed') {
+    const byFeed = new Map<string, EntryWithState[]>()
+    for (const entry of entries) {
+      const list = byFeed.get(entry.feed_id)
+      if (list) list.push(entry)
+      else byFeed.set(entry.feed_id, [entry])
+    }
+    // Build feed_id -> name via subscriptions
+    const feedName = new Map<string, string>()
+    for (const sub of ctx.subscriptions) {
+      feedName.set(
+        sub.feed_id,
+        sub.custom_title || sub.feed.title || sub.feed.url
+      )
+    }
+    const sections: DigestSection[] = []
+    for (const [feedId, list] of byFeed) {
+      list.sort((a, b) => {
+        const aTime = a.published_at ? new Date(a.published_at).getTime() : 0
+        const bTime = b.published_at ? new Date(b.published_at).getTime() : 0
+        return bTime - aTime
+      })
+      sections.push({
+        folderId: feedId,
+        folderName: feedName.get(feedId) ?? '',
+        groupId: feedId,
+        groupKind: 'feed',
+        groupName: feedName.get(feedId) ?? '',
+        entries: list,
+        sourceCount: 1,
+      })
+    }
+    // Stable by name
+    sections.sort((a, b) => a.groupName.localeCompare(b.groupName))
+    return sections
+  }
+
+  return groupEntriesByFolder(entries, ctx.folders, ctx.subscriptions)
 }
 
 /**
@@ -108,6 +195,9 @@ export function groupEntriesByFolder(
     sections.push({
       folderId: folder.id,
       folderName: folder.name,
+      groupId: folder.id,
+      groupKind: 'folder',
+      groupName: folder.name,
       entries: sectionEntries,
       sourceCount: sourceFeedIds.size,
     })
@@ -120,6 +210,9 @@ export function groupEntriesByFolder(
     sections.push({
       folderId: null,
       folderName: '',
+      groupId: null,
+      groupKind: 'folder',
+      groupName: '',
       entries: othersEntries,
       sourceCount: sourceFeedIds.size,
     })

@@ -59,7 +59,6 @@ function Row({ entry, isSelected, onClick, translation }: RowProps) {
           fontFamily: "'Noto Serif SC', Georgia, serif",
           fontWeight: entry.is_read ? 400 : 600,
           color: 'var(--digest-text, #1A1A1A)',
-          opacity: entry.is_read ? 0.65 : 1,
         }}
       >
         {title}

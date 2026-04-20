@@ -195,7 +195,7 @@ export function useMarkAllRead() {
       entryService.markAllRead(feedId, folderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: entryKeys.lists() })
-      // Invalidate all subscription queries to update unread counts (including sync)
+      queryClient.invalidateQueries({ queryKey: ['digest-entries'] })
       queryClient.invalidateQueries({ queryKey: subscriptionKeys.all })
     },
   })

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   useInfiniteEntries,
@@ -28,6 +28,8 @@ import {
 } from './components/ReaderCoreParts'
 import { TodayBoard } from './components/TodayBoard'
 import { DigestView } from './components/DigestView'
+import { StreamView } from './components/StreamView'
+import { DigestSidebar } from './components/DigestView/DigestSidebar'
 import { stripHtmlTags } from '../../../lib/html'
 import { shouldAutoTranslate } from '../../../lib/translationLanguagePolicy'
 import { buildTodayBoardEntries } from './todayBoard'
@@ -819,6 +821,17 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
   }, [isMobile, isReaderVisibleOnMobile, filterType]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isDigestView) {
+    // When a feed/folder scope is active, swap Digest for the time-ordered StreamView.
+    // The DigestSidebar (rendered inside each view) handles URL params for scope selection.
+    if (selectedFeedId || selectedFolderId) {
+      return (
+        <StreamViewShell
+          feedId={selectedFeedId}
+          folderId={selectedFolderId}
+          isMobile={isMobile}
+        />
+      )
+    }
     return (
       <DigestView
         date={digestDate}
@@ -1202,3 +1215,48 @@ export function ReaderCore({ isMobile }: { isMobile: boolean }) {
     </div>
   )
 }
+
+/**
+ * Small shell that renders StreamView alongside DigestSidebar so the rail/panel
+ * (feeds/saved/settings) stays available while browsing a feed or folder stream.
+ */
+function StreamViewShell({
+  feedId,
+  folderId,
+  isMobile,
+}: {
+  feedId?: string
+  folderId?: string
+  isMobile: boolean
+}) {
+  const [, setSearchParams] = useSearchParams()
+  // Saved-panel entry selection → sync ?entry= so the current view can pick it up.
+  // StreamView manages its own local selection; we're just keeping the Saved flow alive.
+  const handleSelectEntry = useCallback(
+    (entry: EntryWithState) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          next.set('entry', entry.id)
+          return next
+        },
+        { replace: false }
+      )
+    },
+    [setSearchParams]
+  )
+
+  // Sidebar's onAddFeed is a no-op here — the panel has its own add-feed button
+  // inside FeedsPanel, and the shell does not own an AddFeedModal. Wire up if needed.
+  return (
+    <div className="flex min-h-full w-full flex-1">
+      <StreamView feedId={feedId} folderId={folderId} isMobile={isMobile} />
+      <DigestSidebar
+        onAddFeed={() => undefined}
+        onSelectEntry={handleSelectEntry}
+        isMobile={isMobile}
+      />
+    </div>
+  )
+}
+

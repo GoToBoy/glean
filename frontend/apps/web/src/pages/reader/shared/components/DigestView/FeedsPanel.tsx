@@ -18,6 +18,9 @@ import { getFeedColor } from './digestHelpers'
 interface FeedsPanelProps {
   onAddFeed: () => void
   onSelectFeed?: (feedId: string) => void
+  onSelectFolder?: (folderId: string) => void
+  selectedFeedId?: string | null
+  selectedFolderId?: string | null
 }
 
 interface DragState {
@@ -44,6 +47,9 @@ function FolderItem({
   siblings,
   subscriptions,
   onSelectFeed,
+  onSelectFolder,
+  selectedFeedId,
+  selectedFolderId,
   initialCollapsed = false,
   dragState,
   setDragState,
@@ -52,6 +58,9 @@ function FolderItem({
   siblings: FolderTreeNode[]
   subscriptions: Subscription[]
   onSelectFeed?: (feedId: string) => void
+  onSelectFolder?: (folderId: string) => void
+  selectedFeedId?: string | null
+  selectedFolderId?: string | null
   initialCollapsed?: boolean
   dragState: DragState
   setDragState: React.Dispatch<React.SetStateAction<DragState>>
@@ -158,6 +167,7 @@ function FolderItem({
   }
 
   const children = sortByPosition(folder.children)
+  const isSelected = selectedFolderId === folder.id
 
   return (
     <div className="mb-0.5">
@@ -179,33 +189,47 @@ function FolderItem({
           color: 'var(--digest-text-secondary, #5E5A52)',
           background: isFeedDropTarget
             ? 'var(--digest-accent-soft, #F5E6E5)'
-            : undefined,
+            : isSelected
+              ? 'var(--digest-accent-soft, #F5E6E5)'
+              : undefined,
           boxShadow: isDropBefore
             ? 'inset 0 2px 0 var(--digest-accent, #B8312F)'
             : isDropAfter
               ? 'inset 0 -2px 0 var(--digest-accent, #B8312F)'
-              : undefined,
+              : isSelected
+                ? 'inset 2px 0 0 var(--digest-accent, #B8312F)'
+                : undefined,
         }}
         onMouseEnter={(e) => {
-          if (!isFeedDropTarget) {
+          if (!isFeedDropTarget && !isSelected) {
             e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
           }
         }}
         onMouseLeave={(e) => {
-          if (!isFeedDropTarget) {
+          if (!isFeedDropTarget && !isSelected) {
             e.currentTarget.style.background = ''
           }
         }}
       >
         <button
           type="button"
-          onClick={() => setCollapsed((v) => !v)}
-          className="flex flex-1 items-center gap-1.5 text-left"
+          onClick={(e) => {
+            e.stopPropagation()
+            setCollapsed((v) => !v)
+          }}
+          aria-label={collapsed ? 'Expand folder' : 'Collapse folder'}
+          className="flex items-center justify-center"
         >
           <ChevronRight
             className="h-3 w-3 flex-shrink-0 transition-transform"
             style={{ transform: collapsed ? undefined : 'rotate(90deg)' }}
           />
+        </button>
+        <button
+          type="button"
+          onClick={() => onSelectFolder?.(folder.id)}
+          className="flex flex-1 items-center gap-1.5 text-left"
+        >
           <span className="flex-1 truncate">{folder.name}</span>
           {totalUnread > 0 && (
             <span
@@ -267,6 +291,7 @@ function FolderItem({
               key={sub.id}
               subscription={sub}
               onSelect={onSelectFeed}
+              isSelected={selectedFeedId === sub.feed_id}
               dragState={dragState}
               setDragState={setDragState}
             />
@@ -278,6 +303,9 @@ function FolderItem({
                 siblings={children}
                 subscriptions={subscriptions}
                 onSelectFeed={onSelectFeed}
+                onSelectFolder={onSelectFolder}
+                selectedFeedId={selectedFeedId}
+                selectedFolderId={selectedFolderId}
                 initialCollapsed={true}
                 dragState={dragState}
                 setDragState={setDragState}
@@ -293,11 +321,13 @@ function FolderItem({
 function SourceItem({
   subscription,
   onSelect,
+  isSelected = false,
   dragState,
   setDragState,
 }: {
   subscription: Subscription
   onSelect?: (feedId: string) => void
+  isSelected?: boolean
   dragState: DragState
   setDragState: React.Dispatch<React.SetStateAction<DragState>>
 }) {
@@ -321,12 +351,14 @@ function SourceItem({
       style={{
         color: 'var(--digest-text, #1A1A1A)',
         opacity: isDragging ? 0.5 : 1,
+        background: isSelected ? 'var(--digest-accent-soft, #F5E6E5)' : undefined,
+        boxShadow: isSelected ? 'inset 2px 0 0 var(--digest-accent, #B8312F)' : undefined,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+        if (!isSelected) e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = ''
+        if (!isSelected) e.currentTarget.style.background = ''
       }}
     >
       {showIcon ? (
@@ -417,7 +449,13 @@ function UncategorizedDropZone({
   )
 }
 
-export function FeedsPanel({ onAddFeed, onSelectFeed }: FeedsPanelProps) {
+export function FeedsPanel({
+  onAddFeed,
+  onSelectFeed,
+  onSelectFolder,
+  selectedFeedId,
+  selectedFolderId,
+}: FeedsPanelProps) {
   const { t } = useTranslation('digest')
   const { folders } = useFolders('feed')
   const { data: subscriptions = [] } = useAllSubscriptions()
@@ -487,6 +525,9 @@ export function FeedsPanel({ onAddFeed, onSelectFeed }: FeedsPanelProps) {
             siblings={topLevelFolders}
             subscriptions={subscriptions}
             onSelectFeed={onSelectFeed}
+            onSelectFolder={onSelectFolder}
+            selectedFeedId={selectedFeedId}
+            selectedFolderId={selectedFolderId}
             initialCollapsed={index > 0}
             dragState={dragState}
             setDragState={setDragState}
@@ -500,6 +541,7 @@ export function FeedsPanel({ onAddFeed, onSelectFeed }: FeedsPanelProps) {
                 key={sub.id}
                 subscription={sub}
                 onSelect={onSelectFeed}
+                isSelected={selectedFeedId === sub.feed_id}
                 dragState={dragState}
                 setDragState={setDragState}
               />

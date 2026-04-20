@@ -30,7 +30,11 @@ function formatNavDate(dateStr: string, t: (k: string) => string): string {
   }
 }
 
-export function DigestMasthead({ stats, isLoading, topicCount }: DigestMastheadProps) {
+export function DigestMasthead({
+  stats,
+  isLoading,
+  topicCount,
+}: DigestMastheadProps) {
   const { t } = useTranslation('digest')
   const unreadCount = stats ? Math.max(0, stats.total - stats.readCount) : 0
   const readPercent =
