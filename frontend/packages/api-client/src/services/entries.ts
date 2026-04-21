@@ -1,6 +1,7 @@
 import type {
   EntryWithState,
   EntryListResponse,
+  EntrySearchResponse,
   ParagraphTranslationsResponse,
   TranslateTextsResponse,
   TranslationResponse,
@@ -45,6 +46,24 @@ export class EntryService {
     limit?: number
   }, options?: { signal?: AbortSignal }): Promise<EntryListResponse> {
     return this.client.get<EntryListResponse>('/entries/today', {
+      params,
+      signal: options?.signal,
+    })
+  }
+
+  /**
+   * Search entries by keyword across title and summary.
+   */
+  async searchEntries(
+    params: {
+      q: string
+      scope?: 'all' | 'date' | 'week'
+      date?: string
+      limit?: number
+    },
+    options?: { signal?: AbortSignal },
+  ): Promise<EntrySearchResponse> {
+    return this.client.get<EntrySearchResponse>('/entries/search', {
       params,
       signal: options?.signal,
     })

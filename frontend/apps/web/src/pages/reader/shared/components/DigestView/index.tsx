@@ -6,6 +6,7 @@ import { useTranslation } from '@glean/i18n'
 import { entryService } from '@glean/api-client'
 import type { EntryWithState } from '@glean/types'
 import { ArticleReader, ArticleReaderSkeleton } from '@/components/ArticleReader'
+import { SearchModal } from '@/components/SearchModal'
 import { useEntry, useUpdateEntryState } from '@/hooks/useEntries'
 import { useListEntriesTranslation } from '@/hooks/useListEntriesTranslation'
 import { useAllSubscriptions } from '@/hooks/useSubscriptions'
@@ -69,9 +70,18 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
   const [focusedEntryId, setFocusedEntryId] = useState<string | null>(null)
   const [addFeedOpen, setAddFeedOpen] = useState(false)
-  const [scrollProgress, setScrollProgress] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
 
-  const { activePanel } = useDigestSidebarStore()
+  // --- Section state lifted from DigestSection, survives reader open/close ---
+  // Per-group open override. undefined = use default (open iff section has unread).
+  // Presence = user has toggled and their choice wins.
+  const [openOverrides, setOpenOverrides] = useState<Record<string, boolean>>({})
+  // "View all" (beyond MAX_VISIBLE_CARDS) toggle per group
+  const [showAllMap, setShowAllMap] = useState<Record<string, boolean>>({})
+  // Read-tail (已读 N 篇) toggle per group
+  const [readTailMap, setReadTailMap] = useState<Record<string, boolean>>({})
+
+  const { activePanel, setActivePanel } = useDigestSidebarStore()
   const isPanelOpen = !!activePanel
   const { autoMarkRead } = useDigestSettingsStore()
 
@@ -117,6 +127,53 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
     })
   }, [entries, folders, subscriptions])
 
+  // Reset per-date section state when date changes
+  useEffect(() => {
+    setOpenOverrides({})
+    setShowAllMap({})
+    setReadTailMap({})
+  }, [date])
+
+  // Collapse the sidebar whenever the user opens/closes an article or changes date
+  useEffect(() => {
+    setActivePanel(null)
+  }, [date, selectedEntryId, setActivePanel])
+
+  // Default-open rule: a section is open iff it still has any unread entry.
+  // User toggles stored in openOverrides win over the default.
+  const isSectionDefaultOpen = useCallback((entries: EntryWithState[]) => {
+    if (entries.length === 0) return false
+    return entries.some((e) => !e.is_read)
+  }, [])
+
+  // Per-section toggle with scroll anchor to prevent page jump when content above collapses.
+  const onToggleOpen = useCallback(
+    (groupKey: string, currentlyOpen: boolean, headerEl: HTMLElement | null) => {
+      const topBefore = headerEl?.getBoundingClientRect().top ?? 0
+      setOpenOverrides((prev) => ({ ...prev, [groupKey]: !currentlyOpen }))
+      if (headerEl) {
+        // Two rAFs: first lets React commit, second lets layout settle
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const topAfter = headerEl.getBoundingClientRect().top
+            const delta = topAfter - topBefore
+            if (Math.abs(delta) > 1)
+              window.scrollBy({ top: delta, left: 0, behavior: 'instant' })
+          })
+        })
+      }
+    },
+    []
+  )
+
+  const onToggleShowAll = useCallback((groupKey: string) => {
+    setShowAllMap((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))
+  }, [])
+
+  const onToggleReadTail = useCallback((groupKey: string) => {
+    setReadTailMap((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }))
+  }, [])
+
   // Flat entry list for j/k keyboard navigation
   const flatEntries = useMemo(() => sections.flatMap((s) => s.entries), [sections])
 
@@ -138,16 +195,28 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   // Selected entry for article reader
   const { data: selectedEntry, isLoading: isLoadingEntry } = useEntry(selectedEntryId ?? '')
 
-  // Scroll-based reading progress bar
+  // Scroll-based reading progress bar — writes a CSS variable directly to avoid re-renders
   useEffect(() => {
-    const onScroll = () => {
-      const scrollEl = document.documentElement
-      const scrollTop = scrollEl.scrollTop || document.body.scrollTop
-      const maxScroll = scrollEl.scrollHeight - scrollEl.clientHeight
-      setScrollProgress(maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0)
+    let rafId: number | null = null
+    const root = document.documentElement
+    const update = () => {
+      rafId = null
+      const scrollTop = root.scrollTop || document.body.scrollTop
+      const maxScroll = root.scrollHeight - root.clientHeight
+      const pct = maxScroll > 0 ? (scrollTop / maxScroll) * 100 : 0
+      root.style.setProperty('--digest-scroll-progress', String(pct))
     }
+    const onScroll = () => {
+      if (rafId !== null) return
+      rafId = window.requestAnimationFrame(update)
+    }
+    update()
     window.addEventListener('scroll', onScroll, { passive: true })
-    return () => window.removeEventListener('scroll', onScroll)
+    return () => {
+      window.removeEventListener('scroll', onScroll)
+      if (rafId !== null) window.cancelAnimationFrame(rafId)
+      root.style.removeProperty('--digest-scroll-progress')
+    }
   }, [])
 
   const handleCloseEntry = useCallback(() => {
@@ -186,13 +255,6 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
           data: { is_read: true },
         })
       }
-      // Scroll the clicked card into view so it stays visible when the reader opens.
-      window.requestAnimationFrame(() => {
-        const el =
-          document.getElementById(`digest-card-${entry.id}`) ??
-          document.querySelector(`[data-entry-id="${entry.id}"]`)
-        el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      })
     },
     [autoMarkRead, updateMutation]
   )
@@ -244,6 +306,20 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
             })
           }
         }
+        return
+      }
+
+      // cmd+k / ctrl+k — open search modal
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault()
+        setSearchOpen(true)
+        return
+      }
+
+      // / key — open search modal (when not inside an input)
+      if (e.key === '/') {
+        e.preventDefault()
+        setSearchOpen(true)
         return
       }
 
@@ -409,7 +485,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
       scrollTimersRef.current.forEach((t) => clearTimeout(t))
       scrollTimersRef.current.clear()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [entryIdsKey, selectedEntryId])
 
   // Determine panel margin for desktop layout
@@ -426,7 +502,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
       <div
         className="pointer-events-none fixed left-0 top-0 z-[100] h-0.5 transition-[width] duration-100"
         style={{
-          width: `${scrollProgress}%`,
+          width: 'calc(var(--digest-scroll-progress, 0) * 1%)',
           background: 'var(--digest-accent, #B8312F)',
           right: isMobile ? 0 : `${panelOffset}px`,
         }}
@@ -452,6 +528,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
             return new Date(y, m - 1, d)
           })()}
           isTranslating={isTranslating}
+          onOpenSearch={() => setSearchOpen(true)}
         />
 
         {selectedEntryId ? (
@@ -476,9 +553,12 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
               </aside>
             )}
 
-            {/* Right pane — article reader */}
+            {/* Right pane — article reader.
+                NOTE: overflow is hidden here so the ArticleReader's own scroll
+                container is the sole scroller — this lets its sticky action
+                header actually pin to the top of the visible article. */}
             <main
-              className="min-w-0 flex-1 overflow-y-auto"
+              className="flex min-h-0 min-w-0 flex-1 overflow-hidden"
               style={{
                 background: 'var(--digest-bg-card, #FFFFFF)',
                 maxHeight: 'calc(100vh - 60px)',
@@ -512,7 +592,8 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
               ref={mainRef}
               className="min-w-0 flex-1 px-[18px] pb-40 sm:px-6 md:px-8 lg:px-8 xl:px-12"
             >
-              <div className="mx-auto max-w-[1600px]">
+              {/* overflow-anchor: auto is a browser-native safety net against layout jumps */}
+              <div className="mx-auto max-w-[1600px]" style={{ overflowAnchor: 'auto' }}>
                 {error && (
                   <div className="py-8">
                     <Alert variant="error">
@@ -536,21 +617,33 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
                 )}
 
                 {!isLoading &&
-                  sections.map((section) => (
-                    <DigestSection
-                      key={`${section.groupKind}:${section.groupId ?? '__others__'}`}
-                      groupId={section.groupId}
-                      groupName={section.groupName}
-                      groupKind={section.groupKind}
-                      entries={section.entries}
-                      sourceCount={section.sourceCount}
-                      onSelectEntry={handleSelectEntry}
-                      isCompact={section.groupKind === 'folder' && section.groupId === null}
-                      focusedEntryId={focusedEntryId}
-                      translations={translations}
-                      hideHeader={section.groupKind === 'all'}
-                    />
-                  ))}
+                  sections.map((section) => {
+                    const groupKey = `${section.groupKind}:${section.groupId ?? '__others__'}`
+                    const defaultOpen = isSectionDefaultOpen(section.entries)
+                    const isOpen = openOverrides[groupKey] ?? defaultOpen
+                    return (
+                      <DigestSection
+                        key={groupKey}
+                        groupKey={groupKey}
+                        groupId={section.groupId}
+                        groupName={section.groupName}
+                        groupKind={section.groupKind}
+                        entries={section.entries}
+                        sourceCount={section.sourceCount}
+                        onSelectEntry={handleSelectEntry}
+                        isCompact={section.groupKind === 'folder' && section.groupId === null}
+                        focusedEntryId={focusedEntryId}
+                        translations={translations}
+                        hideHeader={section.groupKind === 'all'}
+                        isOpen={isOpen}
+                        onToggleOpen={(gk, headerEl) => onToggleOpen(gk, isOpen, headerEl)}
+                        showAll={showAllMap[groupKey] ?? false}
+                        onToggleShowAll={() => onToggleShowAll(groupKey)}
+                        readTailOpen={readTailMap[groupKey] ?? false}
+                        onToggleReadTail={() => onToggleReadTail(groupKey)}
+                      />
+                    )
+                  })}
 
                 {/* Bottom "yesterday" link */}
                 {!isLoading && entries.length > 0 && (
@@ -612,6 +705,17 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
 
       {/* Add Feed modal */}
       <AddFeedModal open={addFeedOpen} onClose={() => setAddFeedOpen(false)} />
+
+      {/* Search modal */}
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        initialDate={date}
+        onSelectEntry={(entry) => {
+          setSearchOpen(false)
+          handleSelectEntry(entry)
+        }}
+      />
     </div>
   )
 }

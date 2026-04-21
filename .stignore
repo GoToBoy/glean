@@ -1,6 +1,8 @@
 // Git
 .git
 .git/**
+.github/**
+.github
 
 // Node / frontend
 node_modules

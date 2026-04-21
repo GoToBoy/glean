@@ -33,6 +33,7 @@ from .routers import (
     entries,
     feeds,
     folders,
+    icons,
     system,
 )
 
@@ -73,6 +74,7 @@ def get_oss_routers() -> list[RouterConfig]:
         (ai.router, "/api/ai", ["AI Integration"]),
         (bookmarks.router, "/api/bookmarks", ["Bookmarks"]),
         (folders.router, "/api/folders", ["Folders"]),
+        (icons.router, "/api/icons", ["Icons"]),
         (system.router, "/api/system", ["System"]),
         (api_tokens.router, "/api/tokens", ["API Tokens"]),
     ]

@@ -158,7 +158,7 @@ export default function SettingsPage() {
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-medium shadow-sm ring-1 transition-all ${
                 user?.is_active
-                  ? 'bg-green-500/10 text-green-600 ring-green-500/20 hover:bg-green-500/20'
+                  ? 'bg-success/10 text-success ring-success/20 hover:bg-success/20'
                   : 'bg-destructive/10 text-destructive ring-destructive/20 hover:bg-destructive/20'
               }`}
             >
@@ -263,7 +263,7 @@ export default function SettingsPage() {
       </div>
 
       {saveSuccess && (
-        <div className="flex items-center gap-2 rounded-lg bg-green-500/10 px-4 py-3 text-sm text-green-600 ring-1 ring-green-500/20">
+        <div className="flex items-center gap-2 rounded-lg bg-success/10 px-4 py-3 text-sm text-success ring-1 ring-success/20">
           <CheckCircle className="h-4 w-4" />
           {t('readLater.settingsSaved')}
         </div>
@@ -279,10 +279,10 @@ export default function SettingsPage() {
         label: t('appearance.themes.night'),
         description: t('appearance.themes.nightDesc'),
         preview: {
-          bg: 'bg-slate-950',
-          card: 'bg-slate-900',
-          primary: 'bg-amber-500',
-          text: 'bg-slate-100',
+          bg: 'bg-[hsl(220_20%_10%)]',
+          card: 'bg-[hsl(220_18%_13%)]',
+          primary: 'bg-primary',
+          text: 'bg-[hsl(45_30%_96%)]',
         },
       },
       {
@@ -291,10 +291,10 @@ export default function SettingsPage() {
         label: t('appearance.themes.day'),
         description: t('appearance.themes.dayDesc'),
         preview: {
-          bg: 'bg-slate-50',
-          card: 'bg-white',
-          primary: 'bg-amber-500',
-          text: 'bg-slate-900',
+          bg: 'bg-[hsl(45_30%_97%)]',
+          card: 'bg-[hsl(0_0%_100%)]',
+          primary: 'bg-primary',
+          text: 'bg-[hsl(220_20%_15%)]',
         },
       },
       {
@@ -303,10 +303,10 @@ export default function SettingsPage() {
         label: t('appearance.themes.auto'),
         description: t('appearance.themes.autoDesc'),
         preview: {
-          bg: 'bg-gradient-to-br from-slate-950 to-slate-50',
-          card: 'bg-gradient-to-br from-slate-900 to-white',
-          primary: 'bg-amber-500',
-          text: 'bg-gradient-to-br from-slate-100 to-slate-900',
+          bg: 'bg-gradient-to-br from-[hsl(220_20%_10%)] to-[hsl(45_30%_97%)]',
+          card: 'bg-gradient-to-br from-[hsl(220_18%_13%)] to-[hsl(0_0%_100%)]',
+          primary: 'bg-primary',
+          text: 'bg-gradient-to-br from-[hsl(45_30%_96%)] to-[hsl(220_20%_15%)]',
         },
       },
     ]
@@ -394,9 +394,10 @@ export default function SettingsPage() {
     )
   }
 
-  const settingsRootClass = 'h-full w-full px-4 py-6 md:px-8 md:py-8'
-  const settingsFrameClass =
-    'min-h-0 flex-1 overflow-hidden border bg-card/50 shadow-xl backdrop-blur-sm'
+  const settingsRootClass = 'h-full w-full px-4 py-4 md:px-8 md:py-6'
+  // Inner frame: no border/shadow/backdrop-blur — those create the "viewport-hugging
+  // card" look. Just a flex container that lets the tabs region fill remaining height.
+  const settingsFrameClass = 'min-h-0 flex-1 overflow-hidden'
   const tabsRailClass =
     'w-full shrink-0 border-b bg-muted/20 md:w-56 md:overflow-y-auto md:border-r md:border-b-0'
   const tabsListClass =
@@ -416,7 +417,7 @@ export default function SettingsPage() {
             orientation="vertical"
             className="h-full w-full"
           >
-            <div className="flex h-full w-full flex-1 flex-col md:flex-row">
+            <div className="flex h-full min-h-0 w-full flex-1 flex-col md:flex-row">
               <div className={tabsRailClass}>
                 <TabsList variant="underline" className={tabsListClass}>
                   <TabsTab value="profile" className={tabsTabClass}>
@@ -450,7 +451,7 @@ export default function SettingsPage() {
                 </TabsList>
               </div>
 
-              <div className="w-full min-w-0 flex-1 overflow-y-auto">
+              <div className="w-full min-h-0 min-w-0 flex-1 overflow-y-auto">
                 <TabsPanel value="profile" className={panelClass}>
                   <div className={panelHeaderClass}>
                     <div className="mb-2 flex items-center gap-3">

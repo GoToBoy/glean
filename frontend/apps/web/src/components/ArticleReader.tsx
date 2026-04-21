@@ -202,6 +202,8 @@ export function ArticleReader({
   const [isMoreSheetOpen, setIsMoreSheetOpen] = useState(false)
   const [hasOutline, setHasOutline] = useState(false)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const headerSentinelRef = useRef<HTMLDivElement>(null)
+  const [isAtTop, setIsAtTop] = useState(true)
   const [needsPreChoice, setNeedsPreChoice] = useState(false)
   const [translatePreUnknown, setTranslatePreUnknown] = useState(false)
   const [translatedTitle, setTranslatedTitle] = useState<string | null>(null)
@@ -249,6 +251,9 @@ export function ArticleReader({
     onClose
   )
   const [translationLoadingPhase, setTranslationLoadingPhase] = useState<'idle' | 'start' | 'settled'>('idle')
+
+  // The title to display — prefer translated title when translation is active
+  const displayTitle = (showTranslation && translatedTitle) ? translatedTitle : entry.title
 
   // Apply smart defaults based on mobile detection
   // On mobile: show close button, hide fullscreen button
@@ -356,6 +361,26 @@ export function ArticleReader({
     setTranslatePreUnknown(false)
   }, [entry.id])
 
+  // Observe the header sentinel to hide the sticky action bar when the full
+  // header is visible (at top), and reveal it only after the user scrolls past.
+  useEffect(() => {
+    if (isMobile) return
+    const root = scrollContainerRef.current
+    const sentinel = headerSentinelRef.current
+    if (!root || !sentinel) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry) return
+        setIsAtTop(entry.isIntersecting)
+      },
+      { root, threshold: 0 }
+    )
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [isMobile, entry.id])
+
   useEffect(() => {
     const contentEl = contentRef.current
     if (!contentEl) return
@@ -459,6 +484,199 @@ export function ArticleReader({
           ? t('actions.archived')
           : t('actions.archive')
 
+  // Full (non-sticky) header action buttons — labeled, own-row toolbar.
+  // Restores the ORIGINAL header layout with icon + text labels.
+  const fullHeaderActions = (
+    <div className="flex flex-wrap items-center gap-2">
+      {canTranslate && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={showTranslation ? toggleTranslation : activateTranslation}
+          className={translationButtonClassName}
+        >
+          <Languages className="h-4 w-4" />
+          <span>
+            {showTranslation
+              ? t('translation.hideTranslation')
+              : isTranslationBusy
+                ? t('translation.translating')
+                : t('translation.translate')}
+          </span>
+        </Button>
+      )}
+      {!hideReadStatus && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleToggleRead}
+          className={`action-btn ${readAnimation} ${entry.is_read ? 'text-muted-foreground' : 'text-primary'}`}
+        >
+          <CheckCheck className="h-4 w-4" />
+          <span>{entry.is_read ? t('actions.markUnread') : t('actions.markRead')}</span>
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleToggleReadLater}
+        className={`action-btn ${readLaterAnimation} ${entry.read_later ? 'text-primary' : 'text-muted-foreground'}`}
+      >
+        <Clock className="h-4 w-4" />
+        <span>{entry.read_later ? t('actions.savedForLater') : t('actions.readLater')}</span>
+      </Button>
+      {entry.url && (
+        <Button
+          variant="ghost"
+          size="sm"
+          render={(props) => (
+            <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
+          )}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ExternalLink className="h-4 w-4" />
+          <span>{t('actions.openOriginal')}</span>
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={handleToggleBookmark}
+        disabled={isBookmarking}
+        className={bookmarkButtonClassName}
+      >
+        {archiveFlowState === 'archiving' || archiveFlowState === 'unarchiving' ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Archive className="h-4 w-4" />
+        )}
+        <span>{bookmarkLabel}</span>
+      </Button>
+      {shouldShowFullscreenButton && onToggleFullscreen && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onToggleFullscreen}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
+          <span>{isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}</span>
+        </Button>
+      )}
+      {shouldShowCloseButton && onClose && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+          <span>{t('actions.close')}</span>
+        </Button>
+      )}
+    </div>
+  )
+
+  // Sticky condensed bar action buttons — compact icon-only.
+  const stickyHeaderActions = (
+    <div className="flex shrink-0 items-center gap-1">
+      {canTranslate && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={showTranslation ? toggleTranslation : activateTranslation}
+          title={
+            showTranslation
+              ? t('translation.hideTranslation')
+              : isTranslationBusy
+                ? t('translation.translating')
+                : t('translation.translate')
+          }
+          className={translationButtonClassName}
+        >
+          <Languages className="h-4 w-4" />
+        </Button>
+      )}
+      {!hideReadStatus && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={handleToggleRead}
+          title={entry.is_read ? t('actions.markUnread') : t('actions.markRead')}
+          className={`action-btn ${readAnimation} ${entry.is_read ? 'text-muted-foreground' : 'text-primary'}`}
+        >
+          <CheckCheck className="h-4 w-4" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleToggleReadLater}
+        title={entry.read_later ? t('actions.savedForLater') : t('actions.readLater')}
+        className={`action-btn ${readLaterAnimation} ${entry.read_later ? 'text-primary' : 'text-muted-foreground'}`}
+      >
+        <Clock className="h-4 w-4" />
+      </Button>
+      {entry.url && (
+        <Button
+          variant="ghost"
+          size="icon"
+          title={t('actions.openOriginal')}
+          render={(props) => (
+            <a {...props} href={entry.url} target="_blank" rel="noopener noreferrer" />
+          )}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <ExternalLink className="h-4 w-4" />
+        </Button>
+      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={handleToggleBookmark}
+        disabled={isBookmarking}
+        title={bookmarkLabel}
+        className={bookmarkButtonClassName}
+      >
+        {archiveFlowState === 'archiving' || archiveFlowState === 'unarchiving' ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Archive className="h-4 w-4" />
+        )}
+      </Button>
+      {shouldShowFullscreenButton && onToggleFullscreen && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onToggleFullscreen}
+          title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          {isFullscreen ? (
+            <Minimize2 className="h-4 w-4" />
+          ) : (
+            <Maximize2 className="h-4 w-4" />
+          )}
+        </Button>
+      )}
+      {shouldShowCloseButton && onClose && (
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={onClose}
+          title={t('actions.close')}
+          className="text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
+    </div>
+  )
+
   return (
     <div className="bg-background relative flex min-w-0 flex-1 flex-col overflow-hidden">
       {/* Mobile Header - auto-hide on scroll */}
@@ -490,147 +708,9 @@ export function ArticleReader({
           </div>
           {showTranslation && translatedTitle && (
             <div className="px-4 pb-3">
-              <p className="text-primary/85 line-clamp-3 text-sm font-medium">{translatedTitle}</p>
+              <p className="text-foreground/85 line-clamp-3 text-sm font-medium">{translatedTitle}</p>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Desktop Header */}
-      {!isMobile && (
-        <div className="border-border bg-card border-b px-6 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <h1 className="font-display text-foreground text-2xl leading-tight font-bold">
-              {entry.title}
-            </h1>
-            <div className="flex shrink-0 items-center gap-1">
-              {shouldShowFullscreenButton && onToggleFullscreen && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onToggleFullscreen}
-                  title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  {isFullscreen ? (
-                    <Minimize2 className="h-5 w-5" />
-                  ) : (
-                    <Maximize2 className="h-5 w-5" />
-                  )}
-                </Button>
-              )}
-              {shouldShowCloseButton && onClose && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={onClose}
-                  title={t('actions.close')}
-                  className="text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-              )}
-            </div>
-          </div>
-
-          {showTranslation && translatedTitle && (
-            <p className="text-primary/85 text-base leading-relaxed font-medium">
-              {translatedTitle}
-            </p>
-          )}
-
-          <div className="text-muted-foreground mb-4 flex items-center gap-3 text-sm">
-            {entry.author && <span className="font-medium">{entry.author}</span>}
-            {entry.author && entry.published_at && <span>·</span>}
-            {entry.published_at && (
-              <span>{format(new Date(entry.published_at), 'MMMM d, yyyy')}</span>
-            )}
-          </div>
-
-          {/* Desktop Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleOpenExternal}
-              className="action-btn action-btn-external text-muted-foreground"
-            >
-              <Globe className="h-4 w-4" />
-              <span>{t('actions.openOriginal')}</span>
-            </Button>
-
-            {canTranslate && showTranslation ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={toggleTranslation}
-                className={translationButtonClassName}
-              >
-                <span className="translate-action-btn__icon-wrap">
-                  <span className="translate-action-btn__ring" aria-hidden="true" />
-                  <span className="translate-action-btn__dot" aria-hidden="true" />
-                  <Languages className="translate-action-btn__icon h-4 w-4" />
-                </span>
-                <span>{t('translation.hideTranslation')}</span>
-              </Button>
-            ) : canTranslate ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={activateTranslation}
-                className={translationButtonClassName}
-              >
-                <span className="translate-action-btn__icon-wrap">
-                  <span className="translate-action-btn__ring" aria-hidden="true" />
-                  <span className="translate-action-btn__dot" aria-hidden="true" />
-                  <Languages className="translate-action-btn__icon h-4 w-4" />
-                </span>
-                <span>
-                  {isTranslationBusy ? t('translation.translating') : t('translation.translate')}
-                </span>
-              </Button>
-            ) : null}
-
-            {!hideReadStatus && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleToggleRead}
-                className={`action-btn ${readAnimation} ${entry.is_read ? 'text-muted-foreground' : 'text-primary'}`}
-              >
-                <CheckCheck className="h-4 w-4" />
-                <span>{entry.is_read ? t('actions.markUnread') : t('actions.markRead')}</span>
-              </Button>
-            )}
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleReadLater}
-              className={`action-btn ${readLaterAnimation} ${entry.read_later ? 'text-primary' : 'text-muted-foreground'}`}
-            >
-              <Clock className="h-4 w-4" />
-              <span>{entry.read_later ? t('actions.savedForLater') : t('actions.readLater')}</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleToggleBookmark}
-              disabled={isBookmarking}
-              className={bookmarkButtonClassName}
-            >
-              {archiveFlowState === 'archiving' || archiveFlowState === 'unarchiving' ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <span className="archive-action-btn__icon-wrap">
-                  <span className="archive-action-btn__pulse" aria-hidden="true" />
-                  <Archive className="h-4 w-4" />
-                </span>
-              )}
-              <span>{bookmarkLabel}</span>
-            </Button>
-          </div>
         </div>
       )}
 
@@ -648,6 +728,62 @@ export function ArticleReader({
               onTouchMove={closeGestureHandlers.onTouchMove}
               onTouchEnd={closeGestureHandlers.onTouchEnd}
             >
+              {/* Desktop: full (non-sticky) title + metadata + inline action
+                  buttons — scrolls away. Restores the original header layout
+                  so actions are visible at the top without relying on the
+                  sticky bar. */}
+              {!isMobile && (
+                <div className="bg-card/95 border-border border-b">
+                  <div className="mx-auto w-full max-w-5xl px-6 py-6">
+                  <h1
+                    className="font-display text-foreground text-2xl leading-tight font-bold"
+                    title={displayTitle}
+                  >
+                    {displayTitle}
+                  </h1>
+                  {showTranslation && translatedTitle && (
+                    <h2 className="text-foreground/85 mt-2 text-xl leading-snug font-semibold">
+                      {translatedTitle}
+                    </h2>
+                  )}
+                  {(entry.author || entry.published_at) && (
+                    <div className="text-muted-foreground mt-3 flex items-center gap-3 text-sm">
+                      {entry.author && <span className="font-medium">{entry.author}</span>}
+                      {entry.author && entry.published_at && <span>·</span>}
+                      {entry.published_at && (
+                        <span>{format(new Date(entry.published_at), 'MMMM d, yyyy')}</span>
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-4">{fullHeaderActions}</div>
+                  {/* Sentinel: when visible in the scroll root, we're at the top. */}
+                  <div ref={headerSentinelRef} aria-hidden="true" className="h-px" />
+                  </div>
+                </div>
+              )}
+
+              {/* Desktop sticky action row — pins to top of scroll container once
+                  the user scrolls past the full title above. Contains a truncated
+                  title (becomes the visible heading once full title scrolls away)
+                  plus the action buttons. */}
+              {!isMobile && (
+                <div
+                  className={`bg-card/95 border-border sticky top-0 z-20 mt-6 border-b backdrop-blur-sm transition-opacity duration-150 ${
+                    isAtTop ? 'pointer-events-none -translate-y-2 opacity-0 hidden' : 'opacity-100'
+                  }`}
+                >
+                  <div className="mx-auto flex max-w-5xl items-center gap-3 px-6 py-2">
+                    <h2
+                      className="font-display text-foreground/90 min-w-0 flex-1 truncate text-sm font-semibold"
+                      title={displayTitle}
+                    >
+                      {displayTitle}
+                    </h2>
+                    {stickyHeaderActions}
+                  </div>
+                </div>
+              )}
+
               <div
                 className={`px-4 py-6 sm:px-8 sm:py-8 ${!isMobile ? 'mx-auto max-w-5xl' : 'max-w-3xl'}`}
               >

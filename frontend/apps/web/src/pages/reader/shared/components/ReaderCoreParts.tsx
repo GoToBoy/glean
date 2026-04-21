@@ -12,6 +12,7 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { stripHtmlTags } from '../../../../lib/html'
+import { iconProxyUrl } from '../../../../lib/icon'
 import {
   buttonVariants,
   Skeleton,
@@ -176,7 +177,7 @@ export function EntryListItem({
               <div className="mb-1 flex items-center gap-1.5">
                 {entry.feed_icon_url && !iconLoadFailed && isLikelyImageUrl(entry.feed_icon_url) ? (
                   <img
-                    src={entry.feed_icon_url}
+                    src={iconProxyUrl(entry.feed_icon_url) ?? undefined}
                     alt=""
                     className="h-3.5 w-3.5 shrink-0 rounded-sm object-cover"
                     loading="lazy"

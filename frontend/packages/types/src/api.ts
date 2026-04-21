@@ -123,6 +123,15 @@ export interface AIDailySummaryResponse {
 /** Entry list response */
 export type EntryListResponse = PaginatedResponse<EntryWithState>
 
+/** Entry search response */
+export interface EntrySearchResponse {
+  items: EntryWithState[]
+  total: number
+  query: string
+  scope: 'all' | 'date' | 'week'
+  took_ms: number
+}
+
 /** Subscription list response (paginated) */
 export interface SubscriptionListResponse {
   items: Subscription[]

@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { useShallow } from 'zustand/react/shallow'
 import axios from 'axios'
 import { logger } from '@glean/logger'
 import { hashPassword } from '@glean/api-client'
@@ -91,6 +92,12 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 )
+
+export const useAuthAdmin = () => useAuthStore((s) => s.admin)
+export const useAuthToken = () => useAuthStore((s) => s.token)
+export const useIsAuthenticated = () => useAuthStore((s) => s.isAuthenticated)
+export const useAuthActions = () =>
+  useAuthStore(useShallow((s) => ({ login: s.login, logout: s.logout, setToken: s.setToken })))
 
 // Initialize axios with stored token
 const storedAuth = localStorage.getItem('glean-admin-auth')

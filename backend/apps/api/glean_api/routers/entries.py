@@ -6,7 +6,8 @@ Provides endpoints for reading and managing feed entries.
 
 import asyncio
 from datetime import date, datetime
-from typing import Annotated
+from typing import Annotated, Literal
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
@@ -15,6 +16,7 @@ from glean_core import get_logger
 from glean_core.schemas import (
     EntryListResponse,
     EntryResponse,
+    EntrySearchResponse,
     ParagraphTranslationsResponse,
     TranslateEntryRequest,
     TranslateTextsRequest,
@@ -119,6 +121,45 @@ async def list_today_entries(
         per_page=limit,
         view="today-board",
     )
+
+@router.get("/search", response_model=EntrySearchResponse)
+async def search_entries(
+    current_user: Annotated[UserResponse, Depends(get_current_user)],
+    entry_service: Annotated[EntryService, Depends(get_entry_service)],
+    q: Annotated[str, Query(min_length=2, max_length=200)],
+    scope: Literal["all", "date", "week"] = Query("all"),
+    date_param: str | None = Query(None, alias="date", description="YYYY-MM-DD, required when scope=date"),
+    limit: int = Query(30, ge=1, le=100),
+) -> EntrySearchResponse:
+    """
+    Search entries by keyword across title and summary.
+
+    Args:
+        q: Search query string (min 2, max 200 chars).
+        scope: Time scope — 'all', 'date' (requires date param), or 'week'.
+        date_param: ISO date string (YYYY-MM-DD), required when scope='date'.
+        limit: Maximum number of results to return (max 100).
+        current_user: Current authenticated user.
+        entry_service: Entry service.
+
+    Returns:
+        Search results with timing information.
+    """
+    items, total, took_ms = await entry_service.search_entries(
+        user_id=UUID(current_user.id),
+        query=q,
+        scope=scope,
+        date=date_param,
+        limit=limit,
+    )
+    return EntrySearchResponse(
+        items=items,
+        total=total,
+        query=q,
+        scope=scope,
+        took_ms=took_ms,
+    )
+
 
 @router.get("/{entry_id}")
 async def get_entry(

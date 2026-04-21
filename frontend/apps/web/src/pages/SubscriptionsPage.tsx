@@ -9,6 +9,7 @@ import {
   useImportOPML,
   useExportOPML,
 } from '../hooks/useSubscriptions'
+import { iconProxyUrl } from '../lib/icon'
 import { useFolderStore } from '../stores/folderStore'
 import { useTranslation } from '@glean/i18n'
 import type { Subscription, FolderTreeNode } from '@glean/types'
@@ -645,7 +646,7 @@ function SubscriptionRow({
       <div className="flex flex-1 items-center gap-3 overflow-hidden">
         {subscription.feed.icon_url ? (
           <img
-            src={subscription.feed.icon_url}
+            src={iconProxyUrl(subscription.feed.icon_url) ?? undefined}
             alt=""
             className="bg-muted h-8 w-8 shrink-0 rounded object-cover"
           />
@@ -737,7 +738,7 @@ interface EditSubscriptionDialogProps {
   onClose: () => void
 }
 
-function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscriptionDialogProps) {
+export function EditSubscriptionDialog({ subscription, folders, onClose }: EditSubscriptionDialogProps) {
   const { t } = useTranslation('feeds')
   const updateMutation = useUpdateSubscription()
   const { createFolder } = useFolderStore()

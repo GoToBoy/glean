@@ -4,10 +4,13 @@ Entry service.
 Handles entry retrieval and user-specific entry state management.
 """
 
+import time as _time
 from datetime import UTC, datetime, timedelta
+from typing import Literal
+from uuid import UUID
 
 from arq.connections import ArqRedis
-from sqlalchemy import desc, func, select
+from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from glean_core import get_logger
@@ -16,6 +19,7 @@ from glean_core.schemas import (
     EntryResponse,
     UpdateEntryStateRequest,
 )
+from glean_core.server_time import get_server_day_range
 from glean_database.models import (
     Bookmark,
     Entry,
@@ -380,6 +384,137 @@ class EntryService:
 
         # Return updated entry
         return await self.get_entry(entry_id, user_id)
+
+    async def search_entries(
+        self,
+        user_id: UUID,
+        query: str,
+        scope: Literal["all", "date", "week"] = "all",
+        date: str | None = None,
+        limit: int = 30,
+    ) -> tuple[list[EntryResponse], int, int]:
+        """
+        Search entries by keyword across title and summary.
+
+        Args:
+            user_id: User identifier.
+            query: Search query string (min 2, max 200 chars).
+            scope: Time scope — 'all', 'date' (requires date param), or 'week'.
+            date: ISO date string (YYYY-MM-DD), required when scope='date'.
+            limit: Maximum number of results to return (capped at 100).
+
+        Returns:
+            Tuple of (items, total, took_ms).
+        """
+        user_id_str = str(user_id)
+        query = query.strip()
+        if len(query) < 2:
+            return [], 0, 0
+
+        limit = min(limit, 100)
+        q_pattern = f"%{query}%"
+
+        # Get subscribed feed IDs for this user
+        subscriptions_stmt = select(Subscription.feed_id).where(
+            Subscription.user_id == user_id_str
+        )
+        result = await self.session.execute(subscriptions_stmt)
+        feed_ids = [row[0] for row in result.all()]
+
+        if not feed_ids:
+            return [], 0, 0
+
+        # Subquery to get bookmark_id for entry (limit 1 in case of duplicates)
+        bookmark_id_subq = (
+            select(Bookmark.id)
+            .where(Bookmark.user_id == user_id_str)
+            .where(Bookmark.entry_id == Entry.id)
+            .correlate(Entry)
+            .limit(1)
+            .scalar_subquery()
+        )
+
+        # Build base query
+        stmt = (
+            select(
+                Entry,
+                UserEntry,
+                bookmark_id_subq.label("bookmark_id"),
+                Feed.title.label("feed_title"),
+                Feed.icon_url.label("feed_icon_url"),
+            )
+            .join(Feed, Entry.feed_id == Feed.id)
+            .outerjoin(
+                UserEntry,
+                (Entry.id == UserEntry.entry_id) & (UserEntry.user_id == user_id_str),
+            )
+            .where(Entry.feed_id.in_(feed_ids))
+            .where(or_(Entry.title.ilike(q_pattern), Entry.summary.ilike(q_pattern)))
+        )
+
+        # Apply scope filter
+        if scope == "date":
+            if date:
+                from datetime import date as date_type
+
+                try:
+                    parsed_date = date_type.fromisoformat(date)
+                except ValueError:
+                    return [], 0, 0
+                collected_after, collected_before, _ = get_server_day_range(parsed_date)
+                stmt = stmt.where(Entry.published_at >= collected_after).where(
+                    Entry.published_at < collected_before
+                )
+        elif scope == "week":
+            week_ago = datetime.now(UTC) - timedelta(days=7)
+            stmt = stmt.where(Entry.published_at >= week_ago)
+
+        # Measure query time
+        t0 = _time.perf_counter()
+
+        # Count total
+        count_stmt = select(func.count()).select_from(stmt.subquery())
+        total_result = await self.session.execute(count_stmt)
+        total = total_result.scalar() or 0
+
+        # Fetch results ordered by published_at DESC
+        items_stmt = stmt.order_by(desc(Entry.published_at), desc(Entry.id)).limit(limit)
+        result = await self.session.execute(items_stmt)
+        rows = result.all()
+
+        took_ms = int((_time.perf_counter() - t0) * 1000)
+
+        items: list[EntryResponse] = []
+        for entry, user_entry, bookmark_id, feed_title, feed_icon_url in rows:
+            items.append(
+                EntryResponse(
+                    id=str(entry.id),
+                    feed_id=str(entry.feed_id),
+                    url=str(entry.url),
+                    title=str(entry.title),
+                    author=entry.author,
+                    content=entry.content,
+                    summary=entry.summary,
+                    content_backfill_status=entry.content_backfill_status,
+                    content_backfill_attempts=entry.content_backfill_attempts,
+                    content_backfill_at=entry.content_backfill_at,
+                    content_backfill_error=entry.content_backfill_error,
+                    content_source=entry.content_source,
+                    published_at=entry.published_at,
+                    ingested_at=entry.ingested_at,
+                    created_at=entry.created_at,
+                    is_read=bool(user_entry.is_read) if user_entry else False,
+                    read_later=bool(user_entry.read_later) if user_entry else False,
+                    read_later_until=user_entry.read_later_until if user_entry else None,
+                    read_at=user_entry.read_at if user_entry else None,
+                    is_bookmarked=bookmark_id is not None,
+                    bookmark_id=str(bookmark_id) if bookmark_id else None,
+                    feed_title=feed_title,
+                    feed_icon_url=feed_icon_url,
+                )
+            )
+
+        return items, total, took_ms
 
     async def mark_all_read(
         self, user_id: str, feed_id: str | None = None, folder_id: str | None = None

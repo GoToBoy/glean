@@ -48,6 +48,18 @@ export function useEntries(params: EntryListParams = {}) {
   })
 }
 
+/** Thin wrapper returning only { items, total, isLoading } — use instead of useEntries when the full response is not needed. */
+export function useEntryList(params: EntryListParams = {}) {
+  return useQuery<EntryListResponse, Error, { items: Entry[]; total: number }>({
+    queryKey: ['admin', 'entries', params],
+    queryFn: async () => {
+      const response = await api.get('/entries', { params })
+      return response.data
+    },
+    select: (data) => ({ items: data.items, total: data.total }),
+  })
+}
+
 export function useEntry(entryId: string | null) {
   return useQuery<EntryDetail>({
     queryKey: ['admin', 'entry', entryId],
@@ -65,8 +77,20 @@ export function useDeleteEntry() {
   return useMutation({
     mutationFn: async (entryId: string) => {
       await api.delete(`/entries/${entryId}`)
+      return entryId
     },
-    onSuccess: () => {
+    onSuccess: (entryId: string) => {
+      queryClient.setQueriesData<EntryListResponse>(
+        { queryKey: ['admin', 'entries'] },
+        (old) => {
+          if (!old) return old
+          const items = old.items.filter((e) => e.id !== entryId)
+          const removed = old.items.length - items.length
+          return { ...old, items, total: old.total - removed }
+        },
+      )
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'entries'] })
     },
   })
@@ -78,9 +102,29 @@ export function useBatchEntryOperation() {
   return useMutation({
     mutationFn: async ({ action, entryIds }: { action: string; entryIds: string[] }) => {
       const response = await api.post('/entries/batch', { action, entry_ids: entryIds })
-      return response.data
+      return response.data as { deleted_ids?: string[] }
     },
-    onSuccess: () => {
+    onSuccess: (result: { deleted_ids?: string[] }) => {
+      if (result.deleted_ids?.length) {
+        const deletedSet = new Set(result.deleted_ids)
+        queryClient.setQueriesData<EntryListResponse>(
+          { queryKey: ['admin', 'entries'] },
+          (old) => {
+            if (!old) return old
+            const filtered = old.items.filter((e) => !deletedSet.has(e.id))
+            return {
+              ...old,
+              items: filtered,
+              total: old.total - (old.items.length - filtered.length),
+            }
+          },
+        )
+      } else {
+        // For non-delete batch ops (if any), invalidate to get authoritative state
+        queryClient.invalidateQueries({ queryKey: ['admin', 'entries'] })
+      }
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'entries'] })
     },
   })

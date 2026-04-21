@@ -34,13 +34,19 @@ export function useUsers(params: UserListParams = {}) {
   })
 }
 
-export function useAllUsers() {
+/**
+ * Fetches all users (up to 100) for use in import dialogs.
+ * Disabled by default — pass { enabled: true } when the dialog mounts.
+ * Wave 3: flip enabled=true at the import dialog callsite in UsersPage.
+ */
+export function useAllUsers({ enabled = false }: { enabled?: boolean } = {}) {
   return useQuery<UserListResponse>({
     queryKey: ['admin', 'users', 'all'],
     queryFn: async () => {
       const response = await api.get('/users', { params: { per_page: 100 } })
       return response.data
     },
+    enabled,
   })
 }
 
@@ -50,9 +56,21 @@ export function useToggleUserStatus() {
   return useMutation({
     mutationFn: async ({ userId, isActive }: { userId: string; isActive: boolean }) => {
       const response = await api.patch(`/users/${userId}/status`, { is_active: isActive })
-      return response.data
+      return response.data as User
     },
-    onSuccess: () => {
+    onSuccess: (updatedUser: User) => {
+      queryClient.setQueriesData<UserListResponse>(
+        { queryKey: ['admin', 'users'] },
+        (old) => {
+          if (!old) return old
+          return {
+            ...old,
+            items: old.items.map((u) => (u.id === updatedUser.id ? { ...u, ...updatedUser } : u)),
+          }
+        },
+      )
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
     },
   })

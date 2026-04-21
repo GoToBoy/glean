@@ -45,6 +45,7 @@ from .config import (
 from .entry import (
     EntryListResponse,
     EntryResponse,
+    EntrySearchResponse,
     ParagraphTranslationsResponse,
     TranslateEntryRequest,
     TranslateTextsRequest,
@@ -108,6 +109,7 @@ __all__ = [
     # Entry
     "EntryResponse",
     "EntryListResponse",
+    "EntrySearchResponse",
     "UpdateEntryStateRequest",
     "TranslateEntryRequest",
     "TranslateTextsRequest",

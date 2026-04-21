@@ -171,28 +171,36 @@ export function DigestSidebar({
   // Desktop sidebar
   return (
     <>
-      {/* Slide-out panel */}
+      {/* Slide-out panel — clipped by fixed wrapper to prevent body horizontal overflow */}
       <div
-        className="fixed right-14 top-0 z-[39] flex flex-col overflow-hidden border-l transition-transform duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+        aria-hidden={!activePanel}
+        className="pointer-events-none fixed right-14 top-0 z-[39] overflow-hidden transition-[width] duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
         style={{
-          width: `${PANEL_WIDTH}px`,
           height: '100vh',
-          background: 'var(--digest-bg-card, #FFFFFF)',
-          borderColor: 'var(--digest-divider, #E5E0D2)',
-          transform: activePanel ? 'translateX(0)' : `translateX(100%)`,
+          width: activePanel ? `${PANEL_WIDTH}px` : 0,
         }}
       >
-        {activePanel && (
-          <PanelContent
-            activePanel={activePanel}
-            onAddFeed={onAddFeed}
-            onSelectFeed={handleSelectFeed}
-            onSelectFolder={handleSelectFolder}
-            selectedFeedId={selectedFeedId}
-            selectedFolderId={selectedFolderId}
-            onSelectEntry={onSelectEntry}
-          />
-        )}
+        <div
+          className="pointer-events-auto flex h-full flex-col border-l transition-transform duration-[250ms] ease-[cubic-bezier(0.4,0,0.2,1)]"
+          style={{
+            width: `${PANEL_WIDTH}px`,
+            background: 'var(--digest-bg-card, #FFFFFF)',
+            borderColor: 'var(--digest-divider, #E5E0D2)',
+            transform: activePanel ? 'translateX(0)' : 'translateX(100%)',
+          }}
+        >
+          {activePanel && (
+            <PanelContent
+              activePanel={activePanel}
+              onAddFeed={onAddFeed}
+              onSelectFeed={handleSelectFeed}
+              onSelectFolder={handleSelectFolder}
+              selectedFeedId={selectedFeedId}
+              selectedFolderId={selectedFolderId}
+              onSelectEntry={onSelectEntry}
+            />
+          )}
+        </div>
       </div>
 
       {/* Activity rail */}

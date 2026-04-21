@@ -148,6 +148,8 @@ interface DigestTopNavProps {
   todayAnchor?: Date
   /** Whether list-entry translation is actively fetching. Renders a subtle chip. */
   isTranslating?: boolean
+  /** Called when the user clicks the search button or presses cmd+k. */
+  onOpenSearch?: () => void
 }
 
 export function DigestTopNav({
@@ -159,6 +161,7 @@ export function DigestTopNav({
   onDateChange,
   todayAnchor,
   isTranslating = false,
+  onOpenSearch,
 }: DigestTopNavProps) {
   const { t } = useTranslation('digest')
   const isToday = date === todayDate
@@ -343,11 +346,20 @@ export function DigestTopNav({
           </div>
         )}
 
-        {/* Search placeholder */}
+        {/* Search button */}
         <button
+          onClick={onOpenSearch}
           title={t('topnav.search')}
           className="flex h-8 w-8 items-center justify-center rounded-md transition-colors"
           style={{ color: 'var(--digest-text-secondary, #5E5A52)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+            e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = ''
+            e.currentTarget.style.color = 'var(--digest-text-secondary, #5E5A52)'
+          }}
         >
           <svg
             width="16"
@@ -362,27 +374,26 @@ export function DigestTopNav({
           </svg>
         </button>
 
-        {/* Add Feed */}
+        {/* Add Feed — icon-only, matches search button weight */}
         <button
           onClick={onAddFeed}
-          className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-[13px] font-medium transition-opacity hover:opacity-85"
-          style={{
-            background: 'var(--digest-text, #1A1A1A)',
-            color: 'var(--digest-bg, #FAF8F3)',
+          title={t('topnav.addFeed')}
+          aria-label={t('topnav.addFeed')}
+          className="flex h-8 w-8 items-center justify-center rounded-md transition-colors"
+          style={{ color: 'var(--digest-text-secondary, #5E5A52)' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+            e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = ''
+            e.currentTarget.style.color = 'var(--digest-text-secondary, #5E5A52)'
           }}
         >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-          >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <line x1="12" y1="5" x2="12" y2="19" />
             <line x1="5" y1="12" x2="19" y2="12" />
           </svg>
-          {t('topnav.addFeed')}
         </button>
       </div>
     </nav>

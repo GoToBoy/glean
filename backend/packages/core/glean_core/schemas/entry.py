@@ -5,6 +5,7 @@ Request and response models for entry-related operations.
 """
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -107,3 +108,13 @@ class ParagraphTranslationsResponse(BaseModel):
     """Cached paragraph-level translations for an entry."""
 
     translations: dict[str, str]
+
+
+class EntrySearchResponse(BaseModel):
+    """Search result response for keyword entry search."""
+
+    items: list[EntryResponse]
+    total: int
+    query: str
+    scope: Literal["all", "date", "week"]
+    took_ms: int

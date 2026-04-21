@@ -1,5 +1,5 @@
 import { Navigate } from 'react-router-dom'
-import { useAuthStore } from '../stores/authStore'
+import { useIsAuthenticated } from '../stores/authStore'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
  * Redirects to login if not authenticated.
  */
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const isAuthenticated = useIsAuthenticated()
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />

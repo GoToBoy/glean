@@ -206,9 +206,9 @@ export function useListEntriesTranslation({
           const unique = Array.from(new Set(pendingIds))
           pendingIds = []
           void translateEntries(unique)
-        }, 120)
+        }, 250)
       },
-      { root: container ?? null, rootMargin: '0px 0px 220px 0px', threshold: 0.1 }
+      { root: container ?? null, rootMargin: '0px 0px 100px 0px', threshold: 0.1 }
     )
 
     // If no scroll container ref is provided, observe nodes document-wide.

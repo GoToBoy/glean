@@ -1,6 +1,6 @@
 import type { EntryWithState } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
-import { getFeedColor } from './digestHelpers'
+import { FeedIcon } from './FeedIcon'
 import type { ListEntryTranslation } from '../../../../../hooks/useListEntriesTranslation'
 import { stripHtmlTags } from '@/lib/html'
 
@@ -27,7 +27,6 @@ function formatPublishedAt(dateStr: string | null): string {
 
 export function DigestArticleCard({ entry, onClick, isFocused = false, translation }: DigestArticleCardProps) {
   const { t } = useTranslation('digest')
-  const feedColor = getFeedColor(entry.feed_id)
 
   const feedName = entry.feed_title || t('card.unknownSource')
   const timeStr = formatPublishedAt(entry.published_at)
@@ -39,18 +38,12 @@ export function DigestArticleCard({ entry, onClick, isFocused = false, translati
     <article
       id={`digest-card-${entry.id}`}
       data-entry-id={entry.id}
+      data-focused={isFocused}
       onClick={onClick}
-      className="group/card relative flex cursor-pointer flex-col gap-2 border-b border-r px-7 py-6 transition-colors"
+      className="group/card relative flex cursor-pointer flex-col gap-2 border-b border-r px-7 py-6 transition-colors hover:bg-[var(--digest-bg-hover,#F1EDE2)] data-[focused=true]:bg-[var(--digest-bg-hover,#F1EDE2)]"
       style={{
         borderColor: 'var(--digest-divider, #E5E0D2)',
-        background: isFocused ? 'var(--digest-bg-hover, #F1EDE2)' : undefined,
         boxShadow: isFocused ? 'inset 3px 0 0 var(--digest-accent, #B8312F)' : undefined,
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = isFocused ? 'var(--digest-bg-hover, #F1EDE2)' : ''
       }}
     >
       <div
@@ -61,9 +54,12 @@ export function DigestArticleCard({ entry, onClick, isFocused = false, translati
       {/* Header: feed name on left, time on right */}
       <div className="flex items-baseline justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span
-            className="inline-block h-2 w-2 flex-shrink-0 rounded-[2px]"
-            style={{ background: feedColor }}
+          <FeedIcon
+            feedId={entry.feed_id}
+            feedIconUrl={entry.feed_icon_url}
+            feedTitle={entry.feed_title}
+            className="h-4 w-4 rounded-[3px]"
+            fallback="letter"
           />
           <span
             className="truncate text-[11px] font-medium uppercase tracking-[0.1em]"

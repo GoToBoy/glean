@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { ChevronRight, Plus, FolderInput, MoreHorizontal } from 'lucide-react'
+import { ChevronRight, Plus, FolderInput, FolderPlus, MoreHorizontal } from 'lucide-react'
 import type { FolderTreeNode, Subscription } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import { useFolders } from '../../../../../hooks/useFolders'
+import { iconProxyUrl } from '../../../../../lib/icon'
 import {
   useAllSubscriptions,
   useUpdateSubscription,
@@ -363,7 +364,7 @@ function SourceItem({
     >
       {showIcon ? (
         <img
-          src={iconUrl}
+          src={iconProxyUrl(iconUrl) ?? undefined}
           alt=""
           className="h-3.5 w-3.5 flex-shrink-0 rounded-[2px] object-cover"
           onError={() => setIconFailed(true)}
@@ -510,7 +511,7 @@ export function FeedsPanel({
             e.currentTarget.style.background = ''
           }}
         >
-          <Plus className="h-3.5 w-3.5" />
+          <FolderPlus className="h-3.5 w-3.5" />
         </button>
       </div>
 

@@ -126,6 +126,8 @@
     "expand": "Expand",
     "collapse": "Collapse",
     "viewAll": "View all {{count}} ↓",
+    "collapseViewAll": "Collapse",
+    "collapseRead": "Collapse read",
     "otherFolder": "Other",
     "readTail": "{{count}} read"
   },
@@ -143,5 +145,25 @@
   },
   "error": {
     "title": "Failed to load"
+  },
+  "search": {
+    "placeholder": "Search articles...",
+    "scope": {
+      "all": "All",
+      "date": "Today",
+      "week": "This week"
+    },
+    "empty": {
+      "title": "No results",
+      "hint": "Try a different scope or query"
+    },
+    "hints": "↑↓ navigate · ↵ open · ⌘↵ original · esc close",
+    "group": {
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This week",
+      "older": "Older"
+    },
+    "took": "{{count}} results in {{ms}}ms"
   }
 }

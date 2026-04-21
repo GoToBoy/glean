@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { useShallow } from 'zustand/react/shallow'
 import { changeLanguage, type Locale } from '@glean/i18n'
 
 interface LanguageState {
@@ -39,3 +40,9 @@ export const useLanguageStore = create<LanguageState>()((set) => ({
     }
   },
 }))
+
+export const useLanguage = () => useLanguageStore((s) => s.language)
+export const useLanguageActions = () =>
+  useLanguageStore(
+    useShallow((s) => ({ setLanguage: s.setLanguage, initializeLanguage: s.initializeLanguage })),
+  )

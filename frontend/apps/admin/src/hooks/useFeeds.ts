@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import api from '../lib/api'
+import { usePageVisible, conditionalInterval } from './usePollingEnabled'
 import type {
   FeedFetchActiveRunsResponse,
   FeedFetchLatestRunResponse,
@@ -84,6 +85,23 @@ export interface AdminContentBackfillResponse {
   candidates: AdminContentBackfillCandidate[]
 }
 
+/** Patches a single feed's row across all cached feed list variants. */
+function patchFeedInCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  updatedFeed: Feed,
+): void {
+  queryClient.setQueriesData<FeedListResponse>(
+    { queryKey: ['admin', 'feeds'] },
+    (old) => {
+      if (!old) return old
+      return {
+        ...old,
+        items: old.items.map((f) => (f.id === updatedFeed.id ? { ...f, ...updatedFeed } : f)),
+      }
+    },
+  )
+}
+
 export function useFeeds(params: FeedListParams = {}) {
   return useQuery<FeedListResponse>({
     queryKey: ['admin', 'feeds', params],
@@ -91,6 +109,18 @@ export function useFeeds(params: FeedListParams = {}) {
       const response = await api.get('/feeds', { params })
       return response.data
     },
+  })
+}
+
+/** Thin wrapper returning only { items, total, isLoading } — use instead of useFeeds when the full response is not needed. */
+export function useFeedList(params: FeedListParams = {}) {
+  return useQuery<FeedListResponse, Error, { items: Feed[]; total: number }>({
+    queryKey: ['admin', 'feeds', params],
+    queryFn: async () => {
+      const response = await api.get('/feeds', { params })
+      return response.data
+    },
+    select: (data) => ({ items: data.items, total: data.total }),
   })
 }
 
@@ -111,9 +141,13 @@ export function useResetFeedError() {
   return useMutation({
     mutationFn: async (feedId: string) => {
       const response = await api.post(`/feeds/${feedId}/reset-error`)
-      return response.data
+      return response.data as Feed
     },
-    onSuccess: () => {
+    onSuccess: (updatedFeed: Feed) => {
+      patchFeedInCache(queryClient, updatedFeed)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'feed'] })
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
       queryClient.invalidateQueries({ queryKey: ['admin', 'feed'] })
     },
@@ -132,9 +166,13 @@ export function useUpdateFeed() {
       data: { url?: string; title?: string; status?: 'active' | 'error' | 'disabled' }
     }) => {
       const response = await api.patch(`/feeds/${feedId}`, data)
-      return response.data
+      return response.data as Feed
     },
-    onSuccess: () => {
+    onSuccess: (updatedFeed: Feed) => {
+      patchFeedInCache(queryClient, updatedFeed)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'feed'] })
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
       queryClient.invalidateQueries({ queryKey: ['admin', 'feed'] })
     },
@@ -147,8 +185,20 @@ export function useDeleteFeed() {
   return useMutation({
     mutationFn: async (feedId: string) => {
       await api.delete(`/feeds/${feedId}`)
+      return feedId
     },
-    onSuccess: () => {
+    onSuccess: (feedId: string) => {
+      queryClient.setQueriesData<FeedListResponse>(
+        { queryKey: ['admin', 'feeds'] },
+        (old) => {
+          if (!old) return old
+          const items = old.items.filter((f) => f.id !== feedId)
+          const removed = old.items.length - items.length
+          return { ...old, items, total: old.total - removed }
+        },
+      )
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
     },
   })
@@ -160,9 +210,18 @@ export function useBatchFeedOperation() {
   return useMutation({
     mutationFn: async ({ action, feedIds }: { action: string; feedIds: string[] }) => {
       const response = await api.post('/feeds/batch', { action, feed_ids: feedIds })
-      return response.data
+      return { affected: response.data as { affected: number }, action, feedIds }
     },
-    onSuccess: () => {
+    onSuccess: ({ action }: { affected: { affected: number }; action: string; feedIds: string[] }) => {
+      if (action === 'delete') {
+        // Invalidate to get authoritative totals across all pages after bulk delete
+        queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
+      } else {
+        // enable/disable/reset_error: API returns only a count, must refetch for updated row data
+        queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
+      }
+    },
+    onError: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'feeds'] })
     },
   })
@@ -229,7 +288,13 @@ export function useLatestFeedFetchRun(feedId: string, enabled = true) {
   })
 }
 
-export function useLatestFeedFetchRuns(feedIds: string[], enabled = true) {
+/**
+ * Polls only when page is visible AND hasPending is true.
+ * Wave 3: pass hasPending={true} from FeedsPage when there are queued/running jobs.
+ * Until then polling is off by default (hasPending defaults to false).
+ */
+export function useLatestFeedFetchRuns(feedIds: string[], enabled = true, hasPending = false) {
+  const pageVisible = usePageVisible()
   const normalizedFeedIds = Array.from(new Set(feedIds)).sort()
 
   return useQuery<FeedFetchRunBatchLatestResponse>({
@@ -239,7 +304,7 @@ export function useLatestFeedFetchRuns(feedIds: string[], enabled = true) {
       return response.data
     },
     enabled: enabled && normalizedFeedIds.length > 0,
-    refetchInterval: enabled ? 15000 : false,
+    refetchInterval: conditionalInterval(hasPending && pageVisible, 15000),
   })
 }
 
@@ -254,7 +319,14 @@ export function useFeedFetchRunHistory(feedId: string, enabled = true) {
   })
 }
 
-export function useActiveFeedFetchRuns(enabled = true) {
+/**
+ * Polls only when page is visible AND hasPending is true.
+ * Wave 3: pass hasPending={true} from FeedsPage when there are queued/running jobs.
+ * Until then polling is off by default (hasPending defaults to false).
+ */
+export function useActiveFeedFetchRuns(enabled = true, hasPending = false) {
+  const pageVisible = usePageVisible()
+
   return useQuery<FeedFetchActiveRunsResponse>({
     queryKey: ['admin', 'feed-fetch-progress', 'active'],
     queryFn: async () => {
@@ -262,7 +334,7 @@ export function useActiveFeedFetchRuns(enabled = true) {
       return response.data
     },
     enabled,
-    refetchInterval: enabled ? 15000 : false,
+    refetchInterval: conditionalInterval(hasPending && pageVisible, 15000),
   })
 }
 

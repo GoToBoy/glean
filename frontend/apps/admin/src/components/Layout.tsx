@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { useAuthStore } from '../stores/authStore'
-import { useLanguageStore } from '../stores/languageStore'
+import { useAuthAdmin, useAuthActions } from '../stores/authStore'
+import { useLanguage, useLanguageActions } from '../stores/languageStore'
 import {
   LogOut,
   LayoutDashboard,
@@ -33,6 +33,39 @@ import {
 import { useState } from 'react'
 import { useTranslation } from '@glean/i18n'
 
+const navItems = [
+  {
+    path: '/dashboard',
+    labelKey: 'admin:layout.nav.dashboard' as const,
+    icon: LayoutDashboard,
+  },
+  {
+    path: '/users',
+    labelKey: 'admin:layout.nav.users' as const,
+    icon: Users,
+  },
+  {
+    path: '/feeds',
+    labelKey: 'admin:layout.nav.feeds' as const,
+    icon: Rss,
+  },
+  {
+    path: '/entries',
+    labelKey: 'admin:layout.nav.entries' as const,
+    icon: FileText,
+  },
+  {
+    path: '/embeddings',
+    labelKey: 'admin:layout.nav.embeddings' as const,
+    icon: SlidersHorizontal,
+  },
+  {
+    path: '/system',
+    labelKey: 'admin:layout.nav.system' as const,
+    icon: Settings,
+  },
+]
+
 /**
  * Admin layout component.
  *
@@ -40,55 +73,20 @@ import { useTranslation } from '@glean/i18n'
  */
 export function Layout() {
   const { t } = useTranslation(['admin', 'common'])
-  const { admin, logout } = useAuthStore()
-  const { language, setLanguage } = useLanguageStore()
+  const admin = useAuthAdmin()
+  const { logout } = useAuthActions()
+  const language = useLanguage()
+  const { setLanguage } = useLanguageActions()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
 
   const handleLogout = () => {
-    // Clear auth state
     logout()
-
-    // Clear all React Query cache
     queryClient.clear()
-
     navigate('/login')
   }
-
-  const navItems = [
-    {
-      path: '/dashboard',
-      label: t('admin:layout.nav.dashboard'),
-      icon: LayoutDashboard,
-    },
-    {
-      path: '/users',
-      label: t('admin:layout.nav.users'),
-      icon: Users,
-    },
-    {
-      path: '/feeds',
-      label: t('admin:layout.nav.feeds'),
-      icon: Rss,
-    },
-    {
-      path: '/entries',
-      label: t('admin:layout.nav.entries'),
-      icon: FileText,
-    },
-    {
-      path: '/embeddings',
-      label: t('admin:layout.nav.embeddings'),
-      icon: SlidersHorizontal,
-    },
-    {
-      path: '/system',
-      label: t('admin:layout.nav.system'),
-      icon: Settings,
-    },
-  ]
 
   return (
     <div className="bg-background flex h-screen">
@@ -129,7 +127,7 @@ export function Layout() {
                   <Icon
                     className={`h-5 w-5 ${isActive ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground'}`}
                   />
-                  <span>{item.label}</span>
+                  <span>{t(item.labelKey)}</span>
                   {isActive && <span className="bg-primary ml-auto h-1.5 w-1.5 rounded-full" />}
                 </Link>
               )

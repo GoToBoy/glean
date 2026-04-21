@@ -86,8 +86,10 @@ import {
   entryService,
   mapFeedFetchRunToViewModel,
 } from '@glean/api-client'
+import { iconProxyUrl } from '../../lib/icon'
 import { shouldAutoTranslate } from '../../lib/translationLanguagePolicy'
 import { formatFeedQueueSummary } from './feedQueueSummary'
+import { EditSubscriptionDialog } from '../../pages/SubscriptionsPage'
 
 type FeedRefreshState = {
   jobId: string
@@ -889,6 +891,8 @@ function SubscriptionRow({
   latestRun,
 }: SubscriptionRowProps) {
   const { t } = useTranslation('settings')
+  const { feedFolders } = useFolderStore()
+  const [isEditOpen, setIsEditOpen] = useState(false)
   const isRefreshingRow = refreshState && isPendingRefreshStatus(refreshState.status)
   const latestViewModel = mapFeedFetchRunToViewModel(latestRun)
   const isError = refreshState?.resultStatus === 'error'
@@ -916,7 +920,11 @@ function SubscriptionRow({
         )}
 
         {subscription.feed.icon_url ? (
-          <img src={subscription.feed.icon_url} alt="" className="h-5 w-5 shrink-0 rounded" />
+          <img
+            src={iconProxyUrl(subscription.feed.icon_url) ?? undefined}
+            alt=""
+            className="h-5 w-5 shrink-0 rounded"
+          />
         ) : (
           <div className="h-5 w-5 shrink-0 rounded bg-muted" />
         )}
@@ -1028,11 +1036,7 @@ function SubscriptionRow({
               <MoreHorizontal className="h-4 w-4" />
             </MenuTrigger>
             <MenuPopup align="end">
-              <MenuItem
-                onClick={() => {
-                  console.log('Edit feed:', subscription.id)
-                }}
-              >
+              <MenuItem onClick={() => setIsEditOpen(true)}>
                 <Pencil className="h-4 w-4" />
                 {t('manageFeeds.edit')}
               </MenuItem>
@@ -1048,6 +1052,13 @@ function SubscriptionRow({
             </MenuPopup>
           </Menu>
         </div>
+      {isEditOpen && (
+        <EditSubscriptionDialog
+          subscription={subscription}
+          folders={feedFolders}
+          onClose={() => setIsEditOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -1703,22 +1714,22 @@ function getBackfillStatusMeta(
     case 'pending':
       return {
         label: t('manageFeeds.contentBackfill.pending'),
-        toneClass: 'bg-amber-500/10 text-amber-700',
+        toneClass: 'bg-warning/10 text-warning ring-1 ring-warning/20',
       }
     case 'processing':
       return {
         label: t('manageFeeds.contentBackfill.processing'),
-        toneClass: 'bg-primary/12 text-primary',
+        toneClass: 'bg-info/10 text-info ring-1 ring-info/20',
       }
     case 'done':
       return {
         label: t('manageFeeds.contentBackfill.done'),
-        toneClass: 'bg-emerald-500/10 text-emerald-700',
+        toneClass: 'bg-success/10 text-success ring-1 ring-success/20',
       }
     case 'failed':
       return {
         label: t('manageFeeds.contentBackfill.failed'),
-        toneClass: 'bg-destructive/10 text-destructive',
+        toneClass: 'bg-destructive/10 text-destructive ring-1 ring-destructive/20',
       }
     case 'skipped':
       return {

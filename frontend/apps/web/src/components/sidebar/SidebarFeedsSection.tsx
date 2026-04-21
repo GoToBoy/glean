@@ -49,6 +49,7 @@ import {
   useUpdateSubscription,
 } from '../../hooks/useSubscriptions'
 import { useMarkAllRead } from '../../hooks/useEntries'
+import { iconProxyUrl } from '../../lib/icon'
 import { useFolderStore } from '../../stores/folderStore'
 import { SidebarItem } from './SidebarItem'
 import {
@@ -1043,7 +1044,7 @@ function SidebarFeedItem({
         >
           {subscription.feed.icon_url ? (
             <img
-              src={subscription.feed.icon_url}
+              src={iconProxyUrl(subscription.feed.icon_url) ?? undefined}
               alt=""
               className="h-4 w-4 shrink-0 rounded object-cover"
               draggable={false}

@@ -15,44 +15,44 @@ export default function DashboardPage() {
       title: t('dashboard.cards.totalUsers'),
       value: stats?.total_users,
       icon: Users,
-      color: 'text-primary-500',
-      bgColor: 'bg-primary-50 dark:bg-primary-900/20',
+      color: 'text-primary',
+      bgColor: 'bg-primary/10 ring-1 ring-primary/20',
     },
     {
       title: t('dashboard.cards.activeUsers'),
       value: stats?.active_users,
       icon: Activity,
-      color: 'text-green-500',
-      bgColor: 'bg-green-50 dark:bg-green-900/20',
+      color: 'text-success',
+      bgColor: 'bg-success/10 ring-1 ring-success/20',
       description: t('dashboard.cards.last7Days'),
     },
     {
       title: t('dashboard.cards.totalFeeds'),
       value: stats?.total_feeds,
       icon: Rss,
-      color: 'text-blue-500',
-      bgColor: 'bg-blue-50 dark:bg-blue-900/20',
+      color: 'text-info',
+      bgColor: 'bg-info/10 ring-1 ring-info/20',
     },
     {
       title: t('dashboard.cards.totalEntries'),
       value: stats?.total_entries,
       icon: FileText,
-      color: 'text-purple-500',
-      bgColor: 'bg-purple-50 dark:bg-purple-900/20',
+      color: 'text-secondary',
+      bgColor: 'bg-secondary/10 ring-1 ring-secondary/20',
     },
     {
       title: 'Total Subscriptions',
       value: stats?.total_subscriptions,
       icon: BookMarked,
-      color: 'text-orange-500',
-      bgColor: 'bg-orange-50 dark:bg-orange-900/20',
+      color: 'text-warning',
+      bgColor: 'bg-warning/10 ring-1 ring-warning/20',
     },
     {
       title: 'New Users Today',
       value: stats?.new_users_today,
       icon: TrendingUp,
-      color: 'text-teal-500',
-      bgColor: 'bg-teal-50 dark:bg-teal-900/20',
+      color: 'text-secondary',
+      bgColor: 'bg-secondary/10 ring-1 ring-secondary/20',
     },
   ]
 
@@ -111,8 +111,8 @@ export default function DashboardPage() {
             </h2>
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div className="flex items-center gap-3">
-                <div className="bg-primary-50 dark:bg-primary-900/20 flex h-10 w-10 items-center justify-center rounded-lg">
-                  <TrendingUp className="text-primary-500 h-5 w-5" />
+                <div className="bg-primary/10 ring-primary/20 flex h-10 w-10 items-center justify-center rounded-lg ring-1">
+                  <TrendingUp className="text-primary h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-foreground text-sm font-medium">
@@ -124,8 +124,8 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                  <FileText className="h-5 w-5 text-purple-500" />
+                <div className="bg-secondary/10 ring-secondary/20 flex h-10 w-10 items-center justify-center rounded-lg ring-1">
+                  <FileText className="text-secondary h-5 w-5" />
                 </div>
                 <div>
                   <p className="text-foreground text-sm font-medium">

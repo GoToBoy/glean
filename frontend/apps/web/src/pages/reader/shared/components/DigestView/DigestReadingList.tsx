@@ -1,6 +1,8 @@
+import { useEffect, useRef } from 'react'
 import type { EntryWithState } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
 import { stripHtmlTags } from '@/lib/html'
+import { FeedIcon } from './FeedIcon'
 import type { ListEntryTranslation } from '@/hooks/useListEntriesTranslation'
 
 interface DigestReadingListProps {
@@ -48,10 +50,17 @@ function Row({ entry, isSelected, onClick, translation }: RowProps) {
       }}
     >
       <div
-        className="truncate text-[11px] uppercase tracking-[0.08em]"
+        className="flex min-w-0 items-center gap-1.5 text-[11px] uppercase tracking-[0.08em]"
         style={{ color: 'var(--digest-text-tertiary, #9A968C)' }}
       >
-        {feedName}
+        <FeedIcon
+          feedId={entry.feed_id}
+          feedIconUrl={entry.feed_icon_url}
+          feedTitle={entry.feed_title}
+          className="h-3.5 w-3.5 rounded-[3px]"
+          fallback="letter"
+        />
+        <span className="truncate">{feedName}</span>
       </div>
       <div
         className="text-[14px] leading-snug"
@@ -81,8 +90,18 @@ export function DigestReadingList({
   onSelect,
   translations,
 }: DigestReadingListProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!selectedId) return
+    const el = containerRef.current?.querySelector(`[data-entry-id="${selectedId}"]`)
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: 'center', behavior: 'auto' })
+    }
+  }, [selectedId])
+
   return (
-    <div className="flex flex-col">
+    <div ref={containerRef} className="flex flex-col">
       {entries.map((entry) => (
         <Row
           key={entry.id}

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react'
 import { Bookmark, Check } from 'lucide-react'
 import type { EntryWithState } from '@glean/types'
 import { useTranslation } from '@glean/i18n'
-import { getFeedColor } from './digestHelpers'
+import { FeedIcon } from './FeedIcon'
 import { useUpdateEntryState } from '@/hooks/useEntries'
 import type { ListEntryTranslation } from '@/hooks/useListEntriesTranslation'
 
@@ -37,7 +37,6 @@ interface CompactItemProps {
 function CompactItem({ entry, onSelect, isFocused = false, translation }: CompactItemProps) {
   const { t } = useTranslation('digest')
   const updateMutation = useUpdateEntryState()
-  const feedColor = getFeedColor(entry.feed_id)
 
   const handleMarkRead = useCallback(
     (e: React.MouseEvent) => {
@@ -100,9 +99,12 @@ function CompactItem({ entry, onSelect, isFocused = false, translation }: Compac
           {translation?.title || entry.title}
         </div>
         <div className="flex flex-wrap items-center gap-1.5 text-xs" style={{ color: 'var(--digest-text-tertiary, #9A968C)' }}>
-          <span
-            className="inline-block h-2 w-2 flex-shrink-0 rounded-[2px]"
-            style={{ background: feedColor }}
+          <FeedIcon
+            feedId={entry.feed_id}
+            feedIconUrl={entry.feed_icon_url}
+            feedTitle={entry.feed_title}
+            className="h-3.5 w-3.5 rounded-[3px]"
+            fallback="letter"
           />
           <span className="font-medium" style={{ color: 'var(--digest-text-secondary, #5E5A52)' }}>
             {entry.feed_title || t('card.unknownSource')}

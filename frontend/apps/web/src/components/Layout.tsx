@@ -663,7 +663,10 @@ export function Layout() {
   if (isDigestTheme) {
     return (
       <div
-        className="min-h-screen w-screen"
+        className={cn(
+          'w-screen',
+          isDigestSettings ? 'flex h-screen flex-col overflow-hidden' : 'min-h-screen'
+        )}
         style={{
           ...digestVars,
           background: 'var(--digest-bg)',
@@ -673,7 +676,7 @@ export function Layout() {
       >
         {isDigestSettings && (
           <div
-            className="sticky top-0 z-20 flex h-12 items-center justify-between px-4 md:px-6"
+            className="flex h-12 shrink-0 items-center justify-between px-4 md:px-6"
             style={{
               background: 'var(--digest-bg)',
               borderBottom: '1px solid var(--digest-divider)',
@@ -701,7 +704,13 @@ export function Layout() {
             </span>
           </div>
         )}
-        <Outlet />
+        {isDigestSettings ? (
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <Outlet />
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </div>
     )
   }

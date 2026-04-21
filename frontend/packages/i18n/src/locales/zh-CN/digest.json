@@ -126,6 +126,8 @@
     "expand": "展开",
     "collapse": "折叠",
     "viewAll": "查看全部 {{count}} 篇 ↓",
+    "collapseViewAll": "收起",
+    "collapseRead": "收起已读",
     "otherFolder": "其他",
     "readTail": "已读 {{count}} 篇"
   },
@@ -143,5 +145,25 @@
   },
   "error": {
     "title": "加载失败"
+  },
+  "search": {
+    "placeholder": "搜索文章...",
+    "scope": {
+      "all": "全部",
+      "date": "今天",
+      "week": "本周"
+    },
+    "empty": {
+      "title": "无结果",
+      "hint": "尝试更换范围或关键词"
+    },
+    "hints": "↑↓ 导航 · ↵ 打开 · ⌘↵ 原文 · esc 关闭",
+    "group": {
+      "today": "今天",
+      "yesterday": "昨天",
+      "thisWeek": "本周",
+      "older": "更早"
+    },
+    "took": "{{count}} 条，耗时 {{ms}}ms"
   }
 }

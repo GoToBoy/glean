@@ -25,10 +25,8 @@ export function SettingsPanel() {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const currentReadLaterDays = user?.settings?.read_later_days ?? 7
-  const showReadLaterRemaining = user?.settings?.show_read_later_remaining ?? true
   const currentTargetLanguage: TranslationTargetLanguage =
     user?.settings?.translation_target_language ?? 'zh-CN'
-  const currentListTranslationAutoEnabled = user?.settings?.list_translation_auto_enabled ?? false
 
   const handleImportClick = () => {
     fileInputRef.current?.click()
@@ -163,18 +161,6 @@ export function SettingsPanel() {
               </div>
             }
           />
-          <SettingsRow
-            label={t('settings.translation.listAutoEnable')}
-            sub={t('settings.translation.listAutoEnableSub')}
-            control={
-              <Switch
-                checked={currentListTranslationAutoEnabled}
-                onCheckedChange={(checked) =>
-                  void updateSettings({ list_translation_auto_enabled: checked })
-                }
-              />
-            }
-          />
         </SettingsGroup>
 
         {/* Reading */}
@@ -186,16 +172,6 @@ export function SettingsPanel() {
               <Switch
                 checked={autoMarkRead}
                 onCheckedChange={setAutoMarkRead}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settings.reading.showRemaining')}
-            sub={t('settings.reading.showRemainingSub')}
-            control={
-              <Switch
-                checked={showReadLaterRemaining}
-                onCheckedChange={(checked) => void updateSettings({ show_read_later_remaining: checked })}
               />
             }
           />
