@@ -2,14 +2,7 @@
 
 **[English](./README.md)** | **[中文](./README.zh-CN.md)**
 
-> [!IMPORTANT]
-> This README describes the fork's primary branch `personal-main`, not upstream `main`.
-
-> [!NOTE]
-> Join our [Discord](https://discord.gg/KMKC4sRVSJ) to follow updates and get support.
-> This project is still under active development.
-
-Glean is a self-hosted RSS reader and personal knowledge management tool for high-volume reading workflows.
+Reader is a self-hosted RSS reader and personal knowledge management tool for high-volume reading workflows.  fork from Glean project!
 
 ![Glean](asset/Screenshot.png)
 
@@ -44,6 +37,17 @@ The intended primary branch is `personal-main`, which serves as this repo's rele
 - **Feed Ingestion Robustness**: Enhanced failure handling (e.g., 429 rate limiting), improved idempotency, and added detailed fetch-attempt observability.
 - **Admin & Ops**: Batch operations in the admin dashboard, static asset precompression, Cloudflare Tunnel integration, and optimized Docker deployment configurations.
 - **Test Coverage**: Expanded multi-layer tests across API, workers, and frontend hooks to ensure long-term stability.
+
+## Why Rebuild
+The original Glean RSS  was still based on the old RSS model. Based on my experience and personal intuition, I realized that I don't actually need recommendations And Tradition folder to read. also Algorithm doesn't understand a person's preferences or their level of knowledge. Consequently, I decided to remove the  recommendation features entirely .
+
+My typical workflow involves checking what happened each day. Under the old RSS model, you had to click into every single folder to see which items were read or unread, which was very tedious. 
+
+To fix this, I changed the project to a "Reader" mode. In this new version:
+1. The primary focus is the date. It uses the date as the main time dimension so you can immediately see which new articles were pushed today.
+2. On the right side, there is an RSS directory list. You can browse according to your preferences, viewing content by user or specific feed creator in a centralized, efficient layout.
+
+**I build and use this project just wan't see any Ad or any Information recommendation Trash Can**
 
 ## Quick Start
 
