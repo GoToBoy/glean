@@ -225,10 +225,186 @@ image: ghcr.io/leslieleung/glean-backend:latest
 image: ghcr.io/gotoboy/glean-worker:0.1.0-alpha.1
 
 # 官方版本
-image: ghcr.io/leslieleung/glean-backend:latest
+image: ghcr.io/leslieleung/glean-worker:latest
 ```
 
 四处都改回来，重启即可。数据库 volume 不受影响，数据不丢失。
+
+---
+
+## 附录 A：本地 Registry 直推（内网快速迭代）
+
+GHCR 路径适合对外发版,但日常本地调试太慢(push 代码 → 等 CI → NAS 拉)。
+内网有一个 HTTP registry `http://127.0.0.1:5000`,可以把 Mac 构建的镜像直接推过去,NAS 秒级拉取。
+
+### 适用场景
+
+- 只在局域网 NAS 上测试,不需要对外发版
+- 想跳过 `git tag` + GitHub Actions 的循环
+- 只改了 web/admin/backend/worker 其中一个服务,不想重新跑全量 CI
+
+> **注意**:只推应用镜像(`backend`/`worker`/`web`/`admin`),`postgres`/`redis` 继续用上游镜像,不要推到私有 registry。
+
+### 一次性准备
+
+**Mac 端**(推送方) 和 **NAS 端**(拉取方) 的 Docker daemon 都要把 `127.0.0.1:5000` 列为 insecure registry(HTTP,不是 HTTPS):
+
+- Docker Desktop: Settings → Docker Engine,在 JSON 中加入并 Apply & Restart
+- Linux / 群晖 / 绿联: 编辑 `/etc/docker/daemon.json`,`systemctl restart docker`
+
+```json
+{
+  "insecure-registries": ["127.0.0.1:5000"]
+}
+```
+
+验证 registry 可达:
+
+```bash
+curl http://192.168。31.19:5000/v2/_catalog
+# → {"repositories":[...]}
+```
+
+### 推送(Mac 端)
+
+4 个应用镜像对应的 Dockerfile:
+
+| 服务 | Dockerfile | 构建 context |
+|------|-----------|--------------|
+| backend | `backend/Dockerfile` | `./backend` |
+| worker  | `backend/Dockerfile.worker` | `./backend` |
+| web     | `frontend/apps/web/Dockerfile` | `./frontend` |
+| admin   | `frontend/apps/admin/Dockerfile` | `./frontend` |
+
+命名约定:`127.0.0.1:5000/glean-<service>:<tag>`,tag 同时打 `latest` 和 git short sha(或时间戳 `YYYYMMDD-HHMM`)两个标签,便于回滚。
+
+> **⚠️ 架构匹配**:Apple Silicon Mac 默认 `docker build` 产出 `linux/arm64`,而 UGREEN / 群晖等 x86 NAS 需要 `linux/amd64`。如果直接 `docker build + push`,NAS 拉取会报:
+>
+> ```
+> no matching manifest for linux/amd64 in the manifest list entries
+> ```
+>
+> **必须用 `docker buildx build --platform linux/amd64 --push`**(一步推,不经本地 image store),或先 `docker buildx create --use` 建一个支持多架构的 builder。同理,x86 Mac / Linux 推到 arm NAS 也要显式指定 `linux/arm64`。
+>
+> 只有一个目标平台时推单架构即可;如果既有 arm NAS 又有 x86 NAS,一次推多架构:`--platform linux/amd64,linux/arm64`。
+
+以 web 为例(其余同构,只需替换服务名和 Dockerfile 路径):
+
+```bash
+SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d-%H%M)
+REGISTRY=127.0.0.1:5000
+PLATFORM=linux/amd64            # NAS 是 x86 → amd64;arm NAS 改 linux/arm64
+
+docker buildx build --platform $PLATFORM --push \
+  -f frontend/apps/web/Dockerfile \
+  -t $REGISTRY/glean-web:latest \
+  -t $REGISTRY/glean-web:$SHA \
+  frontend
+```
+
+backend / worker / admin 批量推(4 个并行,省时间):
+
+```bash
+# 可放进一个 push.sh
+SHA=$(git rev-parse --short HEAD 2>/dev/null || date +%Y%m%d-%H%M)
+REGISTRY=127.0.0.1:5000
+PLATFORM=linux/amd64
+
+docker buildx build --platform $PLATFORM --push -f backend/Dockerfile \
+  -t $REGISTRY/glean-backend:latest -t $REGISTRY/glean-backend:$SHA backend &
+
+docker buildx build --platform $PLATFORM --push -f backend/Dockerfile.worker \
+  -t $REGISTRY/glean-worker:latest -t $REGISTRY/glean-worker:$SHA backend &
+
+docker buildx build --platform $PLATFORM --push -f frontend/apps/web/Dockerfile \
+  -t $REGISTRY/glean-web:latest -t $REGISTRY/glean-web:$SHA frontend &
+
+docker buildx build --platform $PLATFORM --push -f frontend/apps/admin/Dockerfile \
+  -t $REGISTRY/glean-admin:latest -t $REGISTRY/glean-admin:$SHA frontend &
+
+wait
+```
+
+**验证推上去的是正确架构**:
+
+```bash
+docker buildx imagetools inspect 127.0.0.1:5000/glean-web:latest
+# Manifests 下应看到 Platform: linux/amd64
+```
+
+若看到 `linux/arm64` 或混杂,说明没带 `--platform`。
+
+### 拉取(NAS 端)
+
+修改 NAS 上的 `docker-compose.personal.yml`(或你实际使用的 compose 文件),把 4 个应用服务的 `image:` 字段从 GHCR 换成内网 registry。只需要动 `backend`/`worker`/`web`/`admin` 四处,**不要动 `postgres`/`redis`**。
+
+> **⚠️ Hairpin 坑**:registry 部署在 NAS 本机时,NAS 的 docker daemon 通过 LAN IP(`127.0.0.1:5000`)回连自己经常超时 — UGREEN / 群晖等的默认 bridge 不做 hairpin NAT,包发到 LAN 绕一圈回不来,表现为:
+>
+> ```
+> Get "http://127.0.0.1:5000/v2/": request canceled while waiting for connection (Client.Timeout exceeded while awaiting headers)
+> ```
+>
+> 解决:**NAS 端 compose 用 `127.0.0.1:5000/glean-*`**(registry 就在本机,走 loopback 即通)。Mac 推送仍用 `127.0.0.1:5000`,数据是同一份,两种地址读到同一个 manifest。
+>
+> `127.0.0.0/8` 默认就被 docker 视为 insecure registry,`daemon.json` 不用额外声明 `127.0.0.1:5000`。
+
+Before → After 对照(NAS 端使用 loopback):
+
+```yaml
+# backend
+- image: ghcr.io/gotoboy/glean-backend:${IMAGE_TAG:-latest}
++ image: 127.0.0.1:5000/glean-backend:${IMAGE_TAG:-latest}
+
+# worker
+- image: ghcr.io/gotoboy/glean-worker:${IMAGE_TAG:-latest}
++ image: 127.0.0.1:5000/glean-worker:${IMAGE_TAG:-latest}
+
+# web
+- image: ghcr.io/gotoboy/glean-web:${IMAGE_TAG:-latest}
++ image: 127.0.0.1:5000/glean-web:${IMAGE_TAG:-latest}
+
+# admin
+- image: ghcr.io/gotoboy/glean-admin:${IMAGE_TAG:-latest}
++ image: 127.0.0.1:5000/glean-admin:${IMAGE_TAG:-latest}
+```
+
+> 如果 registry 跑在另一台机器(不是同台 NAS),则 NAS 端 compose 用那台机器的 LAN IP,并在 NAS 的 `daemon.json` 里加 `"insecure-registries": ["<registry-host>:5000"]`。
+
+拉取并重建容器(只重建变化的服务,避免打扰数据库):
+
+```bash
+# 例:只更新 web
+docker compose -f docker-compose.personal.yml pull web
+docker compose -f docker-compose.personal.yml up -d --no-deps --force-recreate web
+
+# 例:后端 + worker 一起更新
+docker compose -f docker-compose.personal.yml pull backend worker
+docker compose -f docker-compose.personal.yml up -d --no-deps --force-recreate backend worker
+```
+
+> `--force-recreate` 是必须的:`docker restart` 只会重启旧容器,不会切到新镜像。验证方法:
+> `docker inspect glean-web --format '{{.Image}}'` 应等于 `docker image inspect 127.0.0.1:5000/glean-web:latest --format '{{.Id}}'`
+
+### 回滚
+
+tag 同时打了 git sha,直接 pin 到旧版本即可:
+
+```bash
+# NAS 上
+IMAGE_TAG=<old-sha> docker compose -f docker-compose.personal.yml up -d --no-deps --force-recreate web
+```
+
+或在 `.env` 中写死 `IMAGE_TAG=<old-sha>`。
+
+### 与 GHCR 路径的关系
+
+两条路径可以共存,互为备份:
+
+| 场景 | 用什么 |
+|------|--------|
+| 局域网日常迭代、快速 A/B | 本地 Registry |
+| 对外发版、跨网络、长期归档 | GHCR + git tag |
+| 内网 registry 挂了 | 临时切回 GHCR 镜像名即可 |
 
 ---
 

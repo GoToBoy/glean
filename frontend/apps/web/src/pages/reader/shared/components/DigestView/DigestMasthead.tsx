@@ -234,10 +234,19 @@ export function DigestTopNav({
         {/* Date switcher */}
         <div ref={containerRef} className="relative ml-2 flex items-center gap-0.5">
           <button
+            type="button"
             onClick={onPrevDay}
             title={t('topnav.prevDay')}
-            className="flex items-center justify-center rounded-[5px] p-1 transition-colors"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] transition-colors"
             style={{ color: 'var(--digest-text-secondary, #5E5A52)' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+              e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = ''
+              e.currentTarget.style.color = 'var(--digest-text-secondary, #5E5A52)'
+            }}
           >
             <ChevronLeft className="h-3.5 w-3.5" strokeWidth={2.5} />
           </button>
@@ -252,22 +261,41 @@ export function DigestTopNav({
             title={t('topnav.selectDate')}
             className={cn(
               'whitespace-nowrap rounded-[5px] border-0 px-2.5 py-1 text-[13px] font-medium transition-colors',
-              onDateChange ? 'cursor-pointer hover:brightness-95' : 'cursor-default',
+              onDateChange ? 'cursor-pointer' : 'cursor-default',
             )}
             style={{
               background: 'var(--digest-bg-hover, #F1EDE2)',
               color: 'var(--digest-text, #1A1A1A)',
               font: 'inherit',
             }}
+            onMouseEnter={(e) => {
+              if (!onDateChange) return
+              e.currentTarget.style.background = 'var(--digest-bg-active, #E8E2D4)'
+              e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+              e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+            }}
           >
             {formatNavDate(date, t)}
           </button>
           <button
+            type="button"
             onClick={onNextDay}
             disabled={isToday}
             title={t('topnav.nextDay')}
-            className="flex items-center justify-center rounded-[5px] p-1 transition-colors disabled:opacity-30"
+            className="flex h-8 w-8 cursor-pointer items-center justify-center rounded-[5px] transition-colors disabled:cursor-default disabled:opacity-30"
             style={{ color: 'var(--digest-text-secondary, #5E5A52)' }}
+            onMouseEnter={(e) => {
+              if (isToday) return
+              e.currentTarget.style.background = 'var(--digest-bg-hover, #F1EDE2)'
+              e.currentTarget.style.color = 'var(--digest-text, #1A1A1A)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = ''
+              e.currentTarget.style.color = 'var(--digest-text-secondary, #5E5A52)'
+            }}
           >
             <ChevronRight className="h-3.5 w-3.5" strokeWidth={2.5} />
           </button>

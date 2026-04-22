@@ -1,28 +1,13 @@
 # Docs Index
 
-This directory is the repository knowledge system of record.
+This directory is the repository knowledge system of record. Prefer code as the ultimate source of truth; these docs capture design intent, operational procedures, and guardrails that aren't obvious from reading source.
 
 ## Sections
 
-- [Architecture](./architecture/index.md)
-  - system maps, runtime flow, and domain-specific invariants
-- [Operations](./operations/index.md)
-  - deployment, runtime operations, guardrails, and local development workflows
-- [Agent Workflows](./agent-workflows/index.md)
-  - planner/generator/evaluator loop, low-risk direct edits, and review artifacts
-- [Product](./product/index.md)
-  - product-level capability notes and feature-oriented documents
-- [References](./references/index.md)
-  - branch deltas and external-reference style repository material
-- [Generated](./generated/index.md)
-  - generated artifacts and repository-derived reference material
-- [ExecPlans](./exec-plans/active/index.md)
-  - current and future plan catalog entrypoint
-
-## Legacy Material
-
-Historical plan/spec artifacts created under earlier workflows still live in:
-
-- `docs/exec-plans/legacy/`
-
-These remain valid historical context until migrated.
+- [Architecture](./architecture/index.md) — system maps, runtime flow, and domain-specific invariants.
+- [Operations](./operations/index.md) — deployment, runtime, guardrails, local development workflows.
+- [Agent Workflows](./agent-workflows/index.md) — planner/generator/evaluator loop, low-risk direct edits, review artifacts.
+- [Product](./product/index.md) — product-level capability notes and the feature change log.
+- [References](./references/index.md) — external-interface references (AI API) and verification runbooks.
+- [Generated](./generated/index.md) — reserved for generated artifacts (currently empty).
+- [ExecPlans — active](./exec-plans/active/index.md) — in-flight plans only; completed plans are not retained.

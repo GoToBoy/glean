@@ -179,18 +179,22 @@ async def _get_browser() -> Browser:
 
         pw = await async_playwright().start()
         _playwright_instance = pw
-        _browser_instance = await pw.chromium.launch(
-            headless=True,
-            args=[
-                "--disable-dev-shm-usage",
-                "--disable-gpu",
-                "--disable-software-rasterizer",
-                "--disable-background-networking",
-                "--disable-background-timer-throttling",
-                "--disable-renderer-backgrounding",
-                "--disable-extensions",
-            ],
-        )
+        cdp_endpoint = os.getenv("BROWSER_CDP_ENDPOINT", "").strip()
+        if cdp_endpoint:
+            _browser_instance = await pw.chromium.connect_over_cdp(cdp_endpoint)
+        else:
+            _browser_instance = await pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-software-rasterizer",
+                    "--disable-background-networking",
+                    "--disable-background-timer-throttling",
+                    "--disable-renderer-backgrounding",
+                    "--disable-extensions",
+                ],
+            )
         return _browser_instance
 
 

@@ -22,9 +22,10 @@ const SOFT_BREAK_LENGTH_THRESHOLD = 80
 const PUNCT_ONLY_RE = /^[\s,，:：;；.!?。！？)\]}>"'”’-]+$/
 
 export function hasSkipAncestor(el: Element): boolean {
-  let current = el.parentElement
+  let current: Element | null = el
   while (current) {
     if (SKIP_TAGS.has(current.tagName)) return true
+    if (current.hasAttribute('data-no-translate')) return true
     current = current.parentElement
   }
   return false

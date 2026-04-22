@@ -208,16 +208,36 @@ export function useListEntriesTranslation({
           void translateEntries(unique)
         }, 250)
       },
-      { root: container ?? null, rootMargin: '0px 0px 100px 0px', threshold: 0.1 }
+      { root: container ?? null, rootMargin: '0px 0px 400px 0px', threshold: 0 }
     )
 
-    // If no scroll container ref is provided, observe nodes document-wide.
-    const nodes = (container ?? document).querySelectorAll('[data-entry-id]')
-    nodes.forEach((node) => observer.observe(node))
+    const observedNodes = new Set<Element>()
+
+    const observeNew = (root: Element | Document) => {
+      root.querySelectorAll('[data-entry-id]').forEach((node) => {
+        if (!observedNodes.has(node)) {
+          observedNodes.add(node)
+          observer.observe(node)
+        }
+      })
+    }
+
+    // Observe nodes already in the DOM.
+    observeNew(container ?? document)
+
+    // Watch for newly added [data-entry-id] nodes (virtualized / paginated rendering).
+    const mutationObserver = new MutationObserver(() => {
+      observeNew(container ?? document)
+    })
+    mutationObserver.observe(container ?? document.body ?? document.documentElement, {
+      childList: true,
+      subtree: true,
+    })
 
     return () => {
       if (timer) clearTimeout(timer)
       observer.disconnect()
+      mutationObserver.disconnect()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entryIdsKey, isActive, translateEntries])

@@ -17,9 +17,10 @@ spec, start from the skeleton and flesh it out as you do your research.
 
 In this repository, store in-progress checked-in ExecPlans under
 `docs/exec-plans/active/`. When an ExecPlan is complete and its
-`Outcomes & Retrospective` section has been fully updated, move it to
-`docs/exec-plans/completed/` and update the relevant indexes so the
-active and completed plan lists stay accurate.
+`Outcomes & Retrospective` section has been fully updated, delete the
+plan file — the code is the source of truth once work lands. Summarize
+user-visible changes in `docs/product/feature-change-log.md` when
+appropriate, and keep the active index accurate.
 
 When implementing an executable specification (ExecPlan), do not prompt
 the user for next steps; simply proceed to the next milestone. Keep all

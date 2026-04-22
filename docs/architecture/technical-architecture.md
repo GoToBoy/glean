@@ -2,7 +2,7 @@
 
 ## Overview
 
-Glean (拾灵) is a personal knowledge management tool and RSS reader. It follows a classic three-tier architecture: React SPA frontend → FastAPI REST backend → PostgreSQL + Redis + Milvus storage layer. All backend I/O is async (asyncpg, arq, aiohttp), and the frontend uses TanStack Query for server state management with Zustand for client state.
+Glean (拾灵) is a personal knowledge management tool and RSS reader. It follows a classic three-tier architecture: React SPA frontend → FastAPI REST backend → PostgreSQL (with `pgvector` for vectors) + Redis storage layer. All backend I/O is async (asyncpg, arq, aiohttp), and the frontend uses TanStack Query for server state management with Zustand for client state.
 
 ---
 
@@ -35,17 +35,17 @@ Glean (拾灵) is a personal knowledge management tool and RSS reader. It follow
 │                                                                      │
 │  ┌────────────────────────────────────────────────────────────┐     │
 │  │              arq Worker (Background Tasks)                  │     │
-│  │  feed_fetcher · translate · embedding · preference · cleanup│     │
+│  │  feed_fetcher · content_backfill · translation · embedding  │     │
+│  │  bookmark_metadata · subscription_cleanup · cleanup          │     │
 │  └────────────────────────────────────────────────────────────┘     │
 ├─────────────────────────────────────────────────────────────────────┤
 │                     Storage Layer                                    │
-│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────────┐     │
-│  │ PostgreSQL 16│  │   Redis 7    │  │   Milvus (optional)    │     │
-│  │   (5432)     │  │   (6379)     │  │   Vector DB            │     │
-│  │  - entries   │  │  - task queue│  │  - embeddings          │     │
-│  │  - users     │  │  - debounce  │  │  - similarity search   │     │
-│  │  - feeds     │  │  - sessions  │  │  - preference scoring  │     │
-│  └──────────────┘  └──────────────┘  └────────────────────────┘     │
+│  ┌───────────────────────────────────┐  ┌──────────────────────┐    │
+│  │ PostgreSQL 16 + pgvector (5432)   │  │   Redis 7 (6379)     │    │
+│  │  - entries, users, feeds          │  │  - arq task queue    │    │
+│  │  - embeddings (pgvector column)   │  │  - sessions          │    │
+│  │  - vector similarity search       │  │  - distributed locks │    │
+│  └───────────────────────────────────┘  └──────────────────────┘    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -96,13 +96,13 @@ All pages are `React.lazy()` loaded with a common `<Suspense>` boundary:
 |--------------------|--------------------|
 | `/login`           | LoginPage          |
 | `/register`        | RegisterPage       |
-| `/reader`          | ReaderPage         |
+| `/auth/callback`   | AuthCallbackPage   |
+| `/reader`          | ReaderRoute        |
 | `/settings`        | SettingsPage       |
 | `/subscriptions`   | SubscriptionsPage  |
 | `/bookmarks`       | BookmarksPage      |
-| `/preference`      | PreferencePage     |
 
-The default route `/` redirects to `/reader?tab=unread`.
+The default route `/` redirects to `/reader?tab=unread`. Unknown paths redirect to `/`.
 
 ### 2.4 Three-Column Layout (ReaderPage)
 
@@ -151,12 +151,15 @@ entryKeys.detail(id)→ ['entries', 'detail', id]
 ### 2.6 State Management
 
 **Zustand Stores** (client-only state):
-| Store           | Purpose                                    |
-|-----------------|--------------------------------------------|
-| `authStore`     | User session, login/logout, token lifecycle |
-| `themeStore`    | Dark/light theme, persisted to localStorage |
-| `languageStore` | i18n language, persisted to localStorage    |
-| `uiStore`       | UI preferences (e.g., show preference score)|
+| Store                 | Purpose                                           |
+|-----------------------|---------------------------------------------------|
+| `authStore`           | User session, login/logout, token lifecycle       |
+| `themeStore`          | Dark/light theme, persisted to localStorage       |
+| `languageStore`       | i18n language, persisted to localStorage          |
+| `folderStore`         | Folder expand/collapse + ordering state           |
+| `bookmarkStore`       | Bookmark panel UI state                           |
+| `digestSettingsStore` | Digest view settings (layout, density)            |
+| `digestSidebarStore`  | Digest sidebar open/close + pinned sections       |
 
 **TanStack Query** (server state):
 - Entry lists (with infinite scroll)
@@ -301,7 +304,7 @@ ORDER BY e.published_at DESC
 LIMIT 20 OFFSET 0;
 ```
 
-**Smart View** fetches `per_page * 5` entries, scores them all via Milvus vector similarity, sorts by score, and returns one page. This is intentionally over-fetching for better recommendation quality.
+**Smart View** fetches `per_page * 5` entries, scores them all via pgvector similarity search against user preference vectors, sorts by score, and returns one page. This is intentionally over-fetching for better recommendation quality.
 
 ### 3.6 Background Worker (arq)
 
@@ -312,17 +315,24 @@ WorkerSettings:
   keep_result = 3600s (1 hour)
 
 Registered Tasks:
-  ├── feed_fetcher.fetch_feed_task        — Single feed fetch
-  ├── feed_fetcher.fetch_all_feeds        — Bulk fetch
-  ├── translation.translate_entry_task    — Full article translation (bilingual HTML)
-  ├── embedding_worker.*                  — Vector embedding generation (M3)
-  ├── preference_worker.*                 — User preference model update (M3)
-  ├── bookmark_metadata.*                 — Bookmark metadata fetch
-  └── cleanup.*                           — Expired read-later, orphan embeddings
+  ├── feed_fetcher.fetch_feed_task              — Single feed fetch
+  ├── feed_fetcher.fetch_all_feeds              — Bulk fetch
+  ├── content_backfill.enqueue_feed_content_backfill  — Schedule backfill for a feed
+  ├── content_backfill.backfill_entry_content_task    — Fetch full HTML content for an entry
+  ├── translation.translate_entry_task          — Full article translation (bilingual HTML)
+  ├── embedding_worker.generate_entry_embedding — Per-entry embedding (M3)
+  ├── embedding_worker.batch_generate_embeddings — Bulk embedding generation
+  ├── embedding_worker.retry_failed_embeddings  — Retry missing / failed embeddings
+  ├── embedding_worker.validate_and_rebuild_embeddings — Validate vector integrity
+  ├── embedding_worker.download_embedding_model — Pull embedding model weights
+  ├── embedding_rebuild.rebuild_embeddings      — Full-index rebuild
+  ├── subscription_cleanup.cleanup_orphan_embeddings — Remove vectors for unsubscribed feeds
+  ├── bookmark_metadata.fetch_bookmark_metadata_task — Bookmark metadata fetch
+  └── cleanup.cleanup_read_later                — Expired read-later entries
 
 Cron Jobs:
-  ├── scheduled_fetch — every 15 min (minute={0,15,30,45})
-  └── scheduled_cleanup — every hour (minute=0)
+  ├── feed_fetcher.scheduled_fetch — derived from FEED_REFRESH_INTERVAL_MINUTES
+  └── cleanup.scheduled_cleanup    — every hour (minute=0)
 ```
 
 ### 3.7 Translation System
@@ -400,13 +410,10 @@ Entry state changes (read, like, bookmark) use optimistic cache updates — the 
 ### 5.2 Entry Position Stability
 When a selected entry is marked read/liked and filtered out of the current list, a ref (`selectedEntryOriginalDataRef`) preserves its original position data. The entry is re-inserted at its correct position using `published_at` for the remaining reader flows.
 
-### 5.3 Debounced Preference Updates
-Like/dislike signals use Redis SET NX with 30s TTL to prevent rapid preference model updates. Only the first signal in a 30-second window triggers a worker task.
-
-### 5.4 Shared Entry Data Model
+### 5.3 Shared Entry Data Model
 Entries are global (not per-user). A `UserEntry` junction table tracks per-user state. This avoids N copies of article content for N users of the same feed.
 
-### 5.5 Two-Tier Translation Cache
+### 5.4 Two-Tier Translation Cache
 - **Sentence level**: `paragraph_translations` JSONB — fast lookup for viewport translation
 - **Full article**: `EntryTranslation` with bilingual HTML — for full document view
 
@@ -418,7 +425,7 @@ Entries are global (not per-user). A `UserEntry` junction table tracks per-user 
 |-----------------|----------------------------------------|--------------------------|
 | Google Fonts    | Crimson Pro + DM Sans (render-blocking)| Degraded typography      |
 | Google Translate| Sentence & article translation         | Translation unavailable  |
-| Milvus          | Vector embeddings + preference scoring | Smart view falls back to simple scoring |
+| pgvector        | Vector embeddings + preference scoring (extension on PostgreSQL) | Smart view falls back to simple scoring |
 | highlight.js    | Code syntax highlighting               | Unstyled code blocks     |
 | lightGallery    | Image viewer overlay                   | No image zoom            |
 | DOMPurify       | HTML sanitization (XSS prevention)     | Security risk if missing |

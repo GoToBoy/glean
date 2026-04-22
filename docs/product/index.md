@@ -1,9 +1,8 @@
 # Product Docs
 
-Use this section for feature-oriented documents and product change logs.
+Feature-oriented documents describing current product capabilities.
 
 ## Documents
 
-- [feature-change-log.md](./feature-change-log.md)
-- [rss-browser-extraction-plan.md](./rss-browser-extraction-plan.md)
-- [rsshub-auto-conversion-enhancement.md](./rsshub-auto-conversion-enhancement.md)
+- [feature-change-log.md](./feature-change-log.md) — Feature-level additions and optimizations over time.
+- [rsshub-auto-conversion-enhancement.md](./rsshub-auto-conversion-enhancement.md) — RSSHub fallback subscription / fetch architecture (implemented).

@@ -4,7 +4,6 @@
 
 > [!IMPORTANT]
 > 本 README 描述的是此 fork 的主分支 `personal-main`，而不是上游 `main`。
-> 与 `main` 的差异概览请见 [docs/references/branch-delta.zh-CN.md](./docs/references/branch-delta.zh-CN.md)。
 
 > [!NOTE]
 > 欢迎加入我们的 [Discord](https://discord.gg/KMKC4sRVSJ) 获取更新和支持。
@@ -218,9 +217,7 @@ docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --buil
 ## 分支相关文档
 
 - [docs/index.md](./docs/index.md) - 仓库文档索引
-- [docs/references/branch-delta.zh-CN.md](./docs/references/branch-delta.zh-CN.md) - `personal-main` 相对上游 `main` 的能力差异概览
 - [docs/product/feature-change-log.md](./docs/product/feature-change-log.md) - 功能级变更记录
-- [docs/product/rss-browser-extraction-plan.md](./docs/product/rss-browser-extraction-plan.md) - RSS 正文浏览器回退抓取方案
 - [docs/operations/local-runtime-modes.md](./docs/operations/local-runtime-modes.md) - 本地 Docker / 宿主机运行分工说明
 - [DEVELOPMENT.md](./DEVELOPMENT.md) - 本地开发指南
 

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router-dom'
 import { AlertCircle } from 'lucide-react'
 import { Alert, AlertTitle, AlertDescription, Skeleton } from '@glean/ui'
 import { useTranslation } from '@glean/i18n'
@@ -67,7 +68,27 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
   const todayDate = systemTime?.current_date ?? format(new Date(), 'yyyy-MM-dd')
   const { resolvedTheme } = useThemeStore()
 
-  const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedEntryId = searchParams.get('entry')
+
+  const setSelectedEntryId = useCallback(
+    (id: string | null) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (id) {
+            next.set('entry', id)
+          } else {
+            next.delete('entry')
+          }
+          return next
+        },
+        { replace: true }
+      )
+    },
+    [setSearchParams]
+  )
+
   const [focusedEntryId, setFocusedEntryId] = useState<string | null>(null)
   const [addFeedOpen, setAddFeedOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -243,7 +264,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
         el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       })
     }
-  }, [focusedEntryId, selectedEntryId, flatEntries, updateMutation])
+  }, [focusedEntryId, selectedEntryId, flatEntries, updateMutation, setSelectedEntryId])
 
   const handleSelectEntry = useCallback(
     (entry: EntryWithState) => {
@@ -256,7 +277,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
         })
       }
     },
-    [autoMarkRead, updateMutation]
+    [autoMarkRead, updateMutation, setSelectedEntryId]
   )
 
   const handlePrevDay = useCallback(() => {
@@ -421,6 +442,7 @@ export function DigestView({ date, isMobile, onDateChange }: DigestViewProps) {
     handleNextDay,
     handleSelectEntry,
     updateMutation,
+    setSelectedEntryId,
   ])
 
   // Refs kept fresh each render so the observer callback never closes over stale values

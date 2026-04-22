@@ -1,6 +1,6 @@
 # Glean Architecture Summary
 
-Last updated: 2026-02-15
+Last updated: 2026-04-21
 
 ## 1. System Overview
 
@@ -41,9 +41,9 @@ glean/
 ## 3. Backend Architecture
 
 - API entrypoint: `backend/apps/api/glean_api/main.py`
-- Router modules:
-  - `auth`, `feeds`, `entries`, `bookmarks`, `folders`
-  - `preference`, `admin`, `system`, `api_tokens`
+- Router modules (prefix `/api`):
+  - `auth`, `feeds`, `entries`, `admin`, `ai`
+  - `bookmarks`, `folders`, `icons`, `system`, `api_tokens`
 - Service layer (domain logic):
   - `backend/packages/core/glean_core/services/`
 - Data layer:
@@ -51,18 +51,18 @@ glean/
   - Migrations: `backend/packages/database/glean_database/migrations/`
 - Worker entrypoint: `backend/apps/worker/glean_worker/main.py`
   - Scheduled feed fetch derived from `FEED_REFRESH_INTERVAL_MINUTES`
-  - Cleanup jobs hourly
-  - Async tasks for feed fetch, translation, embedding, preference updates
+  - Hourly read-later cleanup (`cleanup.scheduled_cleanup`)
+  - Async tasks: feed fetch, content backfill, translation, embedding (generate / retry / rebuild / validate / model download), bookmark metadata, subscription cleanup
 
 ## 4. Frontend Architecture
 
 - Web app entrypoint: `frontend/apps/web/src/main.tsx`
   - Initializes theme, i18n, and TanStack Query client.
 - Route shell: `frontend/apps/web/src/App.tsx`
-  - Lazy loads pages (`Reader`, `Subscriptions`, `Bookmarks`, `Preference`, `Settings`, auth pages).
+  - Lazy loads pages: `ReaderRoute`, `SubscriptionsPage`, `BookmarksPage`, `SettingsPage`, `LoginPage`, `RegisterPage`, `AuthCallbackPage`.
 - State model:
   - Server state: TanStack Query
-  - Client state: Zustand stores (`authStore`, `themeStore`, `languageStore`, etc.)
+  - Client state: Zustand stores — `authStore`, `themeStore`, `languageStore`, `folderStore`, `bookmarkStore`, `digestSettingsStore`, `digestSidebarStore`.
 - Shared frontend packages:
   - API SDK, shared UI components, i18n resources, logging, shared types.
 
@@ -76,7 +76,8 @@ Default Docker Compose deployment includes:
 - `worker` (arq)
 - `web`
 - `admin`
-- vector features now run through PostgreSQL + `pgvector`, so the default stack does not require a separate Milvus deployment.
+
+Vector features (embeddings, preference scoring) run through PostgreSQL's `pgvector` extension — no separate vector database.
 
 ## 6. Key Data & Control Patterns
 
@@ -87,8 +88,8 @@ Default Docker Compose deployment includes:
 
 ## 7. Canonical References
 
-- High-level guide: `CLAUDE.md`
-- Backend guide: `backend/CLAUDE.md`
-- Frontend guide: `frontend/CLAUDE.md`
+- Repo entry for agents: `AGENTS.md` (root `CLAUDE.md` is a thin pointer to it)
+- Backend guide: `backend/AGENTS.md`
+- Frontend guide: `frontend/AGENTS.md`
 - Detailed architecture: `docs/architecture/technical-architecture.md`
 - Deployment details: `README.md`, `DEPLOY.md`

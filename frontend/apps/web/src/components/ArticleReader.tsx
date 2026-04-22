@@ -485,7 +485,8 @@ export function ArticleReader({
           : t('actions.archive')
 
   // Full (non-sticky) header action buttons — labeled, own-row toolbar.
-  // Restores the ORIGINAL header layout with icon + text labels.
+  // Close and fullscreen are moved to the title row (icon-only); only
+  // content-related actions remain here.
   const fullHeaderActions = (
     <div className="flex flex-wrap items-center gap-2">
       {canTranslate && (
@@ -552,32 +553,6 @@ export function ArticleReader({
         )}
         <span>{bookmarkLabel}</span>
       </Button>
-      {shouldShowFullscreenButton && onToggleFullscreen && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onToggleFullscreen}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          {isFullscreen ? (
-            <Minimize2 className="h-4 w-4" />
-          ) : (
-            <Maximize2 className="h-4 w-4" />
-          )}
-          <span>{isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}</span>
-        </Button>
-      )}
-      {shouldShowCloseButton && onClose && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClose}
-          className="text-muted-foreground hover:text-foreground"
-        >
-          <X className="h-4 w-4" />
-          <span>{t('actions.close')}</span>
-        </Button>
-      )}
     </div>
   )
 
@@ -702,15 +677,17 @@ export function ArticleReader({
                 <MenuIcon className="h-5 w-5" />
               </button>
             )}
-            <h1 className="text-foreground min-w-0 flex-1 truncate text-base font-semibold">
-              {entry.title}
-            </h1>
-          </div>
-          {showTranslation && translatedTitle && (
-            <div className="px-4 pb-3">
-              <p className="text-foreground/85 line-clamp-3 text-sm font-medium">{translatedTitle}</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="text-foreground truncate text-base font-semibold" data-no-translate>
+                {entry.title}
+              </h1>
+              {showTranslation && translatedTitle && translatedTitle !== entry.title && (
+                <p className="text-muted-foreground truncate text-xs" data-no-translate>
+                  {translatedTitle}
+                </p>
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
 
@@ -729,35 +706,76 @@ export function ArticleReader({
               onTouchEnd={closeGestureHandlers.onTouchEnd}
             >
               {/* Desktop: full (non-sticky) title + metadata + inline action
-                  buttons — scrolls away. Restores the original header layout
-                  so actions are visible at the top without relying on the
-                  sticky bar. */}
+                  buttons — scrolls away. Title block and close/fullscreen
+                  buttons sit on the same flex row; translated subtitle is
+                  a second line inside the left block. */}
               {!isMobile && (
                 <div className="bg-card/95 border-border border-b">
                   <div className="mx-auto w-full max-w-5xl px-6 py-6">
-                  <h1
-                    className="font-display text-foreground text-2xl leading-tight font-bold"
-                    title={displayTitle}
-                  >
-                    {displayTitle}
-                  </h1>
-                  {showTranslation && translatedTitle && (
-                    <h2 className="text-foreground/85 mt-2 text-xl leading-snug font-semibold">
-                      {translatedTitle}
-                    </h2>
-                  )}
-                  {(entry.author || entry.published_at) && (
-                    <div className="text-muted-foreground mt-3 flex items-center gap-3 text-sm">
-                      {entry.author && <span className="font-medium">{entry.author}</span>}
-                      {entry.author && entry.published_at && <span>·</span>}
-                      {entry.published_at && (
-                        <span>{format(new Date(entry.published_at), 'MMMM d, yyyy')}</span>
-                      )}
+                    {/* Title row: left = title + translated subtitle, right = close/fullscreen */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0 flex-1">
+                        <h1
+                          className="font-display text-foreground text-2xl leading-tight font-bold"
+                          title={entry.title}
+                          data-no-translate
+                        >
+                          {entry.title}
+                        </h1>
+                        {showTranslation && translatedTitle && translatedTitle !== entry.title && (
+                          <h2
+                            className="text-muted-foreground mt-1 text-lg leading-snug font-normal"
+                            title={translatedTitle}
+                            data-no-translate
+                          >
+                            {translatedTitle}
+                          </h2>
+                        )}
+                      </div>
+                      {/* Icon-only close / fullscreen buttons, flush right */}
+                      <div className="flex shrink-0 items-center gap-1">
+                        {shouldShowFullscreenButton && onToggleFullscreen && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={onToggleFullscreen}
+                            title={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+                            aria-label={isFullscreen ? t('actions.exitFullscreen') : t('actions.fullscreen')}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            {isFullscreen ? (
+                              <Minimize2 className="h-4 w-4" />
+                            ) : (
+                              <Maximize2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                        {shouldShowCloseButton && onClose && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={onClose}
+                            title={t('actions.close')}
+                            aria-label={t('actions.close')}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                  )}
-                  <div className="mt-4">{fullHeaderActions}</div>
-                  {/* Sentinel: when visible in the scroll root, we're at the top. */}
-                  <div ref={headerSentinelRef} aria-hidden="true" className="h-px" />
+                    {(entry.author || entry.published_at) && (
+                      <div className="text-muted-foreground mt-3 flex items-center gap-3 text-sm">
+                        {entry.author && <span className="font-medium">{entry.author}</span>}
+                        {entry.author && entry.published_at && <span>·</span>}
+                        {entry.published_at && (
+                          <span>{format(new Date(entry.published_at), 'MMMM d, yyyy')}</span>
+                        )}
+                      </div>
+                    )}
+                    <div className="mt-4">{fullHeaderActions}</div>
+                    {/* Sentinel: when visible in the scroll root, we're at the top. */}
+                    <div ref={headerSentinelRef} aria-hidden="true" className="h-px" />
                   </div>
                 </div>
               )}

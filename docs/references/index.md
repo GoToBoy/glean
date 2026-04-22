@@ -1,10 +1,8 @@
 # Reference Docs
 
-Use this section for branch deltas, external-reference style guides, and supporting repository context.
+External-interface references and operational verification guides.
 
 ## Documents
 
-- [branch-delta.md](./branch-delta.md)
-- [branch-delta.zh-CN.md](./branch-delta.zh-CN.md)
-- [local-ai-api.md](./local-ai-api.md)
-- [openai-rss-verification-guide.md](./openai-rss-verification-guide.md)
+- [local-ai-api.md](./local-ai-api.md) — REST API for local AI agents that read 今日收录 and write back AI summaries.
+- [openai-rss-verification-guide.md](./openai-rss-verification-guide.md) — Runbook for verifying OpenAI RSS extraction (HTTP + browser fallback) in Docker.
